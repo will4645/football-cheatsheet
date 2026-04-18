@@ -440,11 +440,18 @@ async function buildPlayers(
     const players    = starters.map(p => playerDefaults(p));
     const oppPlayers = opp.map(p => playerDefaults(p));
 
+    // Compute per-game average from ESPN history
+    function espnAvg(espnId: string, field: 'fc' | 'fd' | 'goals' | 'assists' | 'sot' | 'shots'): number | null {
+      const games = espnId ? espnHistory.get(espnId) : undefined;
+      if (!games?.length) return null;
+      const sum = games.reduce((s, g) => s + (g[field] ?? 0), 0);
+      return +(sum / games.length).toFixed(2);
+    }
+
     // Build a boolean[5] from ESPN per-game history (newest game = index 4)
     function espnLast5(espnId: string, field: 'fc' | 'fd' | 'goals' | 'assists' | 'sot' | 'shots', threshold = 1): boolean[] | null {
       const games = espnId ? espnHistory.get(espnId) : undefined;
       if (!games?.length) return null;
-      // games[0] = most recent; pad left with false if fewer than 5
       const slice = games.slice(0, 5);
       const result: boolean[] = [];
       for (let i = 0; i < 5 - slice.length; i++) result.push(false);
@@ -458,36 +465,63 @@ async function buildPlayers(
       return seededLast5(p.name, stat, fallbackAvg, fallbackThresh);
     }
 
+    // Re-rank defensive players using real ESPN fouls if available
+    const defPlayers = [...players].sort((a, b) => {
+      const fa = espnAvg(a.espnId, 'fc') ?? a.foulsPerGame;
+      const fb = espnAvg(b.espnId, 'fc') ?? b.foulsPerGame;
+      return fb - fa;
+    }).filter(p => !p.isGK).slice(0, 5);
+
+    const offPlayers = [...players].sort((a, b) => {
+      const fa = espnAvg(a.espnId, 'fd') ?? a.foulsWonPerGame;
+      const fb = espnAvg(b.espnId, 'fd') ?? b.foulsWonPerGame;
+      return fb - fa;
+    }).filter(p => !p.isGK).slice(0, 5);
+
     return {
-      defensive: top5(players, 'foulsPerGame').map(p => ({
-        name: p.name, mins: p.mins, foulsPerGame: +p.foulsPerGame.toFixed(2),
-        tacklesPerGame: +p.tacklesPerGame.toFixed(2),
-        last5Fouls: espnLast5(p.espnId, 'fc') ?? seededLast5(p.name, 'fouls', p.foulsPerGame, 1),
-        yellowCards: p.yellowCards,
-        potentialOpponent: findOpponent(p, oppPlayers),
-        form: p.form,
-      })),
-      offensive: top5(players, 'foulsWonPerGame').map(p => ({
-        name: p.name, mins: p.mins, foulsWonPerGame: +p.foulsWonPerGame.toFixed(2),
-        last5FoulsWon: espnLast5(p.espnId, 'fd') ?? seededLast5(p.name, 'foulsWon', p.foulsWonPerGame, 1),
-        potentialOpponent: findOpponent(p, oppPlayers),
-        form: p.form,
-      })),
-      shooting: top5(players, 'sotPerGame').map(p => ({
-        name: p.name, mins: p.mins, sotPerGame: +p.sotPerGame.toFixed(2),
-        last5SoT:     espnLast5(p.espnId, 'sot',   1) ?? getLast5(p, 'shots1', p.sotPerGame,   1),
-        shotsPerGame: +p.shotsPerGame.toFixed(2),
-        last5Shots:   espnLast5(p.espnId, 'shots', 2) ?? getLast5(p, 'shots2', p.shotsPerGame, 2),
-        badges: [], form: p.form,
-      })),
-      goalscoring: top5(players, 'gaPerGame').map(p => ({
-        name: p.name, mins: p.mins, goals: p.goals, assists: p.assists,
-        gaPerGame: +p.gaPerGame.toFixed(2),
-        badges: [],
-        last5Goals:   espnLast5(p.espnId, 'goals',   1) ?? getLast5(p, 'goals',   p.gaPerGame * (p.goals   / Math.max(p.goals + p.assists, 1)), 1),
-        last5Assists: espnLast5(p.espnId, 'assists', 1) ?? getLast5(p, 'assists', p.gaPerGame * (p.assists / Math.max(p.goals + p.assists, 1)), 1),
-        form: p.form,
-      })),
+      defensive: defPlayers.map(p => {
+        const fc = espnAvg(p.espnId, 'fc') ?? p.foulsPerGame;
+        return {
+          name: p.name, mins: p.mins, foulsPerGame: +fc.toFixed(2),
+          tacklesPerGame: +p.tacklesPerGame.toFixed(2),
+          last5Fouls: espnLast5(p.espnId, 'fc') ?? seededLast5(p.name, 'fouls', fc, 1),
+          yellowCards: p.yellowCards,
+          potentialOpponent: findOpponent(p, oppPlayers),
+          form: p.form,
+        };
+      }),
+      offensive: offPlayers.map(p => {
+        const fd = espnAvg(p.espnId, 'fd') ?? p.foulsWonPerGame;
+        return {
+          name: p.name, mins: p.mins, foulsWonPerGame: +fd.toFixed(2),
+          last5FoulsWon: espnLast5(p.espnId, 'fd') ?? seededLast5(p.name, 'foulsWon', fd, 1),
+          potentialOpponent: findOpponent(p, oppPlayers),
+          form: p.form,
+        };
+      }),
+      shooting: top5(players, 'sotPerGame').map(p => {
+        const sot = espnAvg(p.espnId, 'sot') ?? p.sotPerGame;
+        const sh  = espnAvg(p.espnId, 'shots') ?? p.shotsPerGame;
+        return {
+          name: p.name, mins: p.mins, sotPerGame: +sot.toFixed(2),
+          last5SoT:     espnLast5(p.espnId, 'sot',   1) ?? getLast5(p, 'shots1', sot, 1),
+          shotsPerGame: +sh.toFixed(2),
+          last5Shots:   espnLast5(p.espnId, 'shots', 2) ?? getLast5(p, 'shots2', sh,  2),
+          badges: [], form: p.form,
+        };
+      }),
+      goalscoring: top5(players, 'gaPerGame').map(p => {
+        const g = espnAvg(p.espnId, 'goals')   ?? p.gaPerGame * (p.goals   / Math.max(p.goals + p.assists, 1));
+        const a = espnAvg(p.espnId, 'assists')  ?? p.gaPerGame * (p.assists / Math.max(p.goals + p.assists, 1));
+        return {
+          name: p.name, mins: p.mins, goals: p.goals, assists: p.assists,
+          gaPerGame: +p.gaPerGame.toFixed(2),
+          badges: [],
+          last5Goals:   espnLast5(p.espnId, 'goals',   1) ?? getLast5(p, 'goals',   g, 1),
+          last5Assists: espnLast5(p.espnId, 'assists', 1) ?? getLast5(p, 'assists', a, 1),
+          form: p.form,
+        };
+      }),
     };
   }
 
