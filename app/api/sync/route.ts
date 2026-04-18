@@ -537,8 +537,11 @@ async function runSync() {
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { createClient } = require('@supabase/supabase-js');
     const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { error } = await sb.from('match_cache').upsert({ key: '__sync_test__', value: { ts: Date.now() }, updated_at: new Date().toISOString() }, { onConflict: 'key' });
-    log(`[sync] Supabase write test: ${error ? 'FAILED: ' + error.message : 'OK'}`);
+    const ts = Date.now();
+    const { error: wErr, data: wData, status: wStatus } = await sb.from('match_cache').upsert({ key: '__sync_test__', value: { ts }, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    const { data: rData } = await sb.from('match_cache').select('value').eq('key', '__sync_test__').single();
+    const readBack = rData?.value?.ts;
+    log(`[sync] Supabase write test: status=${wStatus} err=${wErr?.message ?? 'none'} wrote=${ts} readBack=${readBack} match=${readBack === ts}`);
   } else {
     log(`[sync] Supabase write test: SKIPPED — env vars missing`);
   }
