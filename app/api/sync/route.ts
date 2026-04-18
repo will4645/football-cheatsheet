@@ -646,6 +646,7 @@ async function runSync() {
       apiFetch(`/teams/${match.awayTeam.id}/matches?status=FINISHED&limit=10`, 60 * 60 * 1000),
     ]);
 
+    log(`[pre-buildStats] homeStats=${JSON.stringify((espnHistory as any).__homeStats)?.slice(0,80)}`);
     const homeStats = buildTeamStats(homeResults?.matches, match.homeTeam.id, (espnHistory as any).__homeStats ?? null, (espnHistory as any).__awayStats ?? null);
     const awayStats = buildTeamStats(awayResults?.matches, match.awayTeam.id, (espnHistory as any).__awayStats ?? null, (espnHistory as any).__homeStats ?? null);
     log(`[team-stats-home] corners=${homeStats.cornersFor} shots=${homeStats.shotsFor} fouls=${homeStats.foulsCommitted} cards=${homeStats.cardsFor}`);
