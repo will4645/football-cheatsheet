@@ -29,5 +29,5 @@ export async function GET(req: NextRequest) {
       awayCorners: matchRow.value.awayTeam?.stats?.cornersFor,
       homeShots: matchRow.value.homeTeam?.stats?.shotsFor,
     } : null,
-  });
+  }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
 }
