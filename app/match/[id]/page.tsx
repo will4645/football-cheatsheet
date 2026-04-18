@@ -1,17 +1,36 @@
-import { notFound } from 'next/navigation';
-import { matchData as staticMatchData } from '@/data/match';
-import { getMatch } from '@/lib/store';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams, notFound } from 'next/navigation';
 import MatchSheet from '@/components/MatchSheet';
 
-export const dynamic = 'force-dynamic';
+export default function MatchPage() {
+  const params = useParams();
+  const id = params.id as string;
+  const [data, setData] = useState<any>(null);
+  const [status, setStatus] = useState<'loading' | 'found' | 'notfound'>('loading');
 
-export default async function MatchPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+  useEffect(() => {
+    fetch(`/api/matches/${id}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d && !d.error) { setData(d); setStatus('found'); }
+        else setStatus('notfound');
+      })
+      .catch(() => setStatus('notfound'));
+  }, [id]);
 
-  const liveData = await getMatch(id);
-  if (liveData) return <MatchSheet data={liveData as typeof staticMatchData} />;
+  if (status === 'loading') return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: '#080c14' }}>
+      <p className="text-gray-500 text-sm">Loading...</p>
+    </div>
+  );
 
-  if (id === 'atletico-vs-barcelona') return <MatchSheet data={staticMatchData} />;
+  if (status === 'notfound') return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: '#080c14' }}>
+      <p className="text-gray-500 text-sm">Match not found.</p>
+    </div>
+  );
 
-  notFound();
+  return <MatchSheet data={data} />;
 }

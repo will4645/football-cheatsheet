@@ -1,7 +1,7 @@
-import Link from 'next/link';
-import { getMatches, getUpcoming } from '@/lib/store';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 interface AnyMatch {
   id: string;
@@ -24,21 +24,27 @@ function groupByCompetition(matches: AnyMatch[]) {
   return order.map(competition => ({ competition, matches: map.get(competition)! }));
 }
 
-export default async function Home() {
-  const [liveMatches, upcoming] = await Promise.all([
-    getMatches() as Promise<AnyMatch[]>,
-    getUpcoming() as Promise<AnyMatch[]>,
-  ]);
+export default function Home() {
+  const [allMatches, setAllMatches] = useState<AnyMatch[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
-  const liveIds = new Set((liveMatches ?? []).map(m => m.id));
-  const pending = (upcoming ?? []).filter(m => !liveIds.has(m.id)).map(m => ({ ...m, pending: true }));
-  const allMatches: AnyMatch[] = [...(liveMatches ?? []), ...pending];
+  useEffect(() => {
+    fetch('/api/matches', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(({ live, upcoming }) => {
+        const liveIds = new Set((live ?? []).map((m: AnyMatch) => m.id));
+        const pending = (upcoming ?? []).filter((m: AnyMatch) => !liveIds.has(m.id)).map((m: AnyMatch) => ({ ...m, pending: true }));
+        setAllMatches([...(live ?? []), ...pending]);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
   const groups = groupByCompetition(allMatches);
 
   return (
     <div className="min-h-screen p-6 lg:p-10" style={{ background: '#080c14' }}>
       <div className="max-w-4xl mx-auto">
-
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-black text-white tracking-tight mb-1">Cheat Sheets</h1>
           <p className="text-[11px] uppercase tracking-widest text-gray-600">Select a match to view</p>
@@ -71,7 +77,7 @@ export default async function Home() {
             </div>
           ))}
 
-          {allMatches.length === 0 && (
+          {loaded && allMatches.length === 0 && (
             <div className="text-center py-16">
               <p className="text-gray-600 text-sm">No upcoming matches found.</p>
               <p className="text-gray-700 text-[11px] mt-2">The sync bot checks every 5 minutes.</p>
