@@ -17,10 +17,8 @@ async function sbSet(key: string, value: unknown) {
   const sb = getSb();
   if (!sb) return;
   const now = new Date().toISOString();
-  const { data } = await sb.from('match_cache').update({ value, updated_at: now }).eq('key', key).select('key');
-  if (!data || data.length === 0) {
-    await sb.from('match_cache').insert({ key, value, updated_at: now });
-  }
+  await sb.from('match_cache').delete().eq('key', key);
+  await sb.from('match_cache').insert({ key, value, updated_at: now });
 }
 
 async function sbGet(key: string) {
