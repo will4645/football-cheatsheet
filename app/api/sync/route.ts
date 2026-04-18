@@ -33,7 +33,11 @@ export const maxDuration = 60; // Vercel max for hobby plan
 // ── Auth ───────────────────────────────────────────────────────────────────
 function isAuthorized(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token') ?? req.headers.get('x-sync-token');
-  return token === process.env.SYNC_SECRET;
+  if (token === process.env.SYNC_SECRET) return true;
+  // Vercel Cron sends Authorization: Bearer <CRON_SECRET>
+  const auth = req.headers.get('authorization');
+  if (auth && auth === `Bearer ${process.env.CRON_SECRET}`) return true;
+  return false;
 }
 
 // ── Probability helpers ────────────────────────────────────────────────────

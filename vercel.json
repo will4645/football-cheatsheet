@@ -7,7 +7,7 @@
   },
   "crons": [
     {
-      "path": "/api/sync?token=fc-sync-2026",
+      "path": "/api/sync",
       "schedule": "*/5 * * * *"
     }
   ]
