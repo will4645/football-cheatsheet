@@ -533,6 +533,16 @@ async function runSync() {
 
   log(`[sync] Running — ${new Date().toLocaleTimeString()}`);
 
+  // Test Supabase write directly
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = require('@supabase/supabase-js');
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { error } = await sb.from('match_cache').upsert({ key: '__sync_test__', value: { ts: Date.now() }, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    log(`[sync] Supabase write test: ${error ? 'FAILED: ' + error.message : 'OK'}`);
+  } else {
+    log(`[sync] Supabase write test: SKIPPED — env vars missing`);
+  }
+
   // Load stats index
   const fbrefIdx = await getStatsIndex();
   log(`[sync] FBref index: ${fbrefIdx.size} name keys`);
