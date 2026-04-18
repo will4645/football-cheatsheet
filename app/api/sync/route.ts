@@ -16,7 +16,11 @@ function getSb() {
 async function sbSet(key: string, value: unknown) {
   const sb = getSb();
   if (!sb) return;
-  await sb.from('match_cache').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  const now = new Date().toISOString();
+  const { data } = await sb.from('match_cache').update({ value, updated_at: now }).eq('key', key).select('key');
+  if (!data || data.length === 0) {
+    await sb.from('match_cache').insert({ key, value, updated_at: now });
+  }
 }
 
 async function sbGet(key: string) {
@@ -558,10 +562,10 @@ async function runSync() {
     const { createClient } = require('@supabase/supabase-js');
     const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const ts = Date.now();
-    const { error: wErr, data: wData, status: wStatus } = await sb.from('match_cache').upsert({ key: '__sync_test__', value: { ts }, updated_at: new Date().toISOString() }, { onConflict: 'key' });
-    const { data: rData } = await sb.from('match_cache').select('value').eq('key', '__sync_test__').single();
-    const readBack = rData?.value?.ts;
-    log(`[sync] Supabase write test: status=${wStatus} err=${wErr?.message ?? 'none'} wrote=${ts} readBack=${readBack} match=${readBack === ts}`);
+    await sbSet('__sync_test__', { ts });
+    const { data: rData } = await sb.from('match_cache').select('value').order('updated_at', { ascending: false }).eq('key', '__sync_test__').limit(1);
+    const readBack = rData?.[0]?.value?.ts;
+    log(`[sync] Supabase write test: wrote=${ts} readBack=${readBack} match=${readBack === ts}`);
   } else {
     log(`[sync] Supabase write test: SKIPPED — env vars missing`);
   }
