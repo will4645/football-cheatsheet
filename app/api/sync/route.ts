@@ -17,8 +17,10 @@ async function sbSet(key: string, value: unknown) {
   const sb = getSb();
   if (!sb) return;
   const now = new Date().toISOString();
-  await sb.from('match_cache').delete().eq('key', key);
-  await sb.from('match_cache').insert({ key, value, updated_at: now });
+  const { error: delErr } = await sb.from('match_cache').delete().eq('key', key);
+  if (delErr) console.error(`[sbSet] delete error for ${key}:`, delErr.message);
+  const { error: insErr } = await sb.from('match_cache').insert({ key, value, updated_at: now });
+  if (insErr) console.error(`[sbSet] insert error for ${key}:`, insErr.message);
 }
 
 async function sbGet(key: string) {

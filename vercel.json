@@ -4,5 +4,11 @@
     "app/api/sync/route.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/sync?token=fc-sync-2026",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }
