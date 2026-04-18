@@ -244,6 +244,7 @@ function buildTeamStats(
   const avgAgainst = count > 0 ? goalsAgainst / count : (espnStats?.goalsAgainst ?? 1.2);
 
   // Use ESPN boxscore stats where available, otherwise fall back to league averages
+  console.log(`[buildTeamStats] espnStats=${espnStats ? `corners=${espnStats.cornersFor} shots=${espnStats.shotsFor} fouls=${espnStats.foulsCommitted} cards=${espnStats.cardsFor} sot=${espnStats.sotFor} games=${espnStats.gamesCount}` : 'null'}`);
   const e = espnStats;
   const o = oppEspnStats;
 
@@ -647,6 +648,8 @@ async function runSync() {
 
     const homeStats = buildTeamStats(homeResults?.matches, match.homeTeam.id, (espnHistory as any).__homeStats ?? null, (espnHistory as any).__awayStats ?? null);
     const awayStats = buildTeamStats(awayResults?.matches, match.awayTeam.id, (espnHistory as any).__awayStats ?? null, (espnHistory as any).__homeStats ?? null);
+    log(`[team-stats-home] corners=${homeStats.cornersFor} shots=${homeStats.shotsFor} fouls=${homeStats.foulsCommitted} cards=${homeStats.cardsFor}`);
+    log(`[team-stats-away] corners=${awayStats.cornersFor} shots=${awayStats.shotsFor} fouls=${awayStats.foulsCommitted} cards=${awayStats.cardsFor}`);
     const players   = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory);
     log(`[players-diag] ${players.diag}`);
 
