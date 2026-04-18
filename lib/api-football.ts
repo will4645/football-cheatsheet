@@ -229,7 +229,7 @@ export async function fetchTeamPlayerHistory(
       +( teamStatSamples.reduce((s, g) => s + (g[side][key] ?? 0), 0) / n ).toFixed(2);
 
     seasonStats = {
-      goalsFor:       avg('penaltyKickGoals', 'mine') + avg('totalShots', 'mine') * 0, // computed below
+      goalsFor:       0, // computed below from player goals
       goalsAgainst:   0,
       cornersFor:     avg('wonCorners', 'mine'),
       cornersAgainst: avg('wonCorners', 'opp'),

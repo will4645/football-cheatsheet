@@ -1,8 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  getMatches, setMatches, getUpcoming, setUpcoming,
-  getMatch, setMatch, deleteMatch, getStatsCache, setStatsCache,
-} from '@/lib/store';
 import { getApiFootballLineups, fetchTeamPlayerHistory, PlayerGameStat } from '@/lib/api-football';
 import type { TeamSeasonStats } from '@/lib/api-football';
 
@@ -28,7 +24,8 @@ async function sbGet(key: string) {
   return data?.value ?? null;
 }
 
-export const maxDuration = 60; // Vercel max for hobby plan
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 function isAuthorized(req: NextRequest) {
@@ -237,15 +234,15 @@ function gamesLast5(games: any[], stat: 'goals' | 'assists' | 'shots2' | 'shots1
 }
 
 async function getStatsIndex(): Promise<Map<string, any>> {
-  const cached = await getStatsCache();
+  const cached = await sbGet('fbref_cache') as { scraped: number; players: any[] } | null;
   if (cached && Date.now() - cached.scraped < STATS_TTL) {
-    return buildNameIndex(cached.players as any[]);
+    return buildNameIndex(cached.players);
   }
   const all: any[] = [];
   for (const league of LEAGUES) {
     try { all.push(...await fetchLeague(league)); } catch { /* skip */ }
   }
-  await setStatsCache({ scraped: Date.now(), players: all });
+  await sbSet('fbref_cache', { scraped: Date.now(), players: all });
   return buildNameIndex(all);
 }
 
@@ -269,8 +266,6 @@ function buildTeamStats(
   const avgFor     = count > 0 ? goalsFor / count     : (espnStats?.goalsFor     ?? 1.5);
   const avgAgainst = count > 0 ? goalsAgainst / count : (espnStats?.goalsAgainst ?? 1.2);
 
-  // Use ESPN boxscore stats where available, otherwise fall back to league averages
-  console.log(`[buildTeamStats] espnStats=${espnStats ? `corners=${espnStats.cornersFor} shots=${espnStats.shotsFor} fouls=${espnStats.foulsCommitted} cards=${espnStats.cardsFor} sot=${espnStats.sotFor} games=${espnStats.gamesCount}` : 'null'}`);
   const e = espnStats;
   const o = oppEspnStats;
 
@@ -557,20 +552,7 @@ async function runSync() {
   const logs: string[] = [];
   const log = (msg: string) => { console.log(msg); logs.push(msg); };
 
-  log(`[sync] Running — ${new Date().toLocaleTimeString()}`);
-
-  // Test Supabase write directly
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const { createClient } = require('@supabase/supabase-js');
-    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const ts = Date.now();
-    await sbSet('__sync_test__', { ts });
-    const { data: rData } = await sb.from('match_cache').select('value').order('updated_at', { ascending: false }).eq('key', '__sync_test__').limit(1);
-    const readBack = rData?.[0]?.value?.ts;
-    log(`[sync] Supabase write test: wrote=${ts} readBack=${readBack} match=${readBack === ts}`);
-  } else {
-    log(`[sync] Supabase write test: SKIPPED — env vars missing`);
-  }
+  log(`[sync] Running — ${new Date().toISOString()}`);
 
   // Load stats index
   const fbrefIdx = await getStatsIndex();
@@ -653,9 +635,7 @@ async function runSync() {
           ]);
           homeResult.history.forEach((v, k) => espnHistory.set(k, v));
           awayResult.history.forEach((v, k) => espnHistory.set(k, v));
-          log(`[sync] ESPN history loaded: ${espnHistory.size} player records`);
-          if (homeResult.seasonStats) log(`[espn-stats-home] corners=${homeResult.seasonStats.cornersFor} shots=${homeResult.seasonStats.shotsFor} fouls=${homeResult.seasonStats.foulsCommitted}`);
-          if (awayResult.seasonStats) log(`[espn-stats-away] corners=${awayResult.seasonStats.cornersFor} shots=${awayResult.seasonStats.shotsFor} fouls=${awayResult.seasonStats.foulsCommitted}`);
+          log(`[sync] ESPN: ${espnHistory.size} player records | home corners=${homeResult.seasonStats?.cornersFor ?? 'n/a'} shots=${homeResult.seasonStats?.shotsFor ?? 'n/a'} | away corners=${awayResult.seasonStats?.cornersFor ?? 'n/a'} shots=${awayResult.seasonStats?.shotsFor ?? 'n/a'}`);
           // Store ESPN season stats on espnHistory object for use in buildTeamStats
           (espnHistory as any).__homeStats = homeResult.seasonStats;
           (espnHistory as any).__awayStats = awayResult.seasonStats;
@@ -685,13 +665,11 @@ async function runSync() {
       apiFetch(`/teams/${match.awayTeam.id}/matches?status=FINISHED&limit=10`, 60 * 60 * 1000),
     ]);
 
-    log(`[pre-buildStats] homeStats=${JSON.stringify((espnHistory as any).__homeStats)?.slice(0,80)}`);
     const homeStats = buildTeamStats(homeResults?.matches, match.homeTeam.id, (espnHistory as any).__homeStats ?? null, (espnHistory as any).__awayStats ?? null);
     const awayStats = buildTeamStats(awayResults?.matches, match.awayTeam.id, (espnHistory as any).__awayStats ?? null, (espnHistory as any).__homeStats ?? null);
-    log(`[team-stats-home] corners=${homeStats.cornersFor} shots=${homeStats.shotsFor} fouls=${homeStats.foulsCommitted} cards=${homeStats.cardsFor}`);
-    log(`[team-stats-away] corners=${awayStats.cornersFor} shots=${awayStats.shotsFor} fouls=${awayStats.foulsCommitted} cards=${awayStats.cardsFor}`);
-    const players   = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory);
-    log(`[players-diag] ${players.diag}`);
+    log(`[stats] ${homeName}: corners=${homeStats.cornersFor} shots=${homeStats.shotsFor} fouls=${homeStats.foulsCommitted}`);
+    log(`[stats] ${awayName}: corners=${awayStats.cornersFor} shots=${awayStats.shotsFor} fouls=${awayStats.foulsCommitted}`);
+    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory);
 
     const matchData = {
       competition: match.competition?.name || 'Football', stage,
