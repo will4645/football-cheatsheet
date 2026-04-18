@@ -6,6 +6,26 @@ import {
 import { getApiFootballLineups, fetchTeamPlayerHistory, PlayerGameStat } from '@/lib/api-football';
 import type { TeamSeasonStats } from '@/lib/api-football';
 
+// Direct Supabase client for writes (bypasses store.ts to avoid fs-module caching issues)
+function getSb() {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
+  const { createClient } = require('@supabase/supabase-js');
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+async function sbSet(key: string, value: unknown) {
+  const sb = getSb();
+  if (!sb) return;
+  await sb.from('match_cache').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+}
+
+async function sbGet(key: string) {
+  const sb = getSb();
+  if (!sb) return null;
+  const { data } = await sb.from('match_cache').select('value').eq('key', key).single();
+  return data?.value ?? null;
+}
+
 export const maxDuration = 60; // Vercel max for hobby plan
 
 // ── Auth ───────────────────────────────────────────────────────────────────
@@ -563,7 +583,7 @@ async function runSync() {
 
   const LIVE_STATUSES = new Set(['IN_PLAY', 'PAUSED', 'HALF_TIME', 'EXTRA_TIME', 'PENALTY']);
 
-  const liveMatches: any[] = (await getMatches()) ?? [];
+  const liveMatches: any[] = (await sbGet('matches') as any[]) ?? [];
   const pendingList: any[] = [];
 
   for (const match of data.matches) {
@@ -571,7 +591,7 @@ async function runSync() {
     const status = match.status;
 
     if (FINISHED_STATUSES.has(status)) {
-      await deleteMatch(id);
+      const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${id}`);
       const updated = liveMatches.filter((m: any) => m.id !== id);
       liveMatches.splice(0, liveMatches.length, ...updated);
       continue;
@@ -684,12 +704,8 @@ async function runSync() {
       fixtureId: match.id, status,
     };
 
-    try {
-      await setMatch(id, matchData);
-      log(`[sync] setMatch OK: ${id} corners=${(matchData.homeTeam as any).stats?.cornersFor}`);
-    } catch (e: any) {
-      log(`[sync] setMatch FAILED: ${id} — ${e.message}`);
-    }
+    await sbSet(`match:${id}`, matchData);
+    log(`[sync] saved: ${id} corners=${(matchData.homeTeam as any).stats?.cornersFor}`);
 
     if (!liveMatches.find((m: any) => m.id === id)) {
       liveMatches.push({
@@ -701,8 +717,8 @@ async function runSync() {
     }
   }
 
-  await setMatches(liveMatches);
-  await setUpcoming(pendingList);
+  await sbSet('matches', liveMatches);
+  await sbSet('upcoming', pendingList);
   log(`[sync] Done — ${liveMatches.length} live, ${pendingList.length} pending`);
   return logs;
 }
