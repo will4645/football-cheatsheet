@@ -13,7 +13,7 @@ export async function GET() {
     return NextResponse.json({
       live: live.data?.value ?? [],
       upcoming: upcoming.data?.value ?? [],
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
   return NextResponse.json({ live: [], upcoming: [] });
 }

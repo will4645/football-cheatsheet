@@ -13,7 +13,9 @@ export async function GET(
     const { createClient } = require('@supabase/supabase-js');
     const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { data } = await sb.from('match_cache').select('value').eq('key', `match:${id}`).single();
-    if (data?.value) return NextResponse.json(data.value);
+    if (data?.value) return NextResponse.json(data.value, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    });
   }
 
   // Fallback: serve the hardcoded Atletico vs Barcelona data
