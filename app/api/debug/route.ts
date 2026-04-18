@@ -22,8 +22,8 @@ export async function GET(req: NextRequest) {
     rows: (allRows ?? []).map((r: any) => ({
       key: r.key,
       updatedAt: r.updated_at,
-      hasLast5: !!(r.value?.homeTeam?.players?.defensive?.[0]?.last5Fouls),
-      firstPlayerName: r.value?.homeTeam?.players?.defensive?.[0]?.name ?? null,
+      homeStats: r.value?.homeTeam?.stats ?? null,
+      awayStats: r.value?.awayTeam?.stats ?? null,
     })),
   });
 }
