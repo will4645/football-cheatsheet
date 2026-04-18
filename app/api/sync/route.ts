@@ -681,7 +681,12 @@ async function runSync() {
       fixtureId: match.id, status,
     };
 
-    await setMatch(id, matchData);
+    try {
+      await setMatch(id, matchData);
+      log(`[sync] setMatch OK: ${id} corners=${(matchData.homeTeam as any).stats?.cornersFor}`);
+    } catch (e: any) {
+      log(`[sync] setMatch FAILED: ${id} — ${e.message}`);
+    }
 
     if (!liveMatches.find((m: any) => m.id === id)) {
       liveMatches.push({
