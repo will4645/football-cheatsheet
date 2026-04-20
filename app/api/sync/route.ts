@@ -122,10 +122,10 @@ function lookupPlayer(idx: Map<string, any>, name: string) {
   const norm = normName(name); const parts = norm.split(' ');
   const last = parts[parts.length - 1];
   if (idx.has(norm)) return idx.get(norm);
-  if (idx.has(last) && last.length > 4) return idx.get(last);
+  if (idx.has(last) && last.length > 3) return idx.get(last);
   const fl = `${parts[0]} ${last}`;
   if (idx.has(fl)) return idx.get(fl);
-  if (last.length > 5) { for (const [k, v] of Array.from(idx)) { if (k.includes(last)) return v; } }
+  if (last.length > 4) { for (const [k, v] of Array.from(idx)) { if (k.includes(last)) return v; } }
   return null;
 }
 
@@ -288,7 +288,7 @@ function buildTeamStats(
     shotsFor:      +shotsFor.toFixed(2),      shotsAgainst:   +shotsAgainst.toFixed(2),
     over195Shots:  overProb(shotsFor + shotsAgainst, 19.5),
     sotFor:        +sotFor.toFixed(2),        sotAgainst:     +sotAgainst.toFixed(2),
-    over95SoT:     overProb(sotFor + sotAgainst, 9.5),
+    over95SoT:     overProb(sotFor + sotAgainst, 6.5),
     foulsCommitted: +foulsCommitted.toFixed(2), foulsWon:      +foulsWon.toFixed(2),
     over155Fouls:  overProb(foulsCommitted + foulsWon, 15.5),
     cardsFor:      +cardsFor.toFixed(2),      cardsAgainst:   +cardsAgainst.toFixed(2),
@@ -335,9 +335,9 @@ async function buildPlayers(
       foulsWonPerGame: isAtt ? 1.8 : isMid ? 1.2 : isGK ? 0.1 : 0.8,
       sotPerGame: isAtt ? 1.5 : isMid ? 0.6 : 0.2,
       shotsPerGame: isAtt ? 3.0 : isMid ? 1.2 : 0.4,
-      goals: isAtt ? 8 : isMid ? 4 : 1,
-      assists: isAtt ? 5 : isMid ? 6 : 2,
-      gaPerGame: isAtt ? 0.7 : isMid ? 0.4 : 0.1,
+      goals: isAtt ? 4 : isMid ? 2 : 0,
+      assists: isAtt ? 3 : isMid ? 3 : 1,
+      gaPerGame: isAtt ? 0.35 : isMid ? 0.25 : 0.05,
       yellowCards: isDef ? 4 : isMid ? 3 : 2,
       form: 'ok' as const,
     };
@@ -593,11 +593,12 @@ async function runSync() {
   log(`[sync] FBref index: ${fbrefIdx.size} name keys`);
 
   const today = new Date();
+  const twoDaysAgo = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000);
   const in7d   = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
   const fmt    = (d: Date) => d.toISOString().slice(0, 10);
 
   const data = await apiFetch(
-    `/matches?competitions=${COMPETITIONS.join(',')}&dateFrom=${fmt(today)}&dateTo=${fmt(in7d)}`
+    `/matches?competitions=${COMPETITIONS.join(',')}&dateFrom=${fmt(twoDaysAgo)}&dateTo=${fmt(in7d)}`
   );
   if (!data?.matches) { log('[sync] No matches returned'); return logs; }
 
@@ -612,15 +613,16 @@ async function runSync() {
     const id     = matchId(match.homeTeam?.name, match.awayTeam?.name);
     const status = match.status;
 
-    if (FINISHED_STATUSES.has(status)) {
+    const kickoff   = new Date(match.utcDate);
+    const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
+    const hoursElapsed = -hoursAway;
+
+    if (FINISHED_STATUSES.has(status) || hoursElapsed > 2) {
       const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${id}`);
       const updated = liveMatches.filter((m: any) => m.id !== id);
       liveMatches.splice(0, liveMatches.length, ...updated);
       continue;
     }
-
-    const kickoff   = new Date(match.utcDate);
-    const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
     const isLive    = LIVE_STATUSES.has(status);
 
     // Add future matches (>24h) to upcoming list only
@@ -681,7 +683,7 @@ async function runSync() {
 
     if (!hasLineups) {
       log(`[sync] No lineups yet: ${homeName} vs ${awayName}`);
-      if (!liveMatches.find((m: any) => m.id === id)) {
+      if (hoursAway > -3 && !liveMatches.find((m: any) => m.id === id)) {
         pendingList.push({
           id, competition: match.competition?.name || 'Football', stage,
           date: formatDate(match.utcDate), kickoff: formatKickoff(match.utcDate),
