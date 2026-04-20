@@ -116,7 +116,7 @@ export async function fetchFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
     const stdMap = await fetchStandard(comp.id, comp.slug);
     const miscMap = await fetchMisc(comp.id, comp.slug);
 
-    for (const [key, s] of stdMap) {
+    for (const [key, s] of Array.from(stdMap)) {
       if (index.has(key)) continue; // already have from a higher-priority comp
       const m = miscMap.get(key);
       index.set(key, {
