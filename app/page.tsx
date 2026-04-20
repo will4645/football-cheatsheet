@@ -104,28 +104,28 @@ function MatchCard({ match, pending = false }: { match: AnyMatch; pending?: bool
           </span>
         )}
       </div>
-      <div className="grid grid-cols-3 items-center px-8 py-6">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+      <div className="grid grid-cols-3 items-center px-4 py-4 lg:px-8 lg:py-6">
+        <div className="flex items-center gap-2 lg:gap-4">
+          <div className="w-10 h-10 lg:w-16 lg:h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
                style={{ background: match.homeTeam.primaryColor + '12', border: `1px solid ${match.homeTeam.primaryColor}40` }}>
-            <img src={match.homeTeam.badge} alt={match.homeTeam.name} className="w-12 h-12 object-contain" />
+            <img src={match.homeTeam.badge} alt={match.homeTeam.name} className="w-8 h-8 lg:w-12 lg:h-12 object-contain" style={{ mixBlendMode: 'multiply' }} />
           </div>
-          <div>
-            <p className="text-base font-black text-white leading-tight">{match.homeTeam.name}</p>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">Home</p>
+          <div className="min-w-0">
+            <p className="text-sm lg:text-base font-black text-white leading-tight truncate">{match.homeTeam.name}</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5 hidden sm:block">Home</p>
           </div>
         </div>
         <div className="text-center">
-          <p className="text-5xl font-black" style={{ color: 'rgba(255,255,255,0.06)' }}>VS</p>
+          <p className="text-3xl lg:text-5xl font-black" style={{ color: 'rgba(255,255,255,0.06)' }}>VS</p>
         </div>
-        <div className="flex items-center gap-4 justify-end">
-          <div className="text-right">
-            <p className="text-base font-black text-white leading-tight">{match.awayTeam.name}</p>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">Away</p>
+        <div className="flex items-center gap-2 lg:gap-4 justify-end">
+          <div className="text-right min-w-0">
+            <p className="text-sm lg:text-base font-black text-white leading-tight truncate">{match.awayTeam.name}</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5 hidden sm:block">Away</p>
           </div>
-          <div className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+          <div className="w-10 h-10 lg:w-16 lg:h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
                style={{ background: match.awayTeam.primaryColor + '12', border: `1px solid ${match.awayTeam.primaryColor}40` }}>
-            <img src={match.awayTeam.badge} alt={match.awayTeam.name} className="w-12 h-12 object-contain" />
+            <img src={match.awayTeam.badge} alt={match.awayTeam.name} className="w-8 h-8 lg:w-12 lg:h-12 object-contain" style={{ mixBlendMode: 'multiply' }} />
           </div>
         </div>
       </div>
