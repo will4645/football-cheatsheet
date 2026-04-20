@@ -609,6 +609,14 @@ async function runSync() {
   const liveMatches: any[] = (await sbGet('matches') as any[]) ?? [];
   const pendingList: any[] = [];
 
+  const apiMatchIds = new Set(data.matches.map((m: any) => matchId(m.homeTeam?.name, m.awayTeam?.name)));
+  const stale = liveMatches.filter((m: any) => !apiMatchIds.has(m.id));
+  for (const m of stale) {
+    const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${m.id}`);
+    liveMatches.splice(liveMatches.findIndex((x: any) => x.id === m.id), 1);
+    log(`[sync] Removed stale: ${m.id}`);
+  }
+
   for (const match of data.matches) {
     const id     = matchId(match.homeTeam?.name, match.awayTeam?.name);
     const status = match.status;
