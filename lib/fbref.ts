@@ -57,10 +57,13 @@ function parseRows(html: string): string[] {
   return rows;
 }
 
-async function fetchStandard(compId: string, slug: string): Promise<Map<string, { name: string; games: number; mins: number; goals: number; assists: number; shots: number; yellowCards: number }>> {
+interface StdRow { name: string; games: number; mins: number; goals: number; assists: number; shots: number; yellowCards: number }
+interface MiscRow { games: number; fouls: number; fouled: number }
+
+async function fetchStandard(compId: string, slug: string): Promise<Map<string, StdRow>> {
   const url = `https://fbref.com/en/comps/${compId}/stats/${slug}-Stats`;
   const html = await fbFetch(url);
-  const map = new Map<string, any>();
+  const map = new Map<string, StdRow>();
   if (!html) return map;
   for (const row of parseRows(html)) {
     const name = getCell(row, 'player');
@@ -80,10 +83,10 @@ async function fetchStandard(compId: string, slug: string): Promise<Map<string, 
   return map;
 }
 
-async function fetchMisc(compId: string, slug: string): Promise<Map<string, { fouls: number; fouled: number; games: number }>> {
+async function fetchMisc(compId: string, slug: string): Promise<Map<string, MiscRow>> {
   const url = `https://fbref.com/en/comps/${compId}/misc/${slug}-Misc-Stats`;
   const html = await fbFetch(url);
-  const map = new Map<string, any>();
+  const map = new Map<string, MiscRow>();
   if (!html) return map;
   for (const row of parseRows(html)) {
     const name = getCell(row, 'player');
