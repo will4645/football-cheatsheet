@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+function parseKickoff(match: any): Date | null {
+  try {
+    const [day, month, year] = (match.date || '').split(' ');
+    const months: Record<string, number> = { January:0,February:1,March:2,April:3,May:4,June:5,July:6,August:7,September:8,October:9,November:10,December:11 };
+    const [time] = (match.kickoff || '').split(' ');
+    const [h, m] = time.split(':').map(Number);
+    const d = new Date(Date.UTC(Number(year), months[month], Number(day), h - 1, m)); // BST = UTC+1
+    return isNaN(d.getTime()) ? null : d;
+  } catch { return null; }
+}
+
 export async function GET() {
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { createClient } = require('@supabase/supabase-js');
@@ -10,10 +21,15 @@ export async function GET() {
       sb.from('match_cache').select('value').eq('key', 'matches').single(),
       sb.from('match_cache').select('value').eq('key', 'upcoming').single(),
     ]);
+    const now = Date.now();
+    const liveFiltered = (live.data?.value ?? []).filter((m: any) => {
+      const ko = parseKickoff(m);
+      if (!ko) return true;
+      return (now - ko.getTime()) < 3 * 60 * 60 * 1000; // remove if >3h past kickoff
+    });
     return NextResponse.json({
-      live: live.data?.value ?? [],
+      live: liveFiltered,
       upcoming: upcoming.data?.value ?? [],
-      _debug: { supabaseUrl: process.env.SUPABASE_URL, liveRaw: live.data?.value },
     }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
   return NextResponse.json({ live: [], upcoming: [] });
