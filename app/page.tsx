@@ -108,7 +108,7 @@ function MatchCard({ match, pending = false }: { match: AnyMatch; pending?: bool
         <div className="flex items-center gap-2 lg:gap-4">
           <div className="w-10 h-10 lg:w-16 lg:h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
                style={{ background: match.homeTeam.primaryColor + '12', border: `1px solid ${match.homeTeam.primaryColor}40` }}>
-            <img src={match.homeTeam.badge} alt={match.homeTeam.name} className="w-8 h-8 lg:w-12 lg:h-12 object-contain" style={{ mixBlendMode: 'multiply' }} />
+            <img src={match.homeTeam.badge} alt={match.homeTeam.name} className="w-8 h-8 lg:w-12 lg:h-12 object-contain" />
           </div>
           <div className="min-w-0">
             <p className="text-sm lg:text-base font-black text-white leading-tight truncate">{match.homeTeam.name}</p>
@@ -125,7 +125,7 @@ function MatchCard({ match, pending = false }: { match: AnyMatch; pending?: bool
           </div>
           <div className="w-10 h-10 lg:w-16 lg:h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
                style={{ background: match.awayTeam.primaryColor + '12', border: `1px solid ${match.awayTeam.primaryColor}40` }}>
-            <img src={match.awayTeam.badge} alt={match.awayTeam.name} className="w-8 h-8 lg:w-12 lg:h-12 object-contain" style={{ mixBlendMode: 'multiply' }} />
+            <img src={match.awayTeam.badge} alt={match.awayTeam.name} className="w-8 h-8 lg:w-12 lg:h-12 object-contain" />
           </div>
         </div>
       </div>
