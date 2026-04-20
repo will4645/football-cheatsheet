@@ -4,5 +4,11 @@
     "app/api/sync/route.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/sync",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }
