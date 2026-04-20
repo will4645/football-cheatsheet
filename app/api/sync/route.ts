@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getApiFootballLineups, fetchTeamPlayerHistory, PlayerGameStat } from '@/lib/api-football';
 import type { TeamSeasonStats } from '@/lib/api-football';
+import { fetchFBrefIndex, buildFBrefNameIndex, lookupFBref } from '@/lib/fbref';
+import type { FBrefPlayer } from '@/lib/fbref';
 
 // Direct Supabase client for writes (bypasses store.ts to avoid fs-module caching issues)
 function getSb() {
@@ -246,6 +248,21 @@ async function getStatsIndex(): Promise<Map<string, any>> {
   return buildNameIndex(all);
 }
 
+async function getFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
+  const cached = await sbGet('fbref_v2_cache') as { scraped: number; players: FBrefPlayer[] } | null;
+  if (cached && Date.now() - cached.scraped < STATS_TTL) {
+    return buildFBrefNameIndex(cached.players);
+  }
+  try {
+    const index = await fetchFBrefIndex();
+    const players = Array.from(index.values());
+    await sbSet('fbref_v2_cache', { scraped: Date.now(), players });
+    return buildFBrefNameIndex(players);
+  } catch {
+    return new Map();
+  }
+}
+
 // ── Build team stats ───────────────────────────────────────────────────────
 function buildTeamStats(
   fdMatches: any[],
@@ -313,6 +330,7 @@ async function buildPlayers(
   awayLineup: any,
   fbrefIdx: Map<string, any>,
   espnHistory: Map<string, PlayerGameStat[]> = new Map(),
+  fbrefV2Idx: Map<string, FBrefPlayer> = new Map(),
 ) {
   function playerDefaults(p: any) {
     const name = p.name || p.person?.name || 'Unknown';
@@ -341,9 +359,10 @@ async function buildPlayers(
       yellowCards: isDef ? 4 : isMid ? 3 : 2,
       form: 'ok' as const,
     };
+    // 1. Understat (top 5 leagues — goals, assists, shots, xG)
     const fb = lookupPlayer(fbrefIdx, name);
     if (fb && fb.games >= 3) {
-      return {
+      const result = {
         ...defaults,
         understatId: fb.id ?? '',
         mins: fb.avgMins || defaults.mins,
@@ -355,7 +374,33 @@ async function buildPlayers(
         tacklesPerGame: fb.tacklesPerGame || defaults.tacklesPerGame,
         yellowCards: fb.yellowCards,
       };
+      // 2. FBref overlay — fills fouls/tackles Understat doesn't have
+      const fb2 = lookupFBref(fbrefV2Idx, name);
+      if (fb2 && fb2.games >= 3) {
+        if (!result.foulsPerGame)    result.foulsPerGame    = fb2.foulsPerGame;
+        if (!result.foulsWonPerGame) result.foulsWonPerGame = fb2.foulsWonPerGame;
+        if (!result.yellowCards)     result.yellowCards     = fb2.yellowCards;
+      }
+      return result;
     }
+
+    // 2. FBref only (covers CL and players not in Understat top-5)
+    const fb2 = lookupFBref(fbrefV2Idx, name);
+    if (fb2 && fb2.games >= 3) {
+      const gaPerGame = fb2.games > 0 ? +((fb2.goals + fb2.assists) / fb2.games).toFixed(2) : defaults.gaPerGame;
+      return {
+        ...defaults,
+        mins: fb2.minsPerGame || defaults.mins,
+        goals: fb2.goals, assists: fb2.assists, gaPerGame,
+        shotsPerGame: fb2.shotsPerGame || defaults.shotsPerGame,
+        sotPerGame: fb2.shotsPerGame ? +(fb2.shotsPerGame * 0.37).toFixed(2) : defaults.sotPerGame,
+        foulsPerGame: fb2.foulsPerGame || defaults.foulsPerGame,
+        foulsWonPerGame: fb2.foulsWonPerGame || defaults.foulsWonPerGame,
+        yellowCards: fb2.yellowCards || defaults.yellowCards,
+      };
+    }
+
+    // 3. Position defaults (last resort)
     return defaults;
   }
 
@@ -588,9 +633,11 @@ async function runSync() {
 
   log(`[sync] Running — ${new Date().toISOString()}`);
 
-  // Load stats index
+  // Load stats indexes
   const fbrefIdx = await getStatsIndex();
-  log(`[sync] FBref index: ${fbrefIdx.size} name keys`);
+  log(`[sync] Understat index: ${fbrefIdx.size} name keys`);
+  const fbrefV2Idx = await getFBrefIndex();
+  log(`[sync] FBref index: ${fbrefV2Idx.size} name keys`);
 
   const today = new Date();
   const twoDaysAgo = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000);
@@ -713,7 +760,7 @@ async function runSync() {
     const awayStats = buildTeamStats(awayResults?.matches, match.awayTeam.id, (espnHistory as any).__awayStats ?? null, (espnHistory as any).__homeStats ?? null);
     log(`[stats] ${homeName}: corners=${homeStats.cornersFor} shots=${homeStats.shotsFor} fouls=${homeStats.foulsCommitted}`);
     log(`[stats] ${awayName}: corners=${awayStats.cornersFor} shots=${awayStats.shotsFor} fouls=${awayStats.foulsCommitted}`);
-    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory);
+    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory, fbrefV2Idx);
 
     const matchData = {
       competition: match.competition?.name || 'Football', stage,
