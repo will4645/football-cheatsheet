@@ -28,7 +28,10 @@ export async function GET() {
       if (!ko) return true;
       return (now - ko.getTime()) < 3 * 60 * 60 * 1000; // remove if >3h past kickoff
     });
-    const upcomingFiltered = (upcoming.data?.value ?? []).filter((m: any) => {
+    const rawUpcoming = upcoming.data?.value ?? [];
+    console.log('[matches] raw upcoming count:', rawUpcoming.length);
+    if (rawUpcoming[0]) console.log('[matches] sample:', JSON.stringify({ date: rawUpcoming[0].date, kickoff: rawUpcoming[0].kickoff, ko: parseKickoff(rawUpcoming[0])?.toISOString(), now: new Date(now).toISOString() }));
+    const upcomingFiltered = rawUpcoming.filter((m: any) => {
       const ko = parseKickoff(m);
       if (!ko) return true;
       return ko.getTime() > now;
