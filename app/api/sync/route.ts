@@ -655,6 +655,7 @@ async function runSync() {
 
   const liveMatches: any[] = (await sbGet('matches') as any[]) ?? [];
   const pendingList: any[] = [];
+  const nearTermMatches: any[] = [];
 
   const apiMatchIds = new Set(data.matches.map((m: any) => matchId(m.homeTeam?.name, m.awayTeam?.name)));
   const stale = liveMatches.filter((m: any) => !apiMatchIds.has(m.id));
@@ -664,13 +665,12 @@ async function runSync() {
     log(`[sync] Removed stale: ${m.id}`);
   }
 
+  // Phase 1: fast pass — classify matches without any API calls
   for (const match of data.matches) {
     const id     = matchId(match.homeTeam?.name, match.awayTeam?.name);
     const status = match.status;
-
     const kickoff   = new Date(match.utcDate);
     const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
-    const hoursElapsed = -hoursAway;
 
     if (FINISHED_STATUSES.has(status) || !(hoursAway > -2)) {
       const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${id}`);
@@ -678,9 +678,8 @@ async function runSync() {
       liveMatches.splice(0, liveMatches.length, ...updated);
       continue;
     }
-    const isLive    = LIVE_STATUSES.has(status);
+    const isLive = LIVE_STATUSES.has(status);
 
-    // Add future matches (>24h) to upcoming list only
     if (hoursAway > 24 && !isLive) {
       if (!pendingList.find((m: any) => m.id === id) && !liveMatches.find((m: any) => m.id === id)) {
         const homeName = match.homeTeam?.name;
@@ -693,10 +692,23 @@ async function runSync() {
           homeTeam: { name: homeName, badge: `https://crests.football-data.org/${match.homeTeam.id}.svg`, primaryColor: getTeamColor(homeName) },
           awayTeam: { name: awayName, badge: `https://crests.football-data.org/${match.awayTeam.id}.svg`, primaryColor: getTeamColor(awayName) },
         });
-        log(`[sync] pending (far): ${id} utcDate=${match.utcDate}`);
       }
       continue;
     }
+    nearTermMatches.push(match);
+  }
+
+  // Write upcoming now — far-future matches are ready; near-term will be added below
+  log(`[sync] Phase 1 done — ${pendingList.length} far-pending, ${nearTermMatches.length} near-term to process`);
+  await sbSet('upcoming', pendingList);
+
+  // Phase 2: slow pass — lineup checks for near-term matches
+  for (const match of nearTermMatches) {
+    const id     = matchId(match.homeTeam?.name, match.awayTeam?.name);
+    const status = match.status;
+    const kickoff   = new Date(match.utcDate);
+    const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
+    const isLive = LIVE_STATUSES.has(status);
 
     let lineupData = await apiFetch(`/matches/${match.id}/lineups`, 2 * 60 * 1000);
     let hasLineups = lineupData?.homeTeam?.lineup?.length > 0 || lineupData?.homeTeam?.startingEleven?.length > 0;
