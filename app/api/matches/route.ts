@@ -3,12 +3,16 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 function parseKickoff(match: any): Date | null {
+  if (match.utcDate) {
+    const d = new Date(match.utcDate);
+    return isNaN(d.getTime()) ? null : d;
+  }
   try {
     const [day, month, year] = (match.date || '').split(' ');
     const months: Record<string, number> = { January:0,February:1,March:2,April:3,May:4,June:5,July:6,August:7,September:8,October:9,November:10,December:11 };
     const parts = (match.kickoff || '').split(' ');
     const [h, m] = parts[0].split(':').map(Number);
-    const offset = parts[1] === 'BST' ? 1 : 0; // BST=UTC+1, GMT=UTC+0
+    const offset = parts[1] === 'BST' ? 1 : 0;
     const d = new Date(Date.UTC(Number(year), months[month], Number(day), h - offset, m));
     return isNaN(d.getTime()) ? null : d;
   } catch { return null; }
@@ -30,7 +34,7 @@ export async function GET() {
     });
     const rawUpcoming = upcoming.data?.value ?? [];
     console.log('[matches] raw upcoming count:', rawUpcoming.length);
-    console.log('[matches] upcoming dates:', rawUpcoming.map((m: any) => m.date + ' ' + m.kickoff).join(' | '));
+    if (rawUpcoming[0]) console.log('[matches] sample utcDate:', rawUpcoming[0].utcDate, '| date:', rawUpcoming[0].date);
     const upcomingFiltered = rawUpcoming.filter((m: any) => {
       const ko = parseKickoff(m);
       if (!ko) return true;

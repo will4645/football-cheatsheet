@@ -688,10 +688,12 @@ async function runSync() {
         pendingList.push({
           id, competition: match.competition?.name || 'Football',
           stage: match.stage ? match.stage.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : match.matchday ? `Matchday ${match.matchday}` : 'Match',
+          utcDate: match.utcDate,
           date: formatDate(match.utcDate), kickoff: formatKickoff(match.utcDate),
           homeTeam: { name: homeName, badge: `https://crests.football-data.org/${match.homeTeam.id}.svg`, primaryColor: getTeamColor(homeName) },
           awayTeam: { name: awayName, badge: `https://crests.football-data.org/${match.awayTeam.id}.svg`, primaryColor: getTeamColor(awayName) },
         });
+        log(`[sync] pending (far): ${id} utcDate=${match.utcDate}`);
       }
       continue;
     }
@@ -741,10 +743,12 @@ async function runSync() {
       if (hoursAway > -3 && !liveMatches.find((m: any) => m.id === id)) {
         pendingList.push({
           id, competition: match.competition?.name || 'Football', stage,
+          utcDate: match.utcDate,
           date: formatDate(match.utcDate), kickoff: formatKickoff(match.utcDate),
           homeTeam: { name: homeName, badge: homeBadge, primaryColor: getTeamColor(homeName) },
           awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
         });
+        log(`[sync] pending (near): ${id} utcDate=${match.utcDate}`);
       }
       continue;
     }
