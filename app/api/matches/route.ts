@@ -30,7 +30,7 @@ export async function GET() {
     });
     const rawUpcoming = upcoming.data?.value ?? [];
     console.log('[matches] raw upcoming count:', rawUpcoming.length);
-    if (rawUpcoming[0]) console.log('[matches] sample:', JSON.stringify({ date: rawUpcoming[0].date, kickoff: rawUpcoming[0].kickoff, ko: parseKickoff(rawUpcoming[0])?.toISOString(), now: new Date(now).toISOString() }));
+    console.log('[matches] upcoming dates:', rawUpcoming.map((m: any) => m.date + ' ' + m.kickoff).join(' | '));
     const upcomingFiltered = rawUpcoming.filter((m: any) => {
       const ko = parseKickoff(m);
       if (!ko) return true;
