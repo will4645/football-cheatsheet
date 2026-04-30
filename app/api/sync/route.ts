@@ -672,7 +672,7 @@ async function runSync() {
     const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
     const hoursElapsed = -hoursAway;
 
-    if (FINISHED_STATUSES.has(status) || hoursElapsed > 2) {
+    if (FINISHED_STATUSES.has(status) || !(hoursAway > -2)) {
       const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${id}`);
       const updated = liveMatches.filter((m: any) => m.id !== id);
       liveMatches.splice(0, liveMatches.length, ...updated);
