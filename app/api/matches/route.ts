@@ -28,14 +28,9 @@ export async function GET() {
       if (!ko) return true;
       return (now - ko.getTime()) < 3 * 60 * 60 * 1000; // remove if >3h past kickoff
     });
-    const upcomingFiltered = (upcoming.data?.value ?? []).filter((m: any) => {
-      const ko = parseKickoff(m);
-      if (!ko) return true; // keep if we can't parse the time
-      return ko.getTime() > now; // only show matches that haven't kicked off yet
-    });
     return NextResponse.json({
       live: liveFiltered,
-      upcoming: upcomingFiltered,
+      upcoming: upcoming.data?.value ?? [],
     }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   }
   return NextResponse.json({ live: [], upcoming: [] });
