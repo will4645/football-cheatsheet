@@ -36,17 +36,10 @@ export async function GET() {
         return (now - ko.getTime()) < 3 * 60 * 60 * 1000;
       });
       const rawUpcoming = upcoming.data?.value ?? [];
-      console.log('[matches] raw upcoming count:', rawUpcoming.length, '| now:', new Date(now).toISOString());
-      if (rawUpcoming[0]) console.log('[matches] sample utcDate:', rawUpcoming[0].utcDate, '| ko>now:', parseKickoff(rawUpcoming[0])?.getTime() ?? 'null', '>', now);
-      const upcomingFiltered = rawUpcoming.filter((m: any) => {
-        const ko = parseKickoff(m);
-        if (!ko) return true;
-        return ko.getTime() > now;
-      });
-      console.log('[matches] filtered upcoming count:', upcomingFiltered.length);
+      console.log('[matches] upcoming count:', rawUpcoming.length, '| now:', new Date(now).toISOString());
       return NextResponse.json({
         live: liveFiltered,
-        upcoming: upcomingFiltered,
+        upcoming: rawUpcoming,
       }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
     } catch (e: any) {
       console.error('[matches] error:', e.message);

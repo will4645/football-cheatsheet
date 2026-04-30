@@ -27,7 +27,7 @@ async function sbGet(key: string) {
 }
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 function isAuthorized(req: NextRequest) {
@@ -796,9 +796,10 @@ async function runSync() {
     }
   }
 
+  log(`[sync] Writing — ${liveMatches.length} live, ${pendingList.length} pending`);
   await sbSet('matches', liveMatches);
   await sbSet('upcoming', pendingList);
-  log(`[sync] Done — ${liveMatches.length} live, ${pendingList.length} pending`);
+  log(`[sync] Done — wrote upcoming ok`);
   return logs;
 }
 
