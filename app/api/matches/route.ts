@@ -30,7 +30,7 @@ export async function GET() {
     });
     const upcomingFiltered = (upcoming.data?.value ?? []).filter((m: any) => {
       const ko = parseKickoff(m);
-      if (!ko) return false;
+      if (!ko) return true; // keep if we can't parse the time
       return ko.getTime() > now; // only show matches that haven't kicked off yet
     });
     return NextResponse.json({
