@@ -125,12 +125,12 @@ function extractEventStats(summary: any): { stats: Map<string, PlayerGameStat>; 
       };
 
       map.set(id, {
-        fc:      getStat('foulscommitted', 'fc', 'fouls committed', 'fouls'),
-        fd:      getStat('foulssuffered', 'foulsdrawn', 'fd', 'fouls drawn', 'foulswon', 'foulswonfree'),
-        goals:   getStat('totalgoals', 'goals', 'g', 'goalscored'),
-        assists: getStat('goalassists', 'assists', 'a', 'keyassists'),
-        shots:   getStat('totalshots', 'shots', 'sh', 'shotattempts', 'attemptedshots', 'totalattempts'),
-        sot:     getStat('shotsontarget', 'sot', 'shotsongoal', 'shotongoal', 'ontargetattempts', 'ongoalattempts', 'shotsontarget'),
+        fc:      getStat('foulscommitted', 'fc', 'fouls committed', 'fouls', 'foulscom'),
+        fd:      getStat('foulssuffered', 'foulsdrawn', 'fd', 'fouls drawn', 'foulswon', 'foulswonfree', 'foulsdrawn'),
+        goals:   getStat('totalgoals', 'goals', 'g', 'goalscored', 'goal', 'goalsscored', 'gls', 'goaltotal', 'goalsTotal'),
+        assists: getStat('goalassists', 'assists', 'a', 'keyassists', 'ast', 'assist', 'assiststotal', 'goalassist'),
+        shots:   getStat('totalshots', 'shots', 'sh', 'shotattempts', 'attemptedshots', 'totalattempts', 'totalShots', 'shotstotal'),
+        sot:     getStat('shotsontarget', 'sot', 'shotsongoal', 'shotongoal', 'ontargetattempts', 'ongoalattempts', 'sog', 'targetshots', 'shotsOnTarget'),
       });
     }
   }

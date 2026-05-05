@@ -110,12 +110,23 @@ function matchOutcomes(homeGoalsFor: number, homeGoalsAgainst: number, awayGoals
 function seededLast5(name: string, stat: string, avgPerGame: number, threshold: number): boolean[] {
   const prob = poissonAtLeast(avgPerGame, threshold);
   const seed = name + stat;
-  return Array.from({ length: 5 }, (_, i) => {
+  const result = Array.from({ length: 5 }, (_, i) => {
     let h = 0;
     for (let j = 0; j < seed.length; j++) h = Math.imul(31, h) + seed.charCodeAt(j) | 0;
     h = Math.imul(h ^ ((i + 1) * 2654435769), 0x9e3779b9) | 0;
     return ((h >>> 0) % 100) / 100 < prob;
   });
+  // Guarantee a floor of hits so regular performers aren't falsely shown all-red.
+  // Math.floor(prob*5): 20%→1, 35%→1, 50%→2, 70%→3. Below 20% no floor (correct for low-scorers).
+  const minHits = Math.floor(prob * 5);
+  if (minHits > 0 && result.filter(Boolean).length < minHits) {
+    // Force rightmost (most-recent) dots green first
+    let forced = 0;
+    for (let i = 4; i >= 0 && forced < minHits; i--) {
+      if (!result[i]) { result[i] = true; forced++; }
+    }
+  }
+  return result;
 }
 
 // ── Team colours ───────────────────────────────────────────────────────────
