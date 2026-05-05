@@ -259,31 +259,28 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
 export default function MatchSheet({ data }: { data?: MatchData }) {
   const [activeTab, setActiveTab] = useState<Tab>('defensive');
   const [activeTeam, setActiveTeam] = useState<'home' | 'away'>('home');
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const [thumbWidth, setThumbWidth] = useState(50);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLDivElement>(null);
   const { homeTeam, awayTeam, referee, competition, stage, date, kickoff, probabilities } = data ?? staticMatchData;
   const compColor = competitionColor(competition);
 
-  const handleScroll = useCallback(() => {
+  const updateThumb = useCallback(() => {
     const el = scrollRef.current;
-    if (!el) return;
+    const thumb = thumbRef.current;
+    if (!el || !thumb) return;
     const max = el.scrollWidth - el.clientWidth;
-    setScrollProgress(max > 0 ? el.scrollLeft / max : 0);
-    setThumbWidth(max > 0 ? (el.clientWidth / el.scrollWidth) * 100 : 100);
+    const tw = max > 0 ? (el.clientWidth / el.scrollWidth) * 100 : 100;
+    const pos = max > 0 ? (el.scrollLeft / max) * (100 - tw) : 0;
+    thumb.style.width = `${tw}%`;
+    thumb.style.left = `${pos}%`;
   }, []);
 
-  // recalculate thumb when tab/team changes
+  const handleScroll = useCallback(() => { updateThumb(); }, [updateThumb]);
+
   const resetScroll = useCallback(() => {
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
-    setScrollProgress(0);
-    setTimeout(() => {
-      const el = scrollRef.current;
-      if (!el) return;
-      const max = el.scrollWidth - el.clientWidth;
-      setThumbWidth(max > 0 ? (el.clientWidth / el.scrollWidth) * 100 : 100);
-    }, 50);
-  }, []);
+    setTimeout(updateThumb, 50);
+  }, [updateThumb]);
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'defensive',   label: 'Defensive' },
@@ -466,10 +463,11 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
               </svg>
               <div className="flex-1 h-1 rounded-full relative" style={{ background: 'rgba(255,255,255,0.07)' }}>
                 <div
-                  className="absolute top-0 h-full rounded-full transition-all duration-75"
+                  ref={thumbRef}
+                  className="absolute top-0 h-full rounded-full"
                   style={{
-                    width: `${thumbWidth}%`,
-                    left: `${scrollProgress * (100 - thumbWidth)}%`,
+                    width: '100%',
+                    left: '0%',
                     backgroundColor: compColor,
                     boxShadow: `0 0 6px ${compColor}80`,
                   }}
