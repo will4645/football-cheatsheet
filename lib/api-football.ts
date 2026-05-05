@@ -128,12 +128,12 @@ function extractEventStats(summary: any): { stats: Map<string, PlayerGameStat>; 
       };
 
       map.set(id, {
-        fc:      getStat('foulscommitted', 'fc', 'fouls committed'),
-        fd:      getStat('foulssuffered', 'foulsdrawn', 'fd', 'fouls drawn', 'foulswon'),
-        goals:   getStat('totalgoals', 'goals', 'g'),
-        assists: getStat('goalassists', 'assists', 'a'),
-        shots:   getStat('totalshots', 'shots', 'sh'),
-        sot:     getStat('shotsontarget', 'sot'),
+        fc:      getStat('foulscommitted', 'fc', 'fouls committed', 'fouls'),
+        fd:      getStat('foulssuffered', 'foulsdrawn', 'fd', 'fouls drawn', 'foulswon', 'foulswonfree'),
+        goals:   getStat('totalgoals', 'goals', 'g', 'goalscored'),
+        assists: getStat('goalassists', 'assists', 'a', 'keyassists'),
+        shots:   getStat('totalshots', 'shots', 'sh', 'shotattempts', 'attemptedshots', 'totalattempts'),
+        sot:     getStat('shotsontarget', 'sot', 'shotsongoal', 'shotongoal', 'ontargetattempts', 'ongoalattempts', 'shotsontarget'),
       });
     }
   }
