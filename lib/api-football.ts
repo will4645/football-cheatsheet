@@ -67,7 +67,7 @@ function transformRoster(roster: any[]): { lineup: any[]; startingEleven: any[] 
     .filter(p => p.starter)
     .map(p => ({
       name:           p.athlete?.displayName ?? p.athlete?.fullName ?? 'Unknown',
-      espnId:         p.athlete?.id ?? '',
+      espnId:         p.athlete?.id != null ? String(p.athlete.id) : '',
       position:       p.position?.displayName ?? p.athlete?.position?.displayName ?? 'Midfielder',
       posAbbr:        (p.position?.abbreviation ?? '').toUpperCase(),
       formationPlace: parseInt(p.formationPlace) || 0,
@@ -104,7 +104,7 @@ function extractEventStats(summary: any): { stats: Map<string, PlayerGameStat>; 
   for (const team of rosters) {
     for (const p of team?.roster ?? []) {
       rosterPlayers++;
-      const id = p.athlete?.id;
+      const id = p.athlete?.id != null ? String(p.athlete.id) : null;
       if (!id) continue;
 
       const rawStats: any[] = p.stats ?? p.statistics ?? [];
