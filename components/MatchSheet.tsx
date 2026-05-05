@@ -297,6 +297,8 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
   const [activeTeam, setActiveTeam] = useState<'home' | 'away'>('home');
   const scrollRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
+  const tabsScrollRef = useRef<HTMLDivElement>(null);
+  const tabsThumbRef = useRef<HTMLDivElement>(null);
   const { homeTeam, awayTeam, referee, competition, stage, date, kickoff, probabilities } = data ?? staticMatchData;
   const compColor = competitionColor(competition);
 
@@ -312,6 +314,17 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
   }, []);
 
   const handleScroll = useCallback(() => { updateThumb(); }, [updateThumb]);
+
+  const updateTabsThumb = useCallback(() => {
+    const el = tabsScrollRef.current;
+    const thumb = tabsThumbRef.current;
+    if (!el || !thumb) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const tw = max > 0 ? (el.clientWidth / el.scrollWidth) * 100 : 100;
+    const pos = max > 0 ? (el.scrollLeft / max) * (100 - tw) : 0;
+    thumb.style.width = `${tw}%`;
+    thumb.style.left = `${pos}%`;
+  }, []);
 
   const resetScroll = useCallback(() => {
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
@@ -462,22 +475,37 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
           </div>
 
           {/* Stat type tabs */}
-          <div className="overflow-x-auto" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', scrollbarWidth: 'none' }}>
+          <div
+            ref={tabsScrollRef}
+            className="overflow-x-auto lg:overflow-visible"
+            style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', scrollbarWidth: 'none' }}
+            onScroll={updateTabsThumb}
+          >
             <div className="flex lg:w-full min-w-max lg:min-w-0">
-            {tabs.map(t => (
-              <button
-                key={t.key}
-                onClick={() => { setActiveTab(t.key); resetScroll(); }}
-                className="flex-none lg:flex-1 px-5 py-3 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap"
-                style={{
-                  color: activeTab === t.key ? '#fff' : '#4b5563',
-                  borderBottom: activeTab === t.key ? `2px solid ${compColor}` : '2px solid transparent',
-                  background: activeTab === t.key ? compColor + '0f' : 'transparent',
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
+              {tabs.map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => { setActiveTab(t.key); resetScroll(); }}
+                  className="flex-none lg:flex-1 px-5 py-3 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap"
+                  style={{
+                    color: activeTab === t.key ? '#fff' : '#4b5563',
+                    borderBottom: activeTab === t.key ? `2px solid ${compColor}` : '2px solid transparent',
+                    background: activeTab === t.key ? compColor + '0f' : 'transparent',
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Tab scroll indicator — mobile only */}
+          <div className="lg:hidden px-3 py-1.5">
+            <div className="h-0.5 rounded-full relative" style={{ background: 'rgba(255,255,255,0.07)' }}>
+              <div
+                ref={tabsThumbRef}
+                className="absolute top-0 h-full rounded-full"
+                style={{ width: '60%', left: '0%', backgroundColor: compColor, boxShadow: `0 0 6px ${compColor}80` }}
+              />
             </div>
           </div>
 
