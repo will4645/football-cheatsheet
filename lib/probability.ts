@@ -19,25 +19,22 @@ export function poissonAtLeast(lambda: number, k: number): number {
 }
 
 /**
- * Clamp a probability (0–1) to the nearest 20-point step: 20, 40, 60, 80, 100.
- * Minimum is 20 (never returns 0).
+ * Clamp a probability (0–1) to the nearest 1%, range [1, 100].
  * @param prob Raw probability in range [0, 1]
- * @returns Integer: 20 | 40 | 60 | 80 | 100
+ * @returns Integer in [1, 100]
  */
 export function toScale(prob: number): number {
-  const pct = prob * 100;
-  const rounded = Math.round(pct / 20) * 20;
-  return Math.max(20, Math.min(100, rounded));
+  return Math.max(1, Math.min(100, Math.round(prob * 100)));
 }
 
 /**
- * Returns the scaled probability (as a whole number, multiple of 20) that
- * a stat exceeds `threshold`. E.g. overProb(2.5, 2) = P(X >= 3).
+ * Returns the scaled probability (as a whole-number percent) that
+ * a stat exceeds `threshold`. E.g. overProb(avg, 2.5) = P(X >= 3).
  * @param avg Season average (lambda for Poisson)
- * @param threshold The "over X" value — we compute P(X >= threshold + 1)
+ * @param threshold The "over X" value — we compute P(X >= ceil(threshold))
  */
 export function overProb(avg: number, threshold: number): number {
-  return toScale(poissonAtLeast(avg, threshold + 1));
+  return toScale(poissonAtLeast(avg, Math.ceil(threshold)));
 }
 
 /**

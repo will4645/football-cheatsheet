@@ -2,25 +2,25 @@ export type Form = 'good' | 'ok' | 'poor';
 
 export interface DefensivePlayer {
   name: string; mins: number; foulsPerGame: number; tacklesPerGame: number;
-  last5Fouls?: boolean[]; yellowCards: number; potentialOpponent: string; form: Form;
+  last5Fouls?: boolean[] | null; yellowCards: number; potentialOpponent: string; form: Form;
 }
 export interface OffensivePlayer {
   name: string; mins: number; foulsWonPerGame: number;
-  last5FoulsWon?: boolean[]; potentialOpponent: string; form: Form;
+  last5FoulsWon?: boolean[] | null; potentialOpponent: string; form: Form;
 }
 export interface ShootingPlayer {
-  name: string; mins: number; sotPerGame: number; last5SoT?: boolean[];
-  shotsPerGame: number; last5Shots?: boolean[]; badges?: string[]; form: Form;
+  name: string; mins: number; sotPerGame: number; last5SoT?: boolean[] | null;
+  shotsPerGame: number; last5Shots?: boolean[] | null; badges?: string[]; form: Form;
 }
 export interface GoalscoringPlayer {
   name: string; mins: number; goals: number; assists: number;
   gaPerGame: number; badges?: string[];
-  last5Goals?: boolean[]; last5Assists?: boolean[]; form: Form;
+  last5Goals?: boolean[] | null; last5Assists?: boolean[] | null; form: Form;
 }
 export interface CardsPlayer {
   name: string; appearances: number;
   yellowCards: number; redCards: number; cardsPerGame: number;
-  last5Cards?: boolean[];
+  last5Cards?: boolean[] | null;
 }
 export interface TeamData {
   name: string; primaryColor: string; badge: string;

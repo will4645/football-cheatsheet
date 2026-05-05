@@ -19,7 +19,8 @@ const formColor: Record<Form, string> = {
 };
 
 function last5Color(data?: boolean[] | null): string {
-  const hits = (data ?? []).filter(Boolean).length;
+  if (!Array.isArray(data)) return '#6b7280';
+  const hits = data.filter(Boolean).length;
   return hits >= 3 ? '#4ade80' : hits >= 1 ? '#fbbf24' : '#f87171';
 }
 
@@ -87,8 +88,16 @@ function TeamStatsPanel({ team, compColor }: { team: TeamData; compColor: string
 function Last5Dots({ data, hitColor = '#22c55e', missColor = '#ef4444' }: {
   data?: boolean[] | null; hitColor?: string; missColor?: string;
 }) {
-  const safe = Array.isArray(data) ? data : [];
-  const dots = [...safe, false, false, false, false, false].slice(0, 5);
+  if (!Array.isArray(data)) {
+    return (
+      <div className="flex items-center gap-1">
+        {[0,1,2,3,4].map(i => (
+          <div key={i} className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: '#1f2937' }} />
+        ))}
+      </div>
+    );
+  }
+  const dots = [...data, false, false, false, false, false].slice(0, 5);
   return (
     <div className="flex items-center gap-1">
       {dots.map((hit, i) => (

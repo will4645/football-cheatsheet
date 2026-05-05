@@ -53,8 +53,8 @@ function poissonExact(lambda: number, k: number) {
   for (let i = 0; i < k; i++) p *= lambda / (i + 1);
   return p;
 }
-function toScale(p: number) { return Math.max(5, Math.min(100, Math.round(p * 20) * 5)); }
-function overProb(avg: number, threshold: number) { return toScale(poissonAtLeast(avg, Math.ceil(threshold + 0.001))); }
+function toScale(p: number) { return Math.max(1, Math.min(100, Math.round(p * 100))); }
+function overProb(avg: number, threshold: number) { return toScale(poissonAtLeast(avg, Math.ceil(threshold))); }
 
 // Poisson match outcome model: expected goals based on attack vs opponent defence
 function matchOutcomes(homeGoalsFor: number, homeGoalsAgainst: number, awayGoalsFor: number, awayGoalsAgainst: number) {
@@ -421,7 +421,7 @@ async function buildPlayers(
         if (!result.yellowCards)     result.yellowCards     = fb2.yellowCards;
         if (!result.pkGoals)         result.pkGoals         = fb2.pkGoals ?? 0;
       }
-      return result;
+      return { ...result, hasRealData: true };
     }
 
     // 2. FBref only (covers CL and players not in Understat top-5)
@@ -440,11 +440,12 @@ async function buildPlayers(
         redCards: 0,
         appearances: fb2.games,
         pkGoals: fb2.pkGoals ?? 0,
+        hasRealData: true,
       };
     }
 
     // 3. Position defaults (last resort)
-    return defaults;
+    return { ...defaults, hasRealData: false };
   }
 
   // Pre-fetch game histories for all players in both lineups
@@ -520,7 +521,7 @@ async function buildPlayers(
   }
 
   function top5(players: any[], key: string, excludeGK = true) {
-    const pool = excludeGK ? players.filter(p => !p.isGK) : players;
+    const pool = (excludeGK ? players.filter(p => !p.isGK) : players).filter(p => p.hasRealData !== false);
     // Sort by stat but prioritise players with >= 5 games to avoid small-sample flukes topping the list
     return [...pool].sort((a, b) => {
       const aGames = a.mins > 0 ? 1 : 0; // proxy: non-zero mins means real data
@@ -560,24 +561,24 @@ async function buildPlayers(
       return result;
     }
 
-    function getLast5(p: any, stat: 'goals' | 'assists' | 'shots2' | 'shots1', fallbackAvg: number, fallbackThresh: number): boolean[] {
+    function getLast5(p: any, stat: 'goals' | 'assists' | 'shots2' | 'shots1'): boolean[] | null {
       const games = p.understatId ? gamesMap.get(p.understatId) : undefined;
       if (games?.length) return gamesLast5(games, stat);
-      return seededLast5(p.name, stat, fallbackAvg, fallbackThresh);
+      return null;
     }
 
     // Re-rank defensive players using real ESPN fouls if available
-    const defPlayers = [...players].sort((a, b) => {
+    const defPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) => {
       const fa = espnAvg(a.espnId, 'fc') ?? a.foulsPerGame;
       const fb = espnAvg(b.espnId, 'fc') ?? b.foulsPerGame;
       return fb - fa;
-    }).filter(p => !p.isGK).slice(0, 5);
+    }).slice(0, 5);
 
-    const offPlayers = [...players].sort((a, b) => {
+    const offPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) => {
       const fa = espnAvg(a.espnId, 'fd') ?? a.foulsWonPerGame;
       const fb = espnAvg(b.espnId, 'fd') ?? b.foulsWonPerGame;
       return fb - fa;
-    }).filter(p => !p.isGK).slice(0, 5);
+    }).slice(0, 5);
 
     return {
       defensive: defPlayers.map(p => {
@@ -585,7 +586,7 @@ async function buildPlayers(
         return {
           name: p.name, mins: p.mins, foulsPerGame: +fc.toFixed(2),
           tacklesPerGame: +p.tacklesPerGame.toFixed(2),
-          last5Fouls: espnLast5(p.espnId, 'fc') ?? seededLast5(p.name, 'fouls', fc, 1),
+          last5Fouls: espnLast5(p.espnId, 'fc') ?? null,
           yellowCards: p.yellowCards,
           potentialOpponent: findOpponent(p, oppPlayers),
           form: p.form,
@@ -595,7 +596,7 @@ async function buildPlayers(
         const fd = espnAvg(p.espnId, 'fd') ?? p.foulsWonPerGame;
         return {
           name: p.name, mins: p.mins, foulsWonPerGame: +fd.toFixed(2),
-          last5FoulsWon: espnLast5(p.espnId, 'fd') ?? seededLast5(p.name, 'foulsWon', fd, 1),
+          last5FoulsWon: espnLast5(p.espnId, 'fd') ?? null,
           potentialOpponent: findOpponent(p, oppPlayers),
           form: p.form,
         };
@@ -605,9 +606,9 @@ async function buildPlayers(
         const sh  = espnAvg(p.espnId, 'shots') ?? p.shotsPerGame;
         return {
           name: p.name, mins: p.mins, sotPerGame: +sot.toFixed(2),
-          last5SoT:     espnLast5(p.espnId, 'sot',   1) ?? getLast5(p, 'shots1', sot, 1),
+          last5SoT:     espnLast5(p.espnId, 'sot',   1) ?? getLast5(p, 'shots1'),
           shotsPerGame: +sh.toFixed(2),
-          last5Shots:   espnLast5(p.espnId, 'shots', 2) ?? getLast5(p, 'shots2', sh,  2),
+          last5Shots:   espnLast5(p.espnId, 'shots', 2) ?? getLast5(p, 'shots2'),
           badges: (p.pkGoals ?? 0) >= 1 ? ['PK'] : [],
           form: p.form,
         };
@@ -619,13 +620,13 @@ async function buildPlayers(
           name: p.name, mins: p.mins, goals: p.goals, assists: p.assists,
           gaPerGame: +p.gaPerGame.toFixed(2),
           badges: (p.pkGoals ?? 0) >= 1 ? ['PK'] : [],
-          last5Goals:   espnLast5(p.espnId, 'goals',   1) ?? getLast5(p, 'goals',   g, 1),
-          last5Assists: espnLast5(p.espnId, 'assists', 1) ?? getLast5(p, 'assists', a, 1),
+          last5Goals:   espnLast5(p.espnId, 'goals',   1) ?? getLast5(p, 'goals'),
+          last5Assists: espnLast5(p.espnId, 'assists', 1) ?? getLast5(p, 'assists'),
           form: p.form,
         };
       }),
       cards: [...players]
-        .filter(p => !p.isGK)
+        .filter(p => !p.isGK && p.hasRealData !== false)
         .sort((a, b) => {
           const aRate = a.yellowCards / Math.max(1, a.appearances ?? 20);
           const bRate = b.yellowCards / Math.max(1, b.appearances ?? 20);
@@ -640,7 +641,7 @@ async function buildPlayers(
             yellowCards: p.yellowCards,
             redCards: p.redCards ?? 0,
             cardsPerGame: cpg,
-            last5Cards: seededLast5(p.name, 'cards', cpg, 1),
+            last5Cards: null,
           };
         }),
     };

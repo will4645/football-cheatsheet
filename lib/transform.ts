@@ -5,7 +5,7 @@ import type {
   ShootingPlayer,
   GoalscoringPlayer,
 } from '@/data/match';
-import { poissonAtLeast, toScale, overProb, formColor, seededLast5 } from './probability';
+import { poissonAtLeast, toScale, overProb, formColor } from './probability';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Utility helpers
@@ -266,25 +266,8 @@ export function buildPlayers(
       const e = enrichPlayer(apiStat);
       if (e) enriched.push(e);
     } else {
-      // No stats found — create a minimal placeholder
-      enriched.push({
-        id,
-        name,
-        mins: 75,
-        appearances: 1,
-        foulsPerGame: 0.5,
-        foulsWonPerGame: 0.5,
-        tacklesPerGame: 0.5,
-        shotsPerGame: 0.5,
-        sotPerGame: 0.2,
-        goals: 0,
-        assists: 0,
-        gaPerGame: 0,
-        yellowCards: 0,
-        redCards: 0,
-        last5Goals: 0,
-        last5Assists: 0,
-      });
+      // No stats found — skip this player entirely rather than use fake defaults
+      continue;
     }
   }
 
@@ -302,7 +285,7 @@ export function buildPlayers(
     mins: p.mins,
     foulsPerGame: p.foulsPerGame,
     tacklesPerGame: p.tacklesPerGame,
-    last5Fouls: seededLast5(p.name, 'fouls', p.foulsPerGame, 1),
+    last5Fouls: null,
     yellowCards: p.yellowCards,
     potentialOpponent: oppDefStr || 'Unknown',
     form: formColor(p.last5Goals, p.last5Assists),
@@ -320,7 +303,7 @@ export function buildPlayers(
     name: p.name,
     mins: p.mins,
     foulsWonPerGame: p.foulsWonPerGame,
-    last5FoulsWon: seededLast5(p.name, 'foulsWon', p.foulsWonPerGame, 1),
+    last5FoulsWon: null,
     potentialOpponent: oppOffStr || 'Unknown',
     form: formColor(p.last5Goals, p.last5Assists),
   }));
@@ -334,9 +317,9 @@ export function buildPlayers(
     name: p.name,
     mins: p.mins,
     sotPerGame: p.sotPerGame,
-    last5SoT: seededLast5(p.name, 'sot', p.sotPerGame, 1),
+    last5SoT: null,
     shotsPerGame: p.shotsPerGame,
-    last5Shots: seededLast5(p.name, 'shots2', p.shotsPerGame, 2),
+    last5Shots: null,
     badges: [],
     form: formColor(p.last5Goals, p.last5Assists),
   }));
@@ -353,8 +336,8 @@ export function buildPlayers(
     assists: p.assists,
     gaPerGame: p.gaPerGame,
     badges: [],
-    last5Goals: seededLast5(p.name, 'goals', p.gaPerGame, 1),
-    last5Assists: seededLast5(p.name, 'assists', p.assists / Math.max(p.goals + p.assists, 1) * p.gaPerGame, 1),
+    last5Goals: null,
+    last5Assists: null,
     form: formColor(p.last5Goals, p.last5Assists),
   }));
 
@@ -375,7 +358,7 @@ export function buildPlayers(
       yellowCards: p.yellowCards,
       redCards: p.redCards,
       cardsPerGame: cpg,
-      last5Cards: seededLast5(p.name, 'cards', cpg, 1),
+      last5Cards: null,
     };
   });
 
