@@ -1,9 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { matchData as staticMatchData, TeamData, Form } from '@/data/match';
-import { nameToSlug } from '@/lib/competitions';
+import { nameToSlug, COMPETITION_CONFIG } from '@/lib/competitions';
+
+function competitionColor(name: string): string {
+  const slug = nameToSlug(name);
+  return COMPETITION_CONFIG.find(c => c.slug === slug)?.color ?? '#3b82f6';
+}
 
 type MatchData = typeof staticMatchData;
 
@@ -254,7 +259,31 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
 export default function MatchSheet({ data }: { data?: MatchData }) {
   const [activeTab, setActiveTab] = useState<Tab>('defensive');
   const [activeTeam, setActiveTeam] = useState<'home' | 'away'>('home');
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [thumbWidth, setThumbWidth] = useState(50);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { homeTeam, awayTeam, referee, competition, stage, date, kickoff, probabilities } = data ?? staticMatchData;
+  const compColor = competitionColor(competition);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setScrollProgress(max > 0 ? el.scrollLeft / max : 0);
+    setThumbWidth(max > 0 ? (el.clientWidth / el.scrollWidth) * 100 : 100);
+  }, []);
+
+  // recalculate thumb when tab/team changes
+  const resetScroll = useCallback(() => {
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+    setScrollProgress(0);
+    setTimeout(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const max = el.scrollWidth - el.clientWidth;
+      setThumbWidth(max > 0 ? (el.clientWidth / el.scrollWidth) * 100 : 100);
+    }, 50);
+  }, []);
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'defensive',   label: 'Defensive' },
@@ -384,7 +413,7 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
             {[{ key: 'home' as const, team: homeTeam }, { key: 'away' as const, team: awayTeam }].map(({ key, team }) => (
               <button
                 key={key}
-                onClick={() => setActiveTeam(key)}
+                onClick={() => { setActiveTeam(key); resetScroll(); }}
                 className="flex-1 py-2.5 text-xs font-bold uppercase tracking-wide transition-all flex items-center justify-center gap-1.5"
                 style={{
                   color: activeTeam === key ? '#fff' : '#6b7280',
@@ -403,12 +432,12 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
             {tabs.map(t => (
               <button
                 key={t.key}
-                onClick={() => setActiveTab(t.key)}
+                onClick={() => { setActiveTab(t.key); resetScroll(); }}
                 className="flex-1 py-3 text-xs font-semibold uppercase tracking-wide transition-all"
                 style={{
                   color: activeTab === t.key ? '#fff' : '#6b7280',
-                  borderBottom: activeTab === t.key ? '2px solid #3b82f6' : '2px solid transparent',
-                  background: activeTab === t.key ? 'rgba(59,130,246,0.06)' : 'transparent',
+                  borderBottom: activeTab === t.key ? `2px solid ${compColor}` : '2px solid transparent',
+                  background: activeTab === t.key ? compColor + '0f' : 'transparent',
                 }}
               >
                 {t.label}
@@ -422,8 +451,30 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: activeTeamData.primaryColor }} />
               <span className="text-xs font-bold text-white">{activeTeamData.name}</span>
             </div>
-            <div className="overflow-x-auto">
+            <div
+              ref={scrollRef}
+              className="overflow-x-auto"
+              onScroll={handleScroll}
+              style={{ scrollbarWidth: 'none' }}
+            >
               <PlayerTable team={activeTeamData} tab={activeTab} />
+            </div>
+            {/* Scroll indicator */}
+            <div className="mt-3 flex items-center gap-2">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ color: compColor, opacity: 0.6, flexShrink: 0 }}>
+                <path d="M2 6h8M6 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <div className="flex-1 h-1 rounded-full relative" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                <div
+                  className="absolute top-0 h-full rounded-full transition-all duration-75"
+                  style={{
+                    width: `${thumbWidth}%`,
+                    left: `${scrollProgress * (100 - thumbWidth)}%`,
+                    backgroundColor: compColor,
+                    boxShadow: `0 0 6px ${compColor}80`,
+                  }}
+                />
+              </div>
             </div>
           </div>
 
