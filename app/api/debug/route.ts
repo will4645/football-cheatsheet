@@ -10,12 +10,19 @@ export async function GET(req: NextRequest) {
 
   const hasUrl = !!process.env.SUPABASE_URL;
   const hasKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let keyRole = 'unknown';
+  try {
+    const payload = JSON.parse(Buffer.from((process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').split('.')[1], 'base64').toString());
+    keyRole = payload.role ?? 'no-role-claim';
+  } catch { keyRole = 'decode-error'; }
   const serverNow = new Date().toISOString();
 
   const { createClient } = require('@supabase/supabase-js');
-  const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    global: { fetch: (url: RequestInfo | URL, opts?: RequestInit) => fetch(url, { ...opts, cache: 'no-store' }) },
+  });
 
-  // Live write test — proves whether writes work from this Vercel context
+  // Live write test
   const testTs = Date.now();
   const { error: writeErr } = await sb.from('match_cache').upsert(
     { key: '__debug_test__', value: { ts: testTs }, updated_at: serverNow },
@@ -40,7 +47,7 @@ export async function GET(req: NextRequest) {
       writeErr: writeErr?.message ?? null,
       readErr: readErr?.message ?? null,
     },
-    env: { hasUrl, hasKey },
+    env: { hasUrl, hasKey, keyRole },
     keysError: keysError?.message ?? null,
     allKeys: (allKeys ?? []).map((r: any) => ({ key: r.key, updatedAt: r.updated_at })),
     matchStats: matchRow?.value ? {

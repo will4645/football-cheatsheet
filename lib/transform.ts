@@ -142,7 +142,7 @@ export function buildTeamStats(apiStats: any): TeamData['stats'] {
     over195Shots:  overProb(shotsPg + DEFAULTS.shotsAgainst, 19.5),
     sotFor: +sotFor.toFixed(2),
     sotAgainst: +DEFAULTS.sotAgainst.toFixed(2),
-    over95SoT:     overProb(sotFor + DEFAULTS.sotAgainst, 9.5),
+    over95SoT:     overProb(sotFor + DEFAULTS.sotAgainst, 6.5),
     foulsCommitted: +foulsCommitted.toFixed(2),
     foulsWon:       +foulsWon.toFixed(2),
     over155Fouls:   overProb(foulsCommitted + foulsWon, 15.5),

@@ -38,7 +38,7 @@ export interface TeamData {
 export const matchData: {
   competition: string; stage: string; date: string; kickoff: string;
   homeTeam: TeamData; awayTeam: TeamData;
-  referee: { name: string; currentSeason: { yellows: number; reds: number; foulsPg: number }; career: { yellows: number; reds: number; foulsPg: number } };
+  referee: { name: string; matchAvg: { fouls: number; cards: number } };
   probabilities: { btts: number; homeWin: number; draw: number; awayWin: number };
 } = {
   competition: 'UEFA Champions League',
@@ -136,8 +136,7 @@ export const matchData: {
 
   referee: {
     name: 'Clément Turpin',
-    currentSeason: { yellows: 3.16, reds: 0.28, foulsPg: 21.92 },
-    career:        { yellows: 3.23, reds: 0.27, foulsPg: 25.91 },
+    matchAvg: { fouls: 22.8, cards: 3.4 },
   },
   probabilities: {
     btts:     65,

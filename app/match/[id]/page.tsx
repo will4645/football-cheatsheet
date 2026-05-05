@@ -11,13 +11,18 @@ export default function MatchPage() {
   const [status, setStatus] = useState<'loading' | 'found' | 'notfound'>('loading');
 
   useEffect(() => {
-    fetch(`/api/matches/${id}`, { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d && !d.error) { setData(d); setStatus('found'); }
-        else setStatus('notfound');
-      })
-      .catch(() => setStatus('notfound'));
+    function load() {
+      fetch(`/api/matches/${id}`, { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d && !d.error) { setData(d); setStatus('found'); }
+          else setStatus('notfound');
+        })
+        .catch(() => setStatus('notfound'));
+    }
+    load();
+    const interval = setInterval(load, 120_000);
+    return () => clearInterval(interval);
   }, [id]);
 
   if (status === 'loading') return (

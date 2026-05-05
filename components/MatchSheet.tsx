@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { matchData as staticMatchData, TeamData, Form } from '@/data/match';
+import { nameToSlug } from '@/lib/competitions';
 
 type MatchData = typeof staticMatchData;
 
@@ -11,6 +12,11 @@ const formColor: Record<Form, string> = {
   ok:   '#fbbf24',
   poor: '#f87171',
 };
+
+function last5Color(data?: boolean[] | null): string {
+  const hits = (data ?? []).filter(Boolean).length;
+  return hits >= 3 ? '#4ade80' : hits >= 1 ? '#fbbf24' : '#f87171';
+}
 
 /* ── Probability bar ─────────────────────────────────── */
 function ProbBar({ value }: { value: number }) {
@@ -64,7 +70,7 @@ function TeamStatsPanel({ team }: { team: TeamData }) {
         <StatGroup l1="Goals For" v1={stats.goalsFor} l2="Goals Against" v2={stats.goalsAgainst} overLabel="Over 2.5 Goals" prob={stats.over25Goals} />
         <StatGroup l1="Corners For" v1={stats.cornersFor} l2="Corners Against" v2={stats.cornersAgainst} overLabel="Over 9.5 Corners" prob={stats.over95Corners} />
         <StatGroup l1="Shots For" v1={stats.shotsFor} l2="Shots Against" v2={stats.shotsAgainst} overLabel="Over 19.5 Shots" prob={stats.over195Shots} />
-        <StatGroup l1="Shots on Target For" v1={stats.sotFor} l2="Shots on Target Against" v2={stats.sotAgainst} overLabel="Over 9.5 Shots on Target" prob={stats.over95SoT} />
+        <StatGroup l1="Shots on Target For" v1={stats.sotFor} l2="Shots on Target Against" v2={stats.sotAgainst} overLabel="Over 6.5 Shots on Target" prob={stats.over95SoT} />
         <StatGroup l1="Fouls Committed" v1={stats.foulsCommitted} l2="Fouls Won" v2={stats.foulsWon} overLabel="Over 15.5 Fouls" prob={stats.over155Fouls} />
         <StatGroup l1="Cards For" v1={stats.cardsFor} l2="Cards Against" v2={stats.cardsAgainst} overLabel="Over 4.5 Cards" prob={stats.over45Cards} />
       </div>
@@ -127,9 +133,9 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
           <div className="h-9" />
           {ps.map((_, i) => <div key={i} className="flex items-center h-8 text-[10px] font-bold text-gray-600">{i + 1}</div>)}
         </div>
-        <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex flex-col flex-1 min-w-[120px]">
           <div className="flex items-end h-9 pb-1.5 text-[9px] uppercase tracking-wide text-gray-500">Player</div>
-          {ps.map((p, i) => <div key={i} className="flex items-center h-8"><span className="text-[11px] font-medium truncate" style={{ color: formColor[p.form] }}>{p.name}</span></div>)}
+          {ps.map((p, i) => <div key={i} className="flex items-center h-8"><span className="text-[11px] font-medium truncate" style={{ color: last5Color(p.last5Fouls) }}>{p.name}</span></div>)}
         </div>
         <StatCol width="w-[55px]" header="Minutes" right>
           {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[10px] text-gray-500`}>{p.mins}'</div>)}
@@ -158,9 +164,9 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
           <div className="h-9" />
           {ps.map((_, i) => <div key={i} className="flex items-center h-8 text-[10px] font-bold text-gray-600">{i + 1}</div>)}
         </div>
-        <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex flex-col flex-1 min-w-[120px]">
           <div className="flex items-end h-9 pb-1.5 text-[9px] uppercase tracking-wide text-gray-500">Player</div>
-          {ps.map((p, i) => <div key={i} className="flex items-center h-8"><span className="text-[11px] font-medium truncate" style={{ color: formColor[p.form] }}>{p.name}</span></div>)}
+          {ps.map((p, i) => <div key={i} className="flex items-center h-8"><span className="text-[11px] font-medium truncate" style={{ color: last5Color(p.last5FoulsWon) }}>{p.name}</span></div>)}
         </div>
         <StatCol width="w-[72px]" header="Fouls Won p/g" right>
           {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[11px] font-semibold text-white`}>{p.foulsWonPerGame.toFixed(2)}</div>)}
@@ -183,16 +189,16 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
           <div className="h-9" />
           {ps.map((_, i) => <div key={i} className="flex items-center h-8 text-[10px] font-bold text-gray-600">{i + 1}</div>)}
         </div>
-        <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex flex-col flex-1 min-w-[120px]">
           <div className="flex items-end h-9 pb-1.5 text-[9px] uppercase tracking-wide text-gray-500">Player</div>
           {ps.map((p, i) => (
-            <div key={i} className="flex items-center h-8 gap-1">
-              <span className="text-[11px] font-medium truncate" style={{ color: formColor[p.form] }}>{p.name}</span>
+            <div key={i} className="flex items-center h-8 gap-1 overflow-hidden">
+              <span className="text-[11px] font-medium truncate" style={{ color: last5Color(p.last5SoT) }}>{p.name}</span>
               {p.badges?.map(b => <Badge key={b} label={b} color={c} />)}
             </div>
           ))}
         </div>
-        <StatCol width="w-[72px]" header="Shots on Target p/g" right>
+        <StatCol width="w-[72px]" header="SoT p/g" right>
           {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[11px] font-semibold text-white`}>{p.sotPerGame.toFixed(2)}</div>)}
         </StatCol>
         <StatCol width="w-[90px]" header="Last 5 (1+ SoT)">
@@ -216,11 +222,11 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
         <div className="h-9" />
         {ps.map((_, i) => <div key={i} className="flex items-center h-8 text-[10px] font-bold text-gray-600">{i + 1}</div>)}
       </div>
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex flex-col flex-1 min-w-[120px]">
         <div className="flex items-end h-9 pb-1.5 text-[9px] uppercase tracking-wide text-gray-500">Player</div>
         {ps.map((p, i) => (
-          <div key={i} className="flex items-center h-8 gap-1">
-            <span className="text-[11px] font-medium truncate" style={{ color: formColor[p.form] }}>{p.name}</span>
+          <div key={i} className="flex items-center h-8 gap-1 overflow-hidden">
+            <span className="text-[11px] font-medium truncate" style={{ color: last5Color(p.last5Goals) }}>{p.name}</span>
             {p.badges?.map(b => <Badge key={b} label={b} color={c} />)}
           </div>
         ))}
@@ -247,6 +253,7 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
 /* ── Main component ──────────────────────────────────── */
 export default function MatchSheet({ data }: { data?: MatchData }) {
   const [activeTab, setActiveTab] = useState<Tab>('defensive');
+  const [activeTeam, setActiveTeam] = useState<'home' | 'away'>('home');
   const { homeTeam, awayTeam, referee, competition, stage, date, kickoff, probabilities } = data ?? staticMatchData;
 
   const tabs: { key: Tab; label: string }[] = [
@@ -256,13 +263,15 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
     { key: 'goalscoring', label: 'Goalscoring' },
   ];
 
+  const activeTeamData = activeTeam === 'home' ? homeTeam : awayTeam;
+
   return (
-    <div className="min-h-screen p-4 lg:p-6" style={{ background: '#080c14' }}>
-      <div className="max-w-[1400px] mx-auto space-y-4">
+    <div className="min-h-screen p-3 lg:p-6" style={{ background: '#080c14' }}>
+      <div className="max-w-[1400px] mx-auto space-y-3 lg:space-y-4">
 
         {/* ── Back button ── */}
         <div>
-          <Link href="/" className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-500 hover:text-white transition-colors">
+          <Link href={nameToSlug(competition) ? `/competition/${nameToSlug(competition)}` : '/'} className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-500 hover:text-white transition-colors">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7L9 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
             All Matches
           </Link>
@@ -272,100 +281,93 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
         <div className="rounded-xl overflow-hidden" style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="text-center py-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500"
                style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            {competition} &nbsp;•&nbsp; {stage} &nbsp;•&nbsp; {date} &nbsp;•&nbsp; {kickoff}
+            <span className="hidden sm:inline">{competition} &nbsp;•&nbsp; {stage} &nbsp;•&nbsp; </span>{date} &nbsp;•&nbsp; {kickoff}
           </div>
-          <div className="grid grid-cols-3 items-center px-6 py-5">
+          <div className="grid grid-cols-3 items-center px-3 py-4 lg:px-6 lg:py-5">
             {/* Home */}
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+            <div className="flex items-center gap-2 lg:gap-4">
+              <div className="w-10 h-10 lg:w-14 lg:h-14 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
                    style={{ background: homeTeam.primaryColor + '12', border: `1px solid ${homeTeam.primaryColor}40` }}>
-                <img src={homeTeam.badge} alt={homeTeam.name} className="w-11 h-11 object-contain" />
+                <img src={homeTeam.badge} alt={homeTeam.name} className="w-8 h-8 lg:w-11 lg:h-11 object-contain" />
               </div>
-              <div>
-                <p className="text-lg font-black text-white leading-tight">{homeTeam.name}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wide">Home</p>
+              <div className="min-w-0">
+                <p className="text-sm lg:text-lg font-black text-white leading-tight truncate">{homeTeam.name}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide hidden sm:block">Home</p>
               </div>
             </div>
 
             {/* VS */}
             <div className="text-center">
-              <p className="text-4xl font-black" style={{ color: 'rgba(255,255,255,0.07)' }}>VS</p>
-              <p className="text-[10px] text-gray-600 mt-1">Kick off {kickoff}</p>
+              <p className="text-2xl lg:text-4xl font-black" style={{ color: 'rgba(255,255,255,0.07)' }}>VS</p>
+              <p className="text-[10px] text-gray-600 mt-1 hidden sm:block">Kick off {kickoff}</p>
             </div>
 
             {/* Away */}
-            <div className="flex items-center gap-4 justify-end">
-              <div className="text-right">
-                <p className="text-lg font-black text-white leading-tight">{awayTeam.name}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wide">Away</p>
+            <div className="flex items-center gap-2 lg:gap-4 justify-end">
+              <div className="text-right min-w-0">
+                <p className="text-sm lg:text-lg font-black text-white leading-tight truncate">{awayTeam.name}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide hidden sm:block">Away</p>
               </div>
-              <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+              <div className="w-10 h-10 lg:w-14 lg:h-14 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
                    style={{ background: awayTeam.primaryColor + '12', border: `1px solid ${awayTeam.primaryColor}40` }}>
-                <img src={awayTeam.badge} alt={awayTeam.name} className="w-11 h-11 object-contain" />
+                <img src={awayTeam.badge} alt={awayTeam.name} className="w-8 h-8 lg:w-11 lg:h-11 object-contain" />
               </div>
             </div>
           </div>
         </div>
 
         {/* ── Team stats + referee ── */}
-        <div className="grid grid-cols-[1fr_180px_1fr] gap-4">
+        <div className="flex flex-col gap-3 lg:grid lg:gap-4 lg:grid-cols-[1fr_180px_1fr]">
           <TeamStatsPanel team={homeTeam} />
 
           {/* Referee card */}
-          <div className="rounded-xl p-4 flex flex-col gap-4" style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="text-center">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 font-black text-[10px]"
-                   style={{ background: 'rgba(234,179,8,0.15)', border: '2px solid rgba(234,179,8,0.4)', color: '#facc15' }}>
-                REF
+          <div className="rounded-xl p-4 flex flex-col gap-4 lg:flex-col" style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.06)' }}>
+            {/* Mobile: horizontal layout for ref stats */}
+            <div className="flex items-center gap-4 lg:flex-col lg:items-stretch lg:gap-4">
+              <div className="text-center shrink-0">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-1 font-black text-[10px]"
+                     style={{ background: 'rgba(234,179,8,0.15)', border: '2px solid rgba(234,179,8,0.4)', color: '#facc15' }}>
+                  REF
+                </div>
+                <p className="text-xs font-bold text-white">{referee.name}</p>
+                <p className="text-[9px] text-gray-500 uppercase tracking-wide mt-0.5">Referee</p>
               </div>
-              <p className="text-xs font-bold text-white">{referee.name}</p>
-              <p className="text-[9px] text-gray-500 uppercase tracking-wide mt-0.5">Referee</p>
-            </div>
 
-            {[
-              { label: 'Current Season', data: referee.currentSeason },
-              { label: 'Career',         data: referee.career },
-            ].map(({ label, data }) => (
-              <div key={label}>
-                <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">{label}</p>
-                <div className="grid grid-cols-3 gap-1 text-center">
-                  <div>
-                    <p className="text-[9px] text-gray-500">Yellows</p>
-                    <p className="text-sm font-bold text-yellow-400">{data.yellows}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-gray-500">Reds</p>
-                    <p className="text-sm font-bold text-red-400">{data.reds}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-gray-500">Fouls p/g</p>
-                    <p className="text-sm font-bold text-white">{data.foulsPg}</p>
-                  </div>
+              <div className="flex-1 grid grid-cols-2 gap-3 lg:flex lg:flex-col lg:gap-4">
+                <div>
+                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Exp. Fouls</p>
+                  <p className="text-base font-bold text-white">{referee.matchAvg?.fouls ?? '—'}</p>
+                  <p className="text-[9px] text-gray-600 mt-0.5">Match avg</p>
+                </div>
+                <div>
+                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Exp. Cards</p>
+                  <p className="text-base font-bold text-yellow-400">{referee.matchAvg?.cards ?? '—'}</p>
+                  <p className="text-[9px] text-gray-600 mt-0.5">Match avg</p>
                 </div>
               </div>
-            ))}
-
-            {/* BTTS */}
-            <div>
-              <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Both Teams to Score</p>
-              <ProbBar value={probabilities.btts} />
             </div>
 
-            {/* Win / Draw / Loss */}
-            <div>
-              <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Result Probability</p>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[9px] text-gray-500 w-10 shrink-0">Home</span>
-                  <div className="flex-1"><ProbBar value={probabilities.homeWin} /></div>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[9px] text-gray-500 w-10 shrink-0">Draw</span>
-                  <div className="flex-1"><ProbBar value={probabilities.draw} /></div>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[9px] text-gray-500 w-10 shrink-0">Away</span>
-                  <div className="flex-1"><ProbBar value={probabilities.awayWin} /></div>
+            {/* BTTS + Result */}
+            <div className="grid grid-cols-2 gap-3 lg:flex lg:flex-col lg:gap-4">
+              <div>
+                <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Both Teams to Score</p>
+                <ProbBar value={probabilities.btts} />
+              </div>
+              <div>
+                <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Result Probability</p>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] text-gray-500 w-10 shrink-0">Home</span>
+                    <div className="flex-1"><ProbBar value={probabilities.homeWin} /></div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] text-gray-500 w-10 shrink-0">Draw</span>
+                    <div className="flex-1"><ProbBar value={probabilities.draw} /></div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] text-gray-500 w-10 shrink-0">Away</span>
+                    <div className="flex-1"><ProbBar value={probabilities.awayWin} /></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -376,7 +378,27 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
 
         {/* ── Player sections ── */}
         <div className="rounded-xl overflow-hidden" style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.06)' }}>
-          {/* Tabs */}
+
+          {/* Mobile team toggle */}
+          <div className="flex lg:hidden" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            {[{ key: 'home' as const, team: homeTeam }, { key: 'away' as const, team: awayTeam }].map(({ key, team }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTeam(key)}
+                className="flex-1 py-2.5 text-xs font-bold uppercase tracking-wide transition-all flex items-center justify-center gap-1.5"
+                style={{
+                  color: activeTeam === key ? '#fff' : '#6b7280',
+                  borderBottom: activeTeam === key ? `2px solid ${team.primaryColor}` : '2px solid transparent',
+                  background: activeTeam === key ? team.primaryColor + '10' : 'transparent',
+                }}
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.primaryColor }} />
+                {key === 'home' ? 'Home' : 'Away'}
+              </button>
+            ))}
+          </div>
+
+          {/* Stat type tabs */}
           <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             {tabs.map(t => (
               <button
@@ -394,8 +416,19 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
             ))}
           </div>
 
-          {/* Two-column player tables */}
-          <div className="grid grid-cols-2">
+          {/* Mobile: single team, scrollable */}
+          <div className="lg:hidden p-3">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: activeTeamData.primaryColor }} />
+              <span className="text-xs font-bold text-white">{activeTeamData.name}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <PlayerTable team={activeTeamData} tab={activeTab} />
+            </div>
+          </div>
+
+          {/* Desktop: two columns side by side */}
+          <div className="hidden lg:grid grid-cols-2">
             <div className="p-4" style={{ borderRight: '1px solid rgba(255,255,255,0.06)' }}>
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: homeTeam.primaryColor }} />

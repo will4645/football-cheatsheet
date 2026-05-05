@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 
 export async function GET(
   _req: NextRequest,
@@ -11,7 +12,9 @@ export async function GET(
   // Read from Supabase directly
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { createClient } = require('@supabase/supabase-js');
-    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+      global: { fetch: (url: RequestInfo | URL, opts?: RequestInit) => fetch(url, { ...opts, cache: 'no-store' }) },
+    });
     const { data } = await sb.from('match_cache').select('value').eq('key', `match:${id}`).single();
     if (data?.value) return NextResponse.json(data.value, {
       headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },

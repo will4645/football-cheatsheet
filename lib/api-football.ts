@@ -5,15 +5,16 @@
  */
 
 const ESPN_LEAGUES = [
-  'eng.1',          // Premier League
-  'uefa.champions', // Champions League
-  'uefa.europa',    // Europa League
-  'eng.fa',         // FA Cup
-  'eng.2',          // Championship
-  'esp.1',          // La Liga
-  'ger.1',          // Bundesliga
-  'ita.1',          // Serie A
-  'fra.1',          // Ligue 1
+  'eng.1',               // Premier League
+  'uefa.champions',      // Champions League
+  'uefa.europa',         // Europa League
+  'uefa.europa.conf',    // Conference League
+  'eng.fa',              // FA Cup
+  'eng.2',               // Championship
+  'esp.1',               // La Liga
+  'ger.1',               // Bundesliga
+  'ita.1',               // Serie A
+  'fra.1',               // Ligue 1
 ];
 
 const HEADERS = {
@@ -128,7 +129,7 @@ function extractEventStats(summary: any): { stats: Map<string, PlayerGameStat>; 
 }
 
 // ── Fetch last N completed event IDs for a team ───────────────────────────
-async function fetchTeamRecentEventIds(teamId: string, league: string, n = 5): Promise<{ ids: string[]; debug: string }> {
+async function fetchTeamRecentEventIds(teamId: string, league: string, n = 10): Promise<{ ids: string[]; debug: string }> {
   if (!teamId) return { ids: [], debug: 'no teamId' };
   try {
     const data = await espnFetch(

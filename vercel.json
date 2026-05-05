@@ -2,13 +2,13 @@
   "framework": "nextjs",
   "functions": {
     "app/api/sync/route.ts": {
-      "maxDuration": 120
+      "maxDuration": 300
     }
   },
   "crons": [
     {
       "path": "/api/sync",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }

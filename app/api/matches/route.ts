@@ -23,7 +23,9 @@ export async function GET() {
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const { createClient } = require('@supabase/supabase-js');
-      const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+        global: { fetch: (url: RequestInfo | URL, opts?: RequestInit) => fetch(url, { ...opts, cache: 'no-store' }) },
+      });
       const [live, upcoming] = await Promise.all([
         sb.from('match_cache').select('value').eq('key', 'matches').single(),
         sb.from('match_cache').select('value').eq('key', 'upcoming').single(),
@@ -36,10 +38,15 @@ export async function GET() {
         return (now - ko.getTime()) < 3 * 60 * 60 * 1000;
       });
       const rawUpcoming = upcoming.data?.value ?? [];
-      console.log('[matches] upcoming count:', rawUpcoming.length, '| now:', new Date(now).toISOString());
+      const upcomingFiltered = rawUpcoming.filter((m: any) => {
+        const ko = parseKickoff(m);
+        if (!ko) return true;
+        return ko.getTime() > now - 3 * 60 * 60 * 1000;
+      });
+      console.log('[matches] upcoming count:', rawUpcoming.length, '→', upcomingFiltered.length, '| now:', new Date(now).toISOString());
       return NextResponse.json({
         live: liveFiltered,
-        upcoming: rawUpcoming,
+        upcoming: upcomingFiltered,
       }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
     } catch (e: any) {
       console.error('[matches] error:', e.message);

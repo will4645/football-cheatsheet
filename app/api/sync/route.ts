@@ -8,15 +8,18 @@ import type { FBrefPlayer } from '@/lib/fbref';
 function getSb() {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
   const { createClient } = require('@supabase/supabase-js');
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+    global: { fetch: (url: RequestInfo | URL, opts?: RequestInit) => fetch(url, { ...opts, cache: 'no-store' }) },
+  });
 }
 
-async function sbSet(key: string, value: unknown) {
+async function sbSet(key: string, value: unknown, log?: (s: string) => void) {
   const sb = getSb();
-  if (!sb) return;
+  if (!sb) { log?.(`[sbSet] no client for ${key}`); return; }
   const now = new Date().toISOString();
   const { error } = await sb.from('match_cache').upsert({ key, value, updated_at: now }, { onConflict: 'key' });
-  if (error) console.error(`[sbSet] upsert error for ${key}:`, error.message);
+  if (error) { const msg = `[sbSet] ERROR ${key}: ${error.message} (code:${error.code})`; console.error(msg); log?.(msg); }
+  else log?.(`[sbSet] ok: ${key}`);
 }
 
 async function sbGet(key: string) {
@@ -45,8 +48,32 @@ function poissonAtLeast(lambda: number, k: number) {
   for (let i = 0; i < k; i++) { cumulative += term; term *= lambda / (i + 1); }
   return Math.max(0, Math.min(1, 1 - cumulative));
 }
-function toScale(p: number) { return Math.max(20, Math.min(100, Math.round(p * 5) * 20)); }
-function overProb(avg: number, threshold: number) { return toScale(poissonAtLeast(avg, threshold + 1)); }
+function poissonExact(lambda: number, k: number) {
+  let p = Math.exp(-lambda);
+  for (let i = 0; i < k; i++) p *= lambda / (i + 1);
+  return p;
+}
+function toScale(p: number) { return Math.max(5, Math.min(100, Math.round(p * 20) * 5)); }
+function overProb(avg: number, threshold: number) { return toScale(poissonAtLeast(avg, Math.ceil(threshold + 0.001))); }
+
+// Poisson match outcome model: expected goals based on attack vs opponent defence
+function matchOutcomes(homeGoalsFor: number, homeGoalsAgainst: number, awayGoalsFor: number, awayGoalsAgainst: number) {
+  const lH = Math.max(0.3, (homeGoalsFor + awayGoalsAgainst) / 2);
+  const lA = Math.max(0.3, (awayGoalsFor + homeGoalsAgainst) / 2);
+  let home = 0, draw = 0, away = 0;
+  for (let h = 0; h <= 7; h++) {
+    for (let a = 0; a <= 7; a++) {
+      const p = poissonExact(lH, h) * poissonExact(lA, a);
+      if (h > a) home += p; else if (h === a) draw += p; else away += p;
+    }
+  }
+  const total = home + draw + away;
+  return {
+    homeWin: Math.round((home / total) * 100),
+    draw:    Math.round((draw / total) * 100),
+    awayWin: Math.round((away / total) * 100),
+  };
+}
 
 function seededLast5(name: string, stat: string, avgPerGame: number, threshold: number): boolean[] {
   const prob = poissonAtLeast(avgPerGame, threshold);
@@ -244,7 +271,9 @@ async function getStatsIndex(): Promise<Map<string, any>> {
   for (const league of LEAGUES) {
     try { all.push(...await fetchLeague(league)); } catch { /* skip */ }
   }
-  await sbSet('fbref_cache', { scraped: Date.now(), players: all });
+  if (all.length > 0) {
+    await sbSet('fbref_cache', { scraped: Date.now(), players: all });
+  }
   return buildNameIndex(all);
 }
 
@@ -256,7 +285,9 @@ async function getFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
   try {
     const index = await fetchFBrefIndex();
     const players = Array.from(index.values());
-    await sbSet('fbref_v2_cache', { scraped: Date.now(), players });
+    if (players.length > 0) {
+      await sbSet('fbref_v2_cache', { scraped: Date.now(), players });
+    }
     return buildFBrefNameIndex(players);
   } catch {
     return new Map();
@@ -478,7 +509,20 @@ async function buildPlayers(
 
   function top5(players: any[], key: string, excludeGK = true) {
     const pool = excludeGK ? players.filter(p => !p.isGK) : players;
-    return [...pool].sort((a, b) => b[key] - a[key]).slice(0, 5);
+    // Sort by stat but prioritise players with >= 5 games to avoid small-sample flukes topping the list
+    return [...pool].sort((a, b) => {
+      const aGames = a.mins > 0 ? 1 : 0; // proxy: non-zero mins means real data
+      const bGames = b.mins > 0 ? 1 : 0;
+      const aTotalGA = (a.goals ?? 0) + (a.assists ?? 0);
+      const bTotalGA = (b.goals ?? 0) + (b.assists ?? 0);
+      if (key === 'gaPerGame') {
+        // Penalise players with very few total G+A (likely small sample)
+        const aScore = aTotalGA < 3 ? a[key] * 0.5 : a[key];
+        const bScore = bTotalGA < 3 ? b[key] * 0.5 : b[key];
+        return bScore - aScore;
+      }
+      return b[key] - a[key];
+    }).slice(0, 5);
   }
 
   function buildSide(starters: any[], opp: any[]) {
@@ -600,14 +644,37 @@ function formatKickoff(iso: string) {
   const tz = d.toLocaleTimeString('en-GB', { timeZoneName: 'short', timeZone: 'Europe/London' }).includes('BST') ? 'BST' : 'GMT';
   return `${hm} ${tz}`;
 }
+// fd.org team IDs whose crest CDN returns 404 — override with ESPN CDN
+const BADGE_OVERRIDES: Record<string, string> = {
+  '100':  'https://a.espncdn.com/i/teamlogos/soccer/500/104.png',  // AS Roma
+  '522':  'https://a.espncdn.com/i/teamlogos/soccer/500/2502.png', // OGC Nice
+  '548':  'https://a.espncdn.com/i/teamlogos/soccer/500/174.png',  // AS Monaco FC
+  '7397': 'https://a.espncdn.com/i/teamlogos/soccer/500/2572.png', // Como 1907
+};
+function teamBadge(teamId: string | number) {
+  const id = String(teamId);
+  return BADGE_OVERRIDES[id] ?? `https://crests.football-data.org/${id}.svg`;
+}
+
 function matchId(home: string, away: string) {
   const slug = (s: string) => (s || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   return `${slug(home)}-vs-${slug(away)}`;
 }
+// Normalised match ID for fuzzy dedup — strips club suffixes/prefixes so
+// "Arsenal FC" and "Arsenal", "Club Atlético de Madrid" and "Atlético Madrid" match
+function normMatchId(home: string, away: string) {
+  const norm = (s: string) => (s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\b(fc|cf|sc|afc|bfc|ssc|ac|as|rb|vfb|club|de|van|united|city)\b/g, ' ')
+    .replace(/munchen/g, 'munich')     // FC Bayern München → Bayern Munich
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, '-').replace(/^-|-$/g, '');
+  return `${norm(home)}-vs-${norm(away)}`;
+}
 
 // ── Football-data.org fetch ────────────────────────────────────────────────
 const BASE_URL = 'https://api.football-data.org/v4';
-const COMPETITIONS = ['PL', 'CL', 'FAC', 'EL', 'EC', 'WC', 'CLI'];
+const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1'];
 const FINISHED_STATUSES = new Set(['FINISHED', 'AWARDED', 'CANCELLED']);
 
 const _apiCache = new Map<string, { data: any; exp: number }>();
@@ -657,7 +724,11 @@ async function runSync() {
   const pendingList: any[] = [];
   const nearTermMatches: any[] = [];
 
-  const apiMatchIds = new Set(data.matches.map((m: any) => matchId(m.homeTeam?.name, m.awayTeam?.name)));
+  const apiMatchIds = new Set(
+    data.matches
+      .filter((m: any) => m.homeTeam?.name && m.awayTeam?.name)
+      .map((m: any) => matchId(m.homeTeam.name, m.awayTeam.name))
+  );
   const stale = liveMatches.filter((m: any) => !apiMatchIds.has(m.id));
   for (const m of stale) {
     const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${m.id}`);
@@ -667,7 +738,9 @@ async function runSync() {
 
   // Phase 1: fast pass — classify matches without any API calls
   for (const match of data.matches) {
-    const id     = matchId(match.homeTeam?.name, match.awayTeam?.name);
+    // Skip matches with null team names (fd.org tier restriction — ESPN will cover these)
+    if (!match.homeTeam?.name || !match.awayTeam?.name) continue;
+    const id     = matchId(match.homeTeam.name, match.awayTeam.name);
     const status = match.status;
     const kickoff   = new Date(match.utcDate);
     const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
@@ -689,8 +762,8 @@ async function runSync() {
           stage: match.stage ? match.stage.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : match.matchday ? `Matchday ${match.matchday}` : 'Match',
           utcDate: match.utcDate,
           date: formatDate(match.utcDate), kickoff: formatKickoff(match.utcDate),
-          homeTeam: { name: homeName, badge: `https://crests.football-data.org/${match.homeTeam.id}.svg`, primaryColor: getTeamColor(homeName) },
-          awayTeam: { name: awayName, badge: `https://crests.football-data.org/${match.awayTeam.id}.svg`, primaryColor: getTeamColor(awayName) },
+          homeTeam: { name: homeName, badge: teamBadge(match.homeTeam.id), primaryColor: getTeamColor(homeName) },
+          awayTeam: { name: awayName, badge: teamBadge(match.awayTeam.id), primaryColor: getTeamColor(awayName) },
         });
       }
       continue;
@@ -698,9 +771,85 @@ async function runSync() {
     nearTermMatches.push(match);
   }
 
-  // Write upcoming now — far-future matches are ready; near-term will be added below
   log(`[sync] Phase 1 done — ${pendingList.length} far-pending, ${nearTermMatches.length} near-term to process`);
-  await sbSet('upcoming', pendingList);
+
+  // ── ESPN supplement for CL / EL / ECL (fd.org free tier omits these) ──────
+  const ESPN_COMP_LEAGUES = [
+    { league: 'uefa.champions',   compName: 'UEFA Champions League' },
+    { league: 'uefa.europa',      compName: 'UEFA Europa League' },
+    { league: 'uefa.europa.conf', compName: 'UEFA Europa Conference League' },
+  ];
+  const seenIds = new Set([
+    ...pendingList.map((m: any) => m.id),
+    ...nearTermMatches.map((m: any) => matchId(m.homeTeam?.name, m.awayTeam?.name)),
+    ...liveMatches.map((m: any) => m.id),
+  ]);
+  let espnAdded = 0;
+  const seenNormIds = new Set<string>([
+    ...pendingList.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
+    ...nearTermMatches.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
+    ...liveMatches.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
+  ]);
+  for (const { league, compName } of ESPN_COMP_LEAGUES) {
+    for (let d = 0; d < 8; d++) {
+      const dt = new Date(Date.now() + d * 86_400_000);
+      const ds = `${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}`;
+      let board: any;
+      try {
+        await new Promise(r => setTimeout(r, 300));
+        const res = await fetch(
+          `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${ds}&_cb=${Date.now()}`,
+          { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36', 'Accept': 'application/json' }, cache: 'no-store' }
+        );
+        if (!res.ok) continue;
+        board = await res.json();
+      } catch { continue; }
+      for (const ev of board?.events ?? []) {
+        const comp = ev.competitions?.[0];
+        if (comp?.status?.type?.completed) continue;
+        const homeComp = comp?.competitors?.find((c: any) => c.homeAway === 'home');
+        const awayComp = comp?.competitors?.find((c: any) => c.homeAway === 'away');
+        const homeName = homeComp?.team?.displayName;
+        const awayName = awayComp?.team?.displayName;
+        if (!homeName || !awayName) continue;
+        const id = matchId(homeName, awayName);
+        const nid = normMatchId(homeName, awayName);
+        if (seenIds.has(id) || seenNormIds.has(nid)) continue;
+        seenIds.add(id);
+        seenNormIds.add(nid);
+        const koTime = new Date(ev.date).getTime();
+        const hoursAway = (koTime - Date.now()) / 3_600_000;
+        if (hoursAway < -2) continue;
+        const notes: any[] = comp?.notes ?? [];
+        const stage = notes[0]?.headline || (comp?.type?.abbreviation ? `${comp.type.abbreviation}` : 'Match');
+        const homeEspnId = homeComp.team.id;
+        const awayEspnId = awayComp.team.id;
+        const homeBadge = `https://a.espncdn.com/i/teamlogos/soccer/500/${homeEspnId}.png`;
+        const awayBadge = `https://a.espncdn.com/i/teamlogos/soccer/500/${awayEspnId}.png`;
+        espnAdded++;
+        if (hoursAway > 24) {
+          pendingList.push({
+            id, competition: compName, stage, utcDate: ev.date,
+            date: formatDate(ev.date), kickoff: formatKickoff(ev.date),
+            homeTeam: { name: homeName, badge: homeBadge, primaryColor: getTeamColor(homeName) },
+            awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
+          });
+        } else {
+          nearTermMatches.push({
+            _fromEspn: true, _espnLeague: league,
+            id: ev.id, status: comp?.status?.type?.name ?? 'SCHEDULED', utcDate: ev.date,
+            homeTeam: { name: homeName, id: homeEspnId }, awayTeam: { name: awayName, id: awayEspnId },
+            competition: { name: compName }, stage, referees: [], matchday: null,
+            _homeBadge: homeBadge, _awayBadge: awayBadge,
+          });
+        }
+      }
+    }
+  }
+  log(`[sync] ESPN supplement: +${espnAdded} CL/EL/ECL matches`);
+
+  // Write upcoming now — far-future matches are ready; near-term will be added below
+  await sbSet('upcoming', pendingList, log);
 
   // Phase 2: slow pass — lineup checks for near-term matches
   for (const match of nearTermMatches) {
@@ -710,13 +859,14 @@ async function runSync() {
     const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
     const isLive = LIVE_STATUSES.has(status);
 
-    let lineupData = await apiFetch(`/matches/${match.id}/lineups`, 2 * 60 * 1000);
+    const fromEspn = !!(match as any)._fromEspn;
+    let lineupData = fromEspn ? null : await apiFetch(`/matches/${match.id}/lineups`, 2 * 60 * 1000);
     let hasLineups = lineupData?.homeTeam?.lineup?.length > 0 || lineupData?.homeTeam?.startingEleven?.length > 0;
 
     const homeName = match.homeTeam?.name;
     const awayName = match.awayTeam?.name;
-    const homeBadge = `https://crests.football-data.org/${match.homeTeam.id}.svg`;
-    const awayBadge = `https://crests.football-data.org/${match.awayTeam.id}.svg`;
+    const homeBadge = (match as any)._homeBadge ?? teamBadge(match.homeTeam.id);
+    const awayBadge = (match as any)._awayBadge ?? teamBadge(match.awayTeam.id);
     const stage = match.stage
       ? match.stage.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
       : match.matchday ? `Matchday ${match.matchday}` : 'Match';
@@ -767,10 +917,12 @@ async function runSync() {
 
     log(`[sync] Generating${isLive ? ' (live)' : ''}: ${homeName} vs ${awayName}`);
 
-    const [homeResults, awayResults] = await Promise.all([
-      apiFetch(`/teams/${match.homeTeam.id}/matches?status=FINISHED&limit=10`, 60 * 60 * 1000),
-      apiFetch(`/teams/${match.awayTeam.id}/matches?status=FINISHED&limit=10`, 60 * 60 * 1000),
-    ]);
+    const [homeResults, awayResults] = fromEspn
+      ? [null, null]
+      : await Promise.all([
+          apiFetch(`/teams/${match.homeTeam.id}/matches?status=FINISHED&limit=10`, 60 * 60 * 1000),
+          apiFetch(`/teams/${match.awayTeam.id}/matches?status=FINISHED&limit=10`, 60 * 60 * 1000),
+        ]);
 
     const homeStats = buildTeamStats(homeResults?.matches, match.homeTeam.id, (espnHistory as any).__homeStats ?? null, (espnHistory as any).__awayStats ?? null);
     const awayStats = buildTeamStats(awayResults?.matches, match.awayTeam.id, (espnHistory as any).__awayStats ?? null, (espnHistory as any).__homeStats ?? null);
@@ -779,23 +931,27 @@ async function runSync() {
     const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory, fbrefV2Idx);
 
     const matchData = {
-      competition: match.competition?.name || 'Football', stage,
+      competition: (typeof match.competition === 'string' ? match.competition : match.competition?.name) || 'Football', stage,
       date: formatDate(match.utcDate), kickoff: formatKickoff(match.utcDate),
       homeTeam: { name: homeName, primaryColor: getTeamColor(homeName), badge: homeBadge, stats: homeStats, players: players.home },
       awayTeam: { name: awayName, primaryColor: getTeamColor(awayName), badge: awayBadge, stats: awayStats, players: players.away },
       referee: {
         name: match.referees?.[0]?.name || 'TBC',
-        currentSeason: { yellows: 3.0, reds: 0.2, foulsPg: 22.0 },
-        career:        { yellows: 3.1, reds: 0.2, foulsPg: 23.0 },
+        matchAvg: {
+          fouls: +(homeStats.foulsCommitted + awayStats.foulsCommitted).toFixed(1),
+          cards:  +(homeStats.cardsFor      + awayStats.cardsFor).toFixed(1),
+        },
       },
-      probabilities: {
-        btts: overProb((homeStats.goalsFor + awayStats.goalsFor) / 2, 0),
-        homeWin: 40, draw: 25, awayWin: 35,
-      },
+      probabilities: (() => {
+        const lH = Math.max(0.3, (homeStats.goalsFor + awayStats.goalsAgainst) / 2);
+        const lA = Math.max(0.3, (awayStats.goalsFor + homeStats.goalsAgainst) / 2);
+        const btts = Math.round((1 - Math.exp(-lH)) * (1 - Math.exp(-lA)) * 100);
+        return { btts, ...matchOutcomes(homeStats.goalsFor, homeStats.goalsAgainst, awayStats.goalsFor, awayStats.goalsAgainst) };
+      })(),
       fixtureId: match.id, status,
     };
 
-    await sbSet(`match:${id}`, matchData);
+    await sbSet(`match:${id}`, matchData, log);
     log(`[sync] saved: ${id} corners=${(matchData.homeTeam as any).stats?.cornersFor}`);
 
     if (!liveMatches.find((m: any) => m.id === id)) {
@@ -809,9 +965,9 @@ async function runSync() {
   }
 
   log(`[sync] Writing — ${liveMatches.length} live, ${pendingList.length} pending`);
-  await sbSet('matches', liveMatches);
-  await sbSet('upcoming', pendingList);
-  log(`[sync] Done — wrote upcoming ok`);
+  await sbSet('matches', liveMatches, log);
+  await sbSet('upcoming', pendingList, log);
+  log(`[sync] Done`);
   return logs;
 }
 
