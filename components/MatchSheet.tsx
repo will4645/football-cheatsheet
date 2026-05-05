@@ -236,8 +236,8 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
             return <div key={i} className="flex items-center h-8"><span className="text-[11px] font-medium truncate" style={{ color: nameColor }}>{p.name}</span></div>;
           })}
         </div>
-        <StatCol width="w-[44px]" header="Mins" right>
-          {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[10px] text-gray-500`}>{p.mins}'</div>)}
+        <StatCol width="w-[44px]" header="Games" right>
+          {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[10px] text-gray-500`}>{p.appearances}</div>)}
         </StatCol>
         <StatCol width="w-[32px]" header="Y" right>
           {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[11px] font-bold`} style={{ color: '#facc15' }}>{p.yellowCards}</div>)}

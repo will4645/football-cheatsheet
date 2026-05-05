@@ -18,7 +18,7 @@ export interface GoalscoringPlayer {
   last5Goals?: boolean[]; last5Assists?: boolean[]; form: Form;
 }
 export interface CardsPlayer {
-  name: string; mins: number;
+  name: string; appearances: number;
   yellowCards: number; redCards: number; cardsPerGame: number;
   last5Cards?: boolean[];
 }
@@ -94,11 +94,11 @@ export const matchData: {
         { name: 'Robin Le Normand',  mins: 61, goals: 3,  assists: 0,  gaPerGame: 0.13, badges: [],          last5Goals: [false,false,false,false,false], last5Assists: [false,false,false,false,false],form: 'poor' },
       ],
       cards: [
-        { name: 'Marcos Ruggeri',   mins: 69, yellowCards: 6, redCards: 0, cardsPerGame: 0.24, last5Cards: [false,true,true,false,true]  },
-        { name: 'Clément Lenglet',  mins: 78, yellowCards: 6, redCards: 1, cardsPerGame: 0.21, last5Cards: [true,false,true,false,true]   },
-        { name: 'Marcos Llorente',  mins: 76, yellowCards: 7, redCards: 0, cardsPerGame: 0.21, last5Cards: [false,true,false,true,false]  },
-        { name: 'Giovanni Simeone', mins: 75, yellowCards: 3, redCards: 0, cardsPerGame: 0.15, last5Cards: [false,false,true,false,false] },
-        { name: 'Julián Álvarez',   mins: 70, yellowCards: 2, redCards: 0, cardsPerGame: 0.07, last5Cards: [false,false,false,true,false] },
+        { name: 'Marcos Ruggeri',   appearances: 25, yellowCards: 6, redCards: 0, cardsPerGame: 0.24, last5Cards: [false,true,true,false,true]  },
+        { name: 'Clément Lenglet',  appearances: 29, yellowCards: 6, redCards: 1, cardsPerGame: 0.21, last5Cards: [true,false,true,false,true]   },
+        { name: 'Marcos Llorente',  appearances: 33, yellowCards: 7, redCards: 0, cardsPerGame: 0.21, last5Cards: [false,true,false,true,false]  },
+        { name: 'Giovanni Simeone', appearances: 20, yellowCards: 3, redCards: 0, cardsPerGame: 0.15, last5Cards: [false,false,true,false,false] },
+        { name: 'Julián Álvarez',   appearances: 29, yellowCards: 2, redCards: 0, cardsPerGame: 0.07, last5Cards: [false,false,false,true,false] },
       ],
     },
   },
@@ -145,11 +145,11 @@ export const matchData: {
         { name: 'Jules Koundé',  mins: 77, goals: 3,  assists: 4,  gaPerGame: 0.23, badges: [],          last5Goals: [false,false,false,false,false], last5Assists: [false,true,false,false,false], form: 'ok' },
       ],
       cards: [
-        { name: 'Fermín López', mins: 62, yellowCards: 5, redCards: 0, cardsPerGame: 0.18, last5Cards: [true,false,false,true,false]  },
-        { name: 'Eric García',  mins: 78, yellowCards: 4, redCards: 1, cardsPerGame: 0.15, last5Cards: [false,true,false,false,true]  },
-        { name: 'Gavi',         mins: 32, yellowCards: 2, redCards: 0, cardsPerGame: 0.14, last5Cards: [false,true,false,false,false] },
-        { name: 'Jules Koundé', mins: 77, yellowCards: 4, redCards: 0, cardsPerGame: 0.13, last5Cards: [false,false,true,false,false] },
-        { name: 'João Cancelo', mins: 66, yellowCards: 3, redCards: 0, cardsPerGame: 0.11, last5Cards: [false,false,false,true,false] },
+        { name: 'Fermín López', appearances: 28, yellowCards: 5, redCards: 0, cardsPerGame: 0.18, last5Cards: [true,false,false,true,false]  },
+        { name: 'Eric García',  appearances: 27, yellowCards: 4, redCards: 1, cardsPerGame: 0.15, last5Cards: [false,true,false,false,true]  },
+        { name: 'Gavi',         appearances: 14, yellowCards: 2, redCards: 0, cardsPerGame: 0.14, last5Cards: [false,true,false,false,false] },
+        { name: 'Jules Koundé', appearances: 31, yellowCards: 4, redCards: 0, cardsPerGame: 0.13, last5Cards: [false,false,true,false,false] },
+        { name: 'João Cancelo', appearances: 27, yellowCards: 3, redCards: 0, cardsPerGame: 0.11, last5Cards: [false,false,false,true,false] },
       ],
     },
   },

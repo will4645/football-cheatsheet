@@ -633,9 +633,10 @@ async function buildPlayers(
         })
         .slice(0, 5)
         .map(p => {
-          const cpg = +(p.yellowCards / Math.max(1, p.appearances ?? 20)).toFixed(2);
+          const apps = p.appearances ?? 20;
+          const cpg = +(p.yellowCards / Math.max(1, apps)).toFixed(2);
           return {
-            name: p.name, mins: p.mins,
+            name: p.name, appearances: apps,
             yellowCards: p.yellowCards,
             redCards: p.redCards ?? 0,
             cardsPerGame: cpg,

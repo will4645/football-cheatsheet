@@ -371,7 +371,7 @@ export function buildPlayers(
     const cpg = +(p.yellowCards / Math.max(1, p.appearances)).toFixed(2);
     return {
       name: p.name,
-      mins: p.mins,
+      appearances: p.appearances,
       yellowCards: p.yellowCards,
       redCards: p.redCards,
       cardsPerGame: cpg,
