@@ -376,3 +376,44 @@ export async function getApiFootballLineups(
     return { lineups: null, debug: `ESPN error: ${e.message}`, espnMeta: null };
   }
 }
+
+// ── First-leg aggregate finder (ESPN scoreboard scan) ─────────────────────
+// Scans ESPN scoreboard for the days before a second leg to find the first leg score.
+// Returns from the second-leg's perspective: home/away = current match's home/away.
+export async function findEspnFirstLeg(
+  league: string,
+  homeTeamId: string,
+  awayTeamId: string,
+  currentUtcDate: string,
+): Promise<{ home: number; away: number } | null> {
+  const currentDate = new Date(currentUtcDate);
+  const hId = String(homeTeamId);
+  const aId = String(awayTeamId);
+  // Two-legged knockout ties are typically 7–21 days apart; scan that window
+  for (let daysBack = 5; daysBack <= 21; daysBack++) {
+    const checkDate = new Date(currentDate.getTime() - daysBack * 86_400_000);
+    const ds = `${checkDate.getFullYear()}${String(checkDate.getMonth() + 1).padStart(2, '0')}${String(checkDate.getDate()).padStart(2, '0')}`;
+    try {
+      const board = await espnFetch(
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${ds}`
+      );
+      for (const ev of (board?.events ?? [])) {
+        const comp = ev.competitions?.[0];
+        if (!comp?.status?.type?.completed) continue;
+        const homeComp = comp?.competitors?.find((c: any) => c.homeAway === 'home');
+        const awayComp = comp?.competitors?.find((c: any) => c.homeAway === 'away');
+        if (!homeComp || !awayComp) continue;
+        const evHId = String(homeComp.team?.id ?? '');
+        const evAId = String(awayComp.team?.id ?? '');
+        // Same two teams, either orientation, different game (not the match itself)
+        const sameTeams = (evHId === hId || evHId === aId) && (evAId === hId || evAId === aId) && evHId !== evAId;
+        if (!sameTeams) continue;
+        const hScore = parseInt(homeComp.score ?? '0') || 0;
+        const aScore = parseInt(awayComp.score ?? '0') || 0;
+        // Translate to current match's perspective (hId is home in the second leg)
+        return evHId === hId ? { home: hScore, away: aScore } : { home: aScore, away: hScore };
+      }
+    } catch {}
+  }
+  return null;
+}

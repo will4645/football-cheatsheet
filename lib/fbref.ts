@@ -5,8 +5,8 @@
  * Rate limited to 3.5s per request to avoid FBref bans.
  */
 
-const RATE_MS = 3500;
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const RATE_MS = 4000;
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
 export interface FBrefPlayer {
   name: string;
@@ -31,10 +31,26 @@ async function fbFetch(url: string): Promise<string | null> {
   try {
     await new Promise(r => setTimeout(r, RATE_MS));
     const res = await fetch(url, {
-      headers: { 'User-Agent': UA, 'Accept': 'text/html', 'Accept-Language': 'en-GB' },
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-GB,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+      },
+      redirect: 'follow',
     });
     if (!res.ok) return null;
-    return res.text();
+    const text = await res.text();
+    // FBref returns a Cloudflare challenge page when blocked — detect and reject
+    if (text.includes('cf-browser-verification') || text.includes('Enable JavaScript and cookies')) return null;
+    return text;
   } catch { return null; }
 }
 
@@ -61,8 +77,7 @@ function parseRows(html: string): string[] {
 interface StdRow { name: string; games: number; mins: number; goals: number; assists: number; shots: number; yellowCards: number; pkGoals: number }
 interface MiscRow { games: number; fouls: number; fouled: number }
 
-async function fetchStandard(compId: string, slug: string): Promise<Map<string, StdRow>> {
-  const url = `https://fbref.com/en/comps/${compId}/stats/${slug}-Stats`;
+async function fetchStandardUrl(url: string): Promise<Map<string, StdRow>> {
   const html = await fbFetch(url);
   const map = new Map<string, StdRow>();
   if (!html) return map;
@@ -85,8 +100,7 @@ async function fetchStandard(compId: string, slug: string): Promise<Map<string, 
   return map;
 }
 
-async function fetchMisc(compId: string, slug: string): Promise<Map<string, MiscRow>> {
-  const url = `https://fbref.com/en/comps/${compId}/misc/${slug}-Misc-Stats`;
+async function fetchMiscUrl(url: string): Promise<Map<string, MiscRow>> {
   const html = await fbFetch(url);
   const map = new Map<string, MiscRow>();
   if (!html) return map;
@@ -104,19 +118,45 @@ async function fetchMisc(compId: string, slug: string): Promise<Map<string, Misc
   return map;
 }
 
-// Big5 combined page + Champions League
+// Tries season-specific URL first, falls back to current-season redirect
+async function fetchStandard(stdUrls: string[]): Promise<Map<string, StdRow>> {
+  for (const url of stdUrls) {
+    const m = await fetchStandardUrl(url);
+    if (m.size > 0) return m;
+  }
+  return new Map();
+}
+
+async function fetchMisc(miscUrls: string[]): Promise<Map<string, MiscRow>> {
+  for (const url of miscUrls) {
+    const m = await fetchMiscUrl(url);
+    if (m.size > 0) return m;
+  }
+  return new Map();
+}
+
+const BASE = 'https://fbref.com/en/comps';
 const COMPS = [
-  { id: 'Big5', slug: 'Big-5-European-Leagues' },
-  { id: '8',    slug: 'Champions-League' },
-  { id: '19',   slug: 'Europa-League' },
+  {
+    stdUrls:  [`${BASE}/Big5/2025-2026/stats/players/Big-5-European-Leagues-Stats`,  `${BASE}/Big5/stats/Big-5-European-Leagues-Stats`],
+    miscUrls: [`${BASE}/Big5/2025-2026/misc/players/Big-5-European-Leagues-Misc-Stats`, `${BASE}/Big5/misc/Big-5-European-Leagues-Misc-Stats`],
+  },
+  {
+    stdUrls:  [`${BASE}/8/2025-2026/stats/Champions-League-Stats`,   `${BASE}/8/stats/Champions-League-Stats`],
+    miscUrls: [`${BASE}/8/2025-2026/misc/Champions-League-Misc-Stats`, `${BASE}/8/misc/Champions-League-Misc-Stats`],
+  },
+  {
+    stdUrls:  [`${BASE}/19/2025-2026/stats/Europa-League-Stats`,   `${BASE}/19/stats/Europa-League-Stats`],
+    miscUrls: [`${BASE}/19/2025-2026/misc/Europa-League-Misc-Stats`, `${BASE}/19/misc/Europa-League-Misc-Stats`],
+  },
 ];
 
 export async function fetchFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
   const index = new Map<string, FBrefPlayer>();
 
   for (const comp of COMPS) {
-    const stdMap = await fetchStandard(comp.id, comp.slug);
-    const miscMap = await fetchMisc(comp.id, comp.slug);
+    const stdMap = await fetchStandard(comp.stdUrls);
+    const miscMap = await fetchMisc(comp.miscUrls);
 
     for (const [key, s] of Array.from(stdMap)) {
       if (index.has(key)) continue; // already have from a higher-priority comp

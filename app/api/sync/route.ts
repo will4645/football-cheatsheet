@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiFootballLineups, fetchTeamPlayerHistory, PlayerGameStat } from '@/lib/api-football';
+import { getApiFootballLineups, fetchTeamPlayerHistory, findEspnFirstLeg, PlayerGameStat } from '@/lib/api-football';
 import type { TeamSeasonStats } from '@/lib/api-football';
 import { fetchFBrefIndex, buildFBrefNameIndex, lookupFBref } from '@/lib/fbref';
 import type { FBrefPlayer } from '@/lib/fbref';
@@ -321,11 +321,12 @@ async function getFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
     const players = Array.from(index.values());
     if (players.length > 0) {
       await sbSet('fbref_v2_cache', { scraped: Date.now(), players });
+      return buildFBrefNameIndex(players);
     }
-    return buildFBrefNameIndex(players);
-  } catch {
-    return new Map();
-  }
+  } catch {}
+  // Fresh scrape failed (FBref blocked or changed) — use stale cache if available
+  if (cached?.players?.length) return buildFBrefNameIndex(cached.players);
+  return new Map();
 }
 
 // ── Build team stats ───────────────────────────────────────────────────────
@@ -948,6 +949,7 @@ async function runSync() {
 
     // Fallback to API-Football if football-data.org hasn't published lineups yet
     let espnHistory: Map<string, PlayerGameStat[]> = new Map();
+    let confirmedEspnMeta: { league: string; homeTeamId: string; awayTeamId: string } | null = null;
     if (!hasLineups) {
       log(`[sync] Trying API-Football: ${homeName} vs ${awayName}`);
       const { lineups: afLineups, debug: afDebug, espnMeta } = await getApiFootballLineups(homeName, awayName, match.utcDate);
@@ -958,6 +960,7 @@ async function runSync() {
         log(`[sync] API-Football lineups found for ${homeName} vs ${awayName}`);
         // Fetch per-player foul/shot history from ESPN for both teams
         if (espnMeta?.league && espnMeta.homeTeamId && espnMeta.awayTeamId) {
+          confirmedEspnMeta = espnMeta;
           log(`[sync] Fetching ESPN history — league:${espnMeta.league} home:${espnMeta.homeTeamId} away:${espnMeta.awayTeamId}`);
           const [homeResult, awayResult] = await Promise.all([
             fetchTeamPlayerHistory(espnMeta.homeTeamId, espnMeta.league, homeName),
@@ -966,13 +969,6 @@ async function runSync() {
           homeResult.history.forEach((v, k) => espnHistory.set(k, v));
           awayResult.history.forEach((v, k) => espnHistory.set(k, v));
           log(`[sync] ESPN: ${espnHistory.size} player records | home corners=${homeResult.seasonStats?.cornersFor ?? 'n/a'} shots=${homeResult.seasonStats?.shotsFor ?? 'n/a'} | away corners=${awayResult.seasonStats?.cornersFor ?? 'n/a'} shots=${awayResult.seasonStats?.shotsFor ?? 'n/a'} | debug: ${homeResult.debug}`);
-          // Find player with highest sot to confirm field mapping works
-          let maxSot = 0, maxSotId = '', maxSotGames = 0;
-          for (const [id, games] of Array.from(espnHistory.entries())) {
-            const avg = games.reduce((s, g) => s + (g.sot ?? 0), 0) / games.length;
-            if (avg > maxSot) { maxSot = avg; maxSotId = id; maxSotGames = games.length; }
-          }
-          log(`[sync] top-sot player id=${maxSotId} avgSot=${maxSot.toFixed(2)} games=${maxSotGames}`);
           // Store ESPN season stats on espnHistory object for use in buildTeamStats
           (espnHistory as any).__homeStats = homeResult.seasonStats;
           (espnHistory as any).__awayStats = awayResult.seasonStats;
@@ -1032,11 +1028,24 @@ async function runSync() {
         return { btts, ...matchOutcomes(homeStats.goalsFor, homeStats.goalsAgainst, awayStats.goalsFor, awayStats.goalsAgainst) };
       })(),
       fixtureId: match.id, status,
-      aggregate: findFirstLegAggregate(
-        [...(homeResults?.matches ?? []), ...(awayResults?.matches ?? [])],
-        match.homeTeam.id,
-        match.awayTeam.id,
-      ),
+      aggregate: await (async () => {
+        // Try football-data.org finished matches first
+        const fdAgg = findFirstLegAggregate(
+          [...(homeResults?.matches ?? []), ...(awayResults?.matches ?? [])],
+          match.homeTeam.id, match.awayTeam.id,
+        );
+        if (fdAgg) return fdAgg;
+        // For knockout rounds, scan ESPN scoreboards for the first leg
+        const isKnockout = /quarter|semi|round of|knockout|last 16|last 8|last 4/i.test(stage);
+        if (isKnockout && confirmedEspnMeta) {
+          const espnAgg = await findEspnFirstLeg(
+            confirmedEspnMeta.league, confirmedEspnMeta.homeTeamId, confirmedEspnMeta.awayTeamId, match.utcDate,
+          );
+          if (espnAgg) log(`[sync] First-leg aggregate from ESPN: ${espnAgg.home}–${espnAgg.away}`);
+          return espnAgg;
+        }
+        return null;
+      })(),
     };
 
     await sbSet(`match:${id}`, matchData, log);
