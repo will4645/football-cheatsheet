@@ -811,12 +811,16 @@ async function runSync() {
     const kickoff   = new Date(match.utcDate);
     const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
 
-    if (FINISHED_STATUSES.has(status) || !(hoursAway > -2)) {
+    // Skip and clean up matches that are finished & old, or simply too old
+    const tooOld = !(hoursAway > -3);
+    const oldFinished = FINISHED_STATUSES.has(status) && !(hoursAway > -3);
+    if (tooOld || oldFinished) {
       const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${id}`);
       const updated = liveMatches.filter((m: any) => m.id !== id);
       liveMatches.splice(0, liveMatches.length, ...updated);
       continue;
     }
+    // Recently finished matches (within 3 hours) still get a final data pass
     const isLive = LIVE_STATUSES.has(status);
 
     if (hoursAway > 24 && !isLive) {
