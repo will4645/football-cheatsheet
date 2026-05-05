@@ -185,11 +185,13 @@ async function fetchLeague(league: { id: string; name: string }) {
     const goals = parseFloat(p.goals) || 0;
     const assts = parseFloat(p.assists) || 0;
     const shots = parseFloat(p.shots) || 0;
+    const npg = parseFloat(p.npg) || 0;
     return {
       id: p.id,
       name: p.player_name, games,
       avgMins: Math.round((parseInt(p.time) || 0) / games),
       goals, assists: assts, xg: +(parseFloat(p.npxG) || 0).toFixed(2),
+      penaltyGoals: Math.max(0, Math.round(goals - npg)),
       yellowCards: parseInt(p.yellow_cards) || 0,
       redCards: parseInt(p.red_cards) || 0,
       shotsPerGame: +(shots / games).toFixed(2),
@@ -388,6 +390,7 @@ async function buildPlayers(
       assists: isAtt ? 3 : isMid ? 3 : 1,
       gaPerGame: isAtt ? 0.35 : isMid ? 0.25 : 0.05,
       yellowCards: isDef ? 4 : isMid ? 3 : 2,
+      pkGoals: 0,
       form: 'ok' as const,
     };
     // 1. Understat (top 5 leagues — goals, assists, shots, xG)
@@ -404,6 +407,7 @@ async function buildPlayers(
         foulsWonPerGame: fb.foulsWonPerGame || defaults.foulsWonPerGame,
         tacklesPerGame: fb.tacklesPerGame || defaults.tacklesPerGame,
         yellowCards: fb.yellowCards,
+        pkGoals: fb.penaltyGoals ?? 0,
       };
       // 2. FBref overlay — fills fouls/tackles Understat doesn't have
       const fb2 = lookupFBref(fbrefV2Idx, name);
@@ -411,6 +415,7 @@ async function buildPlayers(
         if (!result.foulsPerGame)    result.foulsPerGame    = fb2.foulsPerGame;
         if (!result.foulsWonPerGame) result.foulsWonPerGame = fb2.foulsWonPerGame;
         if (!result.yellowCards)     result.yellowCards     = fb2.yellowCards;
+        if (!result.pkGoals)         result.pkGoals         = fb2.pkGoals ?? 0;
       }
       return result;
     }
@@ -428,6 +433,7 @@ async function buildPlayers(
         foulsPerGame: fb2.foulsPerGame || defaults.foulsPerGame,
         foulsWonPerGame: fb2.foulsWonPerGame || defaults.foulsWonPerGame,
         yellowCards: fb2.yellowCards || defaults.yellowCards,
+        pkGoals: fb2.pkGoals ?? 0,
       };
     }
 
@@ -596,7 +602,8 @@ async function buildPlayers(
           last5SoT:     espnLast5(p.espnId, 'sot',   1) ?? getLast5(p, 'shots1', sot, 1),
           shotsPerGame: +sh.toFixed(2),
           last5Shots:   espnLast5(p.espnId, 'shots', 2) ?? getLast5(p, 'shots2', sh,  2),
-          badges: [], form: p.form,
+          badges: (p.pkGoals ?? 0) >= 1 ? ['PK'] : [],
+          form: p.form,
         };
       }),
       goalscoring: top5(players, 'gaPerGame').map(p => {
@@ -605,7 +612,7 @@ async function buildPlayers(
         return {
           name: p.name, mins: p.mins, goals: p.goals, assists: p.assists,
           gaPerGame: +p.gaPerGame.toFixed(2),
-          badges: [],
+          badges: (p.pkGoals ?? 0) >= 1 ? ['PK'] : [],
           last5Goals:   espnLast5(p.espnId, 'goals',   1) ?? getLast5(p, 'goals',   g, 1),
           last5Assists: espnLast5(p.espnId, 'assists', 1) ?? getLast5(p, 'assists', a, 1),
           form: p.form,

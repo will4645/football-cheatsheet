@@ -18,6 +18,7 @@ export interface FBrefPlayer {
   yellowCards: number;
   foulsPerGame: number;
   foulsWonPerGame: number;
+  pkGoals: number;
 }
 
 function norm(raw: string): string {
@@ -57,7 +58,7 @@ function parseRows(html: string): string[] {
   return rows;
 }
 
-interface StdRow { name: string; games: number; mins: number; goals: number; assists: number; shots: number; yellowCards: number }
+interface StdRow { name: string; games: number; mins: number; goals: number; assists: number; shots: number; yellowCards: number; pkGoals: number }
 interface MiscRow { games: number; fouls: number; fouled: number }
 
 async function fetchStandard(compId: string, slug: string): Promise<Map<string, StdRow>> {
@@ -78,6 +79,7 @@ async function fetchStandard(compId: string, slug: string): Promise<Map<string, 
       assists: getNum(row, 'assists'),
       shots: getNum(row, 'shots'),
       yellowCards: getNum(row, 'cards_yellow'),
+      pkGoals: getNum(row, 'pens_made'),
     });
   }
   return map;
@@ -129,6 +131,7 @@ export async function fetchFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
         yellowCards: s.yellowCards,
         foulsPerGame: m && m.games > 0 ? +(m.fouls / m.games).toFixed(2) : 0,
         foulsWonPerGame: m && m.games > 0 ? +(m.fouled / m.games).toFixed(2) : 0,
+        pkGoals: s.pkGoals,
       });
     }
   }
