@@ -111,10 +111,7 @@ function extractEventStats(summary: any): { stats: Map<string, PlayerGameStat>; 
       if (!rawStats.length) continue;
 
       if (!sampleStatNames) {
-        const isGK = rawStats.some((s: any) => (s.name ?? '') === 'goalsConceded');
-        if (!isGK) {
-          sampleStatNames = rawStats.map((s: any) => `${s.name ?? '?'}=${s.value ?? s.displayValue ?? '?'}`).join('|');
-        }
+        sampleStatNames = JSON.stringify(rawStats.slice(0, 5));
       }
 
       const getStat = (...names: string[]) => {
