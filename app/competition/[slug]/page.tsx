@@ -11,6 +11,7 @@ interface AnyMatch {
   stage: string;
   date: string;
   kickoff: string;
+  utcDate?: string;
   homeTeam: { name: string; badge: string; primaryColor: string };
   awayTeam: { name: string; badge: string; primaryColor: string };
   pending?: boolean;
@@ -41,7 +42,11 @@ export default function CompetitionPage() {
             .map((m: AnyMatch) => ({ ...m, pending: true }));
           const all: AnyMatch[] = [...(live ?? []), ...pending];
           const filtered = all.filter(m => matchesComp(m.competition, comp!.apiNames));
-          filtered.sort((a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime());
+          filtered.sort((a, b) => {
+            const ta = a.utcDate ? new Date(a.utcDate).getTime() : 0;
+            const tb = b.utcDate ? new Date(b.utcDate).getTime() : 0;
+            return ta - tb;
+          });
           setMatches(filtered);
           setLoaded(true);
         })
