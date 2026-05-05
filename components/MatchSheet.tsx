@@ -33,7 +33,7 @@ function ProbBar({ value }: { value: number }) {
       <div className="w-14 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
         <div className="h-full rounded-full" style={{ width: `${value}%`, backgroundColor: barColor }} />
       </div>
-      <span className="text-[10px] font-bold tabular-nums" style={{ color: textColor }}>{value}%</span>
+      <span className="text-[10px] font-bold tabular-nums" style={{ color: textColor }}>{Math.round(value)}%</span>
     </div>
   );
 }
