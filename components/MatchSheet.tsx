@@ -308,7 +308,7 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
   const thumbRef = useRef<HTMLDivElement>(null);
   const tabsScrollRef = useRef<HTMLDivElement>(null);
   const tabsThumbRef = useRef<HTMLDivElement>(null);
-  const { homeTeam, awayTeam, referee, competition, stage, date, kickoff, probabilities } = data ?? staticMatchData;
+  const { homeTeam, awayTeam, referee, competition, stage, date, kickoff, probabilities, aggregate } = data ?? staticMatchData;
   const compColor = competitionColor(competition);
 
   const updateThumb = useCallback(() => {
@@ -381,10 +381,25 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
               </div>
             </div>
 
-            {/* VS */}
+            {/* VS / Aggregate */}
             <div className="text-center">
-              <p className="text-2xl lg:text-4xl font-black" style={{ color: 'rgba(255,255,255,0.07)' }}>VS</p>
-              <p className="text-[10px] text-gray-600 mt-1 hidden sm:block">Kick off {kickoff}</p>
+              {aggregate != null ? (
+                <>
+                  <p className="text-[9px] uppercase tracking-[0.15em] text-gray-600 mb-1">1st Leg</p>
+                  <div className="flex items-baseline justify-center gap-1.5">
+                    <span className="text-2xl lg:text-3xl font-black tabular-nums" style={{ color: 'rgba(255,255,255,0.85)' }}>{aggregate.home}</span>
+                    <span className="text-base text-gray-600 font-bold">–</span>
+                    <span className="text-2xl lg:text-3xl font-black tabular-nums" style={{ color: 'rgba(255,255,255,0.85)' }}>{aggregate.away}</span>
+                  </div>
+                  <p className="text-[9px] uppercase tracking-[0.15em] font-semibold mt-0.5" style={{ color: compColor }}>Aggregate</p>
+                  <p className="text-[9px] text-gray-600 mt-1.5 hidden sm:block">Kick off {kickoff}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl lg:text-4xl font-black" style={{ color: 'rgba(255,255,255,0.07)' }}>VS</p>
+                  <p className="text-[10px] text-gray-600 mt-1 hidden sm:block">Kick off {kickoff}</p>
+                </>
+              )}
             </div>
 
             {/* Away */}

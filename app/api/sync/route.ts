@@ -56,6 +56,39 @@ function poissonExact(lambda: number, k: number) {
 function toScale(p: number) { return Math.max(1, Math.min(100, Math.round(p * 100))); }
 function overProb(avg: number, threshold: number) { return toScale(poissonAtLeast(avg, Math.ceil(threshold))); }
 
+/**
+ * Scans a team's recent completed matches to find a previous leg against the
+ * same opponent. Returns aggregate goals from the CURRENT match's perspective
+ * (home = current home team, away = current away team).
+ */
+function findFirstLegAggregate(
+  matches: any[],
+  currentHomeTeamId: number | string,
+  currentAwayTeamId: number | string,
+): { home: number; away: number } | null {
+  if (!matches?.length) return null;
+  const hId = String(currentHomeTeamId);
+  const aId = String(currentAwayTeamId);
+  for (const m of matches) {
+    if (!m.score?.fullTime) continue;
+    const st = m.status?.type ?? m.status?.short ?? m.status?.long ?? '';
+    const finished = st === 'FINISHED' || st === 'FT' || st === 'FULL_TIME' ||
+                     (typeof st === 'string' && st.includes('FINISH'));
+    if (!finished) continue;
+    const mH = String(m.homeTeam?.id ?? '');
+    const mA = String(m.awayTeam?.id ?? '');
+    const involves = (mH === hId || mH === aId) && (mA === hId || mA === aId) && mH !== mA;
+    if (!involves) continue;
+    const homeGoals = m.score.fullTime.home ?? 0;
+    const awayGoals = m.score.fullTime.away ?? 0;
+    // Translate so home/away = current match's home/away perspective
+    return mH === hId
+      ? { home: homeGoals, away: awayGoals }
+      : { home: awayGoals, away: homeGoals };
+  }
+  return null;
+}
+
 // Poisson match outcome model: expected goals based on attack vs opponent defence
 function matchOutcomes(homeGoalsFor: number, homeGoalsAgainst: number, awayGoalsFor: number, awayGoalsAgainst: number) {
   const lH = Math.max(0.3, (homeGoalsFor + awayGoalsAgainst) / 2);
@@ -982,6 +1015,11 @@ async function runSync() {
         return { btts, ...matchOutcomes(homeStats.goalsFor, homeStats.goalsAgainst, awayStats.goalsFor, awayStats.goalsAgainst) };
       })(),
       fixtureId: match.id, status,
+      aggregate: findFirstLegAggregate(
+        [...(homeResults?.matches ?? []), ...(awayResults?.matches ?? [])],
+        match.homeTeam.id,
+        match.awayTeam.id,
+      ),
     };
 
     await sbSet(`match:${id}`, matchData, log);

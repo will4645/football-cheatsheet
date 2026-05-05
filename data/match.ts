@@ -46,6 +46,7 @@ export const matchData: {
   homeTeam: TeamData; awayTeam: TeamData;
   referee: { name: string; matchAvg: { fouls: number; cards: number } };
   probabilities: { btts: number; homeWin: number; draw: number; awayWin: number };
+  aggregate?: { home: number; away: number } | null;
 } = {
   competition: 'UEFA Champions League',
   stage: 'Quarter-Final',
