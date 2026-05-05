@@ -40,7 +40,9 @@ export default function CompetitionPage() {
             .filter((m: AnyMatch) => !liveIds.has(m.id))
             .map((m: AnyMatch) => ({ ...m, pending: true }));
           const all: AnyMatch[] = [...(live ?? []), ...pending];
-          setMatches(all.filter(m => matchesComp(m.competition, comp!.apiNames)));
+          const filtered = all.filter(m => matchesComp(m.competition, comp!.apiNames));
+          filtered.sort((a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime());
+          setMatches(filtered);
           setLoaded(true);
         })
         .catch(() => setLoaded(true));
