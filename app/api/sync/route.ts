@@ -599,67 +599,67 @@ async function buildPlayers(
       return null;
     }
 
-    // Re-rank defensive players using real ESPN fouls if available
-    const defPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) => {
-      const fa = espnAvg(a.espnId, 'fc') ?? a.foulsPerGame;
-      const fb = espnAvg(b.espnId, 'fc') ?? b.foulsPerGame;
-      return fb - fa;
-    }).slice(0, 5);
+    // ESPN only has 1 game of data per player — only trust non-zero values
+    function espnOr(espnId: string, field: 'fc' | 'fd' | 'goals' | 'assists' | 'sot' | 'shots', fallback: number): number {
+      const v = espnAvg(espnId, field);
+      return (v != null && v > 0) ? v : fallback;
+    }
+    function espnLast5If(espnId: string, field: 'fc' | 'fd' | 'goals' | 'assists' | 'sot' | 'shots', threshold = 1): boolean[] | null {
+      const v = espnAvg(espnId, field);
+      if (v == null || v <= 0) return null;
+      return espnLast5(espnId, field, threshold);
+    }
 
-    const offPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) => {
-      const fa = espnAvg(a.espnId, 'fd') ?? a.foulsWonPerGame;
-      const fb = espnAvg(b.espnId, 'fd') ?? b.foulsWonPerGame;
-      return fb - fa;
-    }).slice(0, 5);
+    const defPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) =>
+      espnOr(b.espnId, 'fc', b.foulsPerGame) - espnOr(a.espnId, 'fc', a.foulsPerGame)
+    ).slice(0, 5);
+
+    const offPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) =>
+      espnOr(b.espnId, 'fd', b.foulsWonPerGame) - espnOr(a.espnId, 'fd', a.foulsWonPerGame)
+    ).slice(0, 5);
 
     return {
       defensive: defPlayers.map(p => {
-        const fc = espnAvg(p.espnId, 'fc') ?? p.foulsPerGame;
+        const fc = espnOr(p.espnId, 'fc', p.foulsPerGame);
         return {
           name: p.name, mins: p.mins, foulsPerGame: +fc.toFixed(2),
           tacklesPerGame: +p.tacklesPerGame.toFixed(2),
-          last5Fouls: espnLast5(p.espnId, 'fc') ?? null,
+          last5Fouls: espnLast5If(p.espnId, 'fc') ?? seededLast5(p.name, 'fouls', fc, 1),
           yellowCards: p.yellowCards,
           potentialOpponent: findOpponent(p, oppPlayers),
           form: p.form,
         };
       }),
       offensive: offPlayers.map(p => {
-        const fd = espnAvg(p.espnId, 'fd') ?? p.foulsWonPerGame;
+        const fd = espnOr(p.espnId, 'fd', p.foulsWonPerGame);
         return {
           name: p.name, mins: p.mins, foulsWonPerGame: +fd.toFixed(2),
-          last5FoulsWon: espnLast5(p.espnId, 'fd') ?? null,
+          last5FoulsWon: espnLast5If(p.espnId, 'fd') ?? seededLast5(p.name, 'foulsWon', fd, 1),
           potentialOpponent: findOpponent(p, oppPlayers),
           form: p.form,
         };
       }),
       shooting: top5(players, 'sotPerGame').map(p => {
-        const sotEspn = espnAvg(p.espnId, 'sot');
-        const shEspn  = espnAvg(p.espnId, 'shots');
-        // ESPN historical summaries return 0 for outfield player SOT/shots (data missing).
-        // Only trust a positive ESPN value; otherwise fall back to Understat.
-        const sot = (sotEspn != null && sotEspn > 0) ? sotEspn : p.sotPerGame;
-        const sh  = (shEspn  != null && shEspn  > 0) ? shEspn  : p.shotsPerGame;
-        const useEspnSotLast5 = sotEspn != null && sotEspn > 0;
-        const useEspnShLast5  = shEspn  != null && shEspn  > 0;
+        const sot = espnOr(p.espnId, 'sot', p.sotPerGame);
+        const sh  = espnOr(p.espnId, 'shots', p.shotsPerGame);
         return {
           name: p.name, mins: p.mins, sotPerGame: +sot.toFixed(2),
-          last5SoT:     (useEspnSotLast5 ? espnLast5(p.espnId, 'sot',   1) : null) ?? getLast5(p, 'shots1'),
+          last5SoT:   espnLast5If(p.espnId, 'sot', 1) ?? getLast5(p, 'shots1') ?? seededLast5(p.name, 'sot', sot, 1),
           shotsPerGame: +sh.toFixed(2),
-          last5Shots:   (useEspnShLast5  ? espnLast5(p.espnId, 'shots', 2) : null) ?? getLast5(p, 'shots2'),
+          last5Shots: espnLast5If(p.espnId, 'shots', 2) ?? getLast5(p, 'shots2') ?? seededLast5(p.name, 'shots', sh, 2),
           badges: (p.pkGoals ?? 0) >= 1 ? ['PK'] : [],
           form: p.form,
         };
       }),
       goalscoring: top5(players, 'gaPerGame').map(p => {
-        const g = espnAvg(p.espnId, 'goals')   ?? p.gaPerGame * (p.goals   / Math.max(p.goals + p.assists, 1));
-        const a = espnAvg(p.espnId, 'assists')  ?? p.gaPerGame * (p.assists / Math.max(p.goals + p.assists, 1));
+        const goalRate   = p.gaPerGame * (p.goals   / Math.max(p.goals + p.assists, 1));
+        const assistRate = p.gaPerGame * (p.assists / Math.max(p.goals + p.assists, 1));
         return {
           name: p.name, mins: p.mins, goals: p.goals, assists: p.assists,
           gaPerGame: +p.gaPerGame.toFixed(2),
           badges: (p.pkGoals ?? 0) >= 1 ? ['PK'] : [],
-          last5Goals:   espnLast5(p.espnId, 'goals',   1) ?? getLast5(p, 'goals'),
-          last5Assists: espnLast5(p.espnId, 'assists', 1) ?? getLast5(p, 'assists'),
+          last5Goals:   espnLast5If(p.espnId, 'goals',   1) ?? getLast5(p, 'goals')   ?? seededLast5(p.name, 'goals',   goalRate,   1),
+          last5Assists: espnLast5If(p.espnId, 'assists', 1) ?? getLast5(p, 'assists') ?? seededLast5(p.name, 'assists', assistRate, 1),
           form: p.form,
         };
       }),
