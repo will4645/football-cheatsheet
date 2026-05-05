@@ -62,10 +62,10 @@ function StatGroup({ l1, v1, l2, v2, overLabel, prob }: {
 }
 
 /* ── Team stats panel ────────────────────────────────── */
-function TeamStatsPanel({ team }: { team: TeamData }) {
+function TeamStatsPanel({ team, compColor }: { team: TeamData; compColor: string }) {
   const { stats, primaryColor, name } = team;
   return (
-    <div className="rounded-xl overflow-hidden" style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.06)' }}>
+    <div className="rounded-xl overflow-hidden" style={{ background: '#111827', border: `1px solid ${compColor}50`, boxShadow: `0 0 12px ${compColor}18` }}>
       <div className="px-4 py-2.5 text-center text-xs font-bold tracking-wide"
            style={{ background: primaryColor + '18', borderBottom: `1px solid ${primaryColor}30` }}>
         <span className="inline-block w-2 h-2 rounded-full mr-2 align-middle" style={{ backgroundColor: primaryColor }} />
@@ -354,7 +354,7 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
         </div>
 
         {/* ── Match header ── */}
-        <div className="rounded-xl overflow-hidden" style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: '#111827', border: `1px solid ${compColor}50`, boxShadow: `0 0 12px ${compColor}18` }}>
           <div className="text-center py-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500"
                style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             <span className="hidden sm:inline">{competition} &nbsp;•&nbsp; {stage} &nbsp;•&nbsp; </span>{date} &nbsp;•&nbsp; {kickoff}
@@ -394,10 +394,10 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
 
         {/* ── Team stats + referee ── */}
         <div className="flex flex-col gap-3 lg:grid lg:gap-4 lg:grid-cols-[1fr_180px_1fr]">
-          <TeamStatsPanel team={homeTeam} />
+          <TeamStatsPanel team={homeTeam} compColor={compColor} />
 
           {/* Referee card */}
-          <div className="rounded-xl p-4 flex flex-col gap-4 lg:flex-col" style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-4 lg:flex-col" style={{ background: '#111827', border: `1px solid ${compColor}50`, boxShadow: `0 0 12px ${compColor}18` }}>
             {/* Mobile: horizontal layout for ref stats */}
             <div className="flex items-center gap-4 lg:flex-col lg:items-stretch lg:gap-4">
               <div className="text-center shrink-0">
@@ -449,11 +449,11 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
             </div>
           </div>
 
-          <TeamStatsPanel team={awayTeam} />
+          <TeamStatsPanel team={awayTeam} compColor={compColor} />
         </div>
 
         {/* ── Player sections ── */}
-        <div className="rounded-xl overflow-hidden" style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: '#111827', border: `1px solid ${compColor}50`, boxShadow: `0 0 12px ${compColor}18` }}>
 
           {/* Mobile team toggle */}
           <div className="flex lg:hidden" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
