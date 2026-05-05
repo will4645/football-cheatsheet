@@ -384,16 +384,15 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
             {/* VS / Aggregate */}
             <div className="text-center">
               {aggregate != null ? (
-                <>
-                  <p className="text-[9px] uppercase tracking-[0.15em] text-gray-600 mb-1">1st Leg</p>
-                  <div className="flex items-baseline justify-center gap-1.5">
-                    <span className="text-2xl lg:text-3xl font-black tabular-nums" style={{ color: 'rgba(255,255,255,0.85)' }}>{aggregate.home}</span>
-                    <span className="text-base text-gray-600 font-bold">–</span>
-                    <span className="text-2xl lg:text-3xl font-black tabular-nums" style={{ color: 'rgba(255,255,255,0.85)' }}>{aggregate.away}</span>
+                <div className="flex flex-col items-center gap-0.5">
+                  <div className="flex items-center justify-center gap-2 lg:gap-3">
+                    <span className="text-xl lg:text-3xl font-black tabular-nums text-white">{aggregate.home}</span>
+                    <span className="text-xl lg:text-3xl font-black" style={{ color: 'rgba(255,255,255,0.07)' }}>VS</span>
+                    <span className="text-xl lg:text-3xl font-black tabular-nums text-white">{aggregate.away}</span>
                   </div>
-                  <p className="text-[9px] uppercase tracking-[0.15em] font-semibold mt-0.5" style={{ color: compColor }}>Aggregate</p>
-                  <p className="text-[9px] text-gray-600 mt-1.5 hidden sm:block">Kick off {kickoff}</p>
-                </>
+                  <p className="text-[9px] uppercase tracking-[0.15em] font-semibold" style={{ color: compColor }}>1st Leg Agg</p>
+                  <p className="text-[9px] text-gray-600 mt-0.5 hidden sm:block">Kick off {kickoff}</p>
+                </div>
               ) : (
                 <>
                   <p className="text-2xl lg:text-4xl font-black" style={{ color: 'rgba(255,255,255,0.07)' }}>VS</p>
