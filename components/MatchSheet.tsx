@@ -462,14 +462,15 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
           </div>
 
           {/* Stat type tabs */}
-          <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="overflow-x-auto" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', scrollbarWidth: 'none' }}>
+            <div className="flex lg:w-full min-w-max lg:min-w-0">
             {tabs.map(t => (
               <button
                 key={t.key}
                 onClick={() => { setActiveTab(t.key); resetScroll(); }}
-                className="flex-1 py-3 text-xs font-semibold uppercase tracking-wide transition-all"
+                className="flex-none lg:flex-1 px-5 py-3 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap"
                 style={{
-                  color: activeTab === t.key ? '#fff' : '#6b7280',
+                  color: activeTab === t.key ? '#fff' : '#4b5563',
                   borderBottom: activeTab === t.key ? `2px solid ${compColor}` : '2px solid transparent',
                   background: activeTab === t.key ? compColor + '0f' : 'transparent',
                 }}
@@ -477,6 +478,7 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
                 {t.label}
               </button>
             ))}
+            </div>
           </div>
 
           {/* Mobile: single team, scrollable */}
