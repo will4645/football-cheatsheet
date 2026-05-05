@@ -956,9 +956,13 @@ async function runSync() {
           homeResult.history.forEach((v, k) => espnHistory.set(k, v));
           awayResult.history.forEach((v, k) => espnHistory.set(k, v));
           log(`[sync] ESPN: ${espnHistory.size} player records | home corners=${homeResult.seasonStats?.cornersFor ?? 'n/a'} shots=${homeResult.seasonStats?.shotsFor ?? 'n/a'} | away corners=${awayResult.seasonStats?.cornersFor ?? 'n/a'} shots=${awayResult.seasonStats?.shotsFor ?? 'n/a'} | debug: ${homeResult.debug}`);
-          // Log sample player stat to verify field names
-          const sampleEntry = Array.from(espnHistory.entries()).find(([,v]) => v.length > 0);
-          if (sampleEntry) log(`[sync] sample player ${sampleEntry[0]}: ${JSON.stringify(sampleEntry[1][0])}`);
+          // Find player with highest sot to confirm field mapping works
+          let maxSot = 0, maxSotId = '', maxSotGames = 0;
+          for (const [id, games] of Array.from(espnHistory.entries())) {
+            const avg = games.reduce((s, g) => s + (g.sot ?? 0), 0) / games.length;
+            if (avg > maxSot) { maxSot = avg; maxSotId = id; maxSotGames = games.length; }
+          }
+          log(`[sync] top-sot player id=${maxSotId} avgSot=${maxSot.toFixed(2)} games=${maxSotGames}`);
           // Store ESPN season stats on espnHistory object for use in buildTeamStats
           (espnHistory as any).__homeStats = homeResult.seasonStats;
           (espnHistory as any).__awayStats = awayResult.seasonStats;

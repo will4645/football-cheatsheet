@@ -111,7 +111,7 @@ function extractEventStats(summary: any): { stats: Map<string, PlayerGameStat>; 
       if (!rawStats.length) continue;
 
       if (!sampleStatNames) {
-        sampleStatNames = JSON.stringify(rawStats.slice(0, 5));
+        sampleStatNames = rawStats.map((s: any) => s.name ?? s.abbreviation ?? '?').join(',');
       }
 
       const getStat = (...names: string[]) => {
