@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { matchData as staticMatchData, TeamData, Form } from '@/data/match';
+import { matchData as staticMatchData, TeamData, Form, CardsPlayer } from '@/data/match';
 import { nameToSlug, COMPETITION_CONFIG } from '@/lib/competitions';
 
 function competitionColor(name: string): string {
@@ -84,14 +84,16 @@ function TeamStatsPanel({ team }: { team: TeamData }) {
 }
 
 /* ── Last 5 games dots ───────────────────────────────── */
-function Last5Dots({ data }: { data?: boolean[] | null }) {
+function Last5Dots({ data, hitColor = '#22c55e', missColor = '#ef4444' }: {
+  data?: boolean[] | null; hitColor?: string; missColor?: string;
+}) {
   const safe = Array.isArray(data) ? data : [];
   const dots = [...safe, false, false, false, false, false].slice(0, 5);
   return (
     <div className="flex items-center gap-1">
       {dots.map((hit, i) => (
         <div key={i} className="w-2.5 h-2.5 rounded-full shrink-0"
-             style={{ backgroundColor: hit ? '#22c55e' : '#ef4444' }} />
+             style={{ backgroundColor: hit ? hitColor : missColor }} />
       ))}
     </div>
   );
@@ -124,7 +126,7 @@ function StatCol({ width, header, right = false, children }: {
 }
 
 /* ── Player tables ───────────────────────────────────── */
-type Tab = 'defensive' | 'offensive' | 'shooting' | 'goalscoring';
+type Tab = 'defensive' | 'offensive' | 'shooting' | 'goalscoring' | 'cards';
 
 function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
   const c = team.primaryColor;
@@ -219,6 +221,40 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
     );
   }
 
+  if (tab === 'cards') {
+    const ps = team.players.cards ?? [];
+    return (
+      <div className="flex gap-1.5">
+        <div className="flex flex-col w-[18px] shrink-0">
+          <div className="h-9" />
+          {ps.map((_, i) => <div key={i} className="flex items-center h-8 text-[10px] font-bold text-gray-600">{i + 1}</div>)}
+        </div>
+        <div className="flex flex-col flex-1 min-w-[120px]">
+          <div className="flex items-end h-9 pb-1.5 text-[9px] uppercase tracking-wide text-gray-500">Player</div>
+          {ps.map((p, i) => {
+            const nameColor = p.cardsPerGame >= 0.20 ? '#f87171' : p.cardsPerGame >= 0.10 ? '#fbbf24' : '#9ca3af';
+            return <div key={i} className="flex items-center h-8"><span className="text-[11px] font-medium truncate" style={{ color: nameColor }}>{p.name}</span></div>;
+          })}
+        </div>
+        <StatCol width="w-[44px]" header="Mins" right>
+          {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[10px] text-gray-500`}>{p.mins}'</div>)}
+        </StatCol>
+        <StatCol width="w-[32px]" header="Y" right>
+          {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[11px] font-bold`} style={{ color: '#facc15' }}>{p.yellowCards}</div>)}
+        </StatCol>
+        <StatCol width="w-[32px]" header="R" right>
+          {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[11px] font-bold`} style={{ color: p.redCards > 0 ? '#f87171' : '#374151' }}>{p.redCards}</div>)}
+        </StatCol>
+        <StatCol width="w-[55px]" header="Per Gm" right>
+          {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[11px] font-semibold text-white`}>{p.cardsPerGame.toFixed(2)}</div>)}
+        </StatCol>
+        <StatCol width="w-[96px]" header="Last 5 (Carded)">
+          {ps.map((p, i) => <div key={i} className={ROW}><Last5Dots data={p.last5Cards} hitColor="#facc15" missColor="#1f2937" /></div>)}
+        </StatCol>
+      </div>
+    );
+  }
+
   // goalscoring
   const ps = team.players.goalscoring;
   return (
@@ -287,6 +323,7 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
     { key: 'offensive',   label: 'Offensive' },
     { key: 'shooting',    label: 'Shooting' },
     { key: 'goalscoring', label: 'Goalscoring' },
+    { key: 'cards',       label: 'Cards' },
   ];
 
   const activeTeamData = activeTeam === 'home' ? homeTeam : awayTeam;

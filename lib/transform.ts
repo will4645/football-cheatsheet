@@ -188,6 +188,7 @@ interface EnrichedPlayer {
   assists: number;
   gaPerGame: number;
   yellowCards: number;
+  redCards: number;
   last5Goals: number;
   last5Assists: number;
 }
@@ -209,6 +210,7 @@ function enrichPlayer(apiStat: ApiPlayerStat): EnrichedPlayer | null {
   const goals = stat.goals?.total ?? 0;
   const assists = stat.goals?.assists ?? 0;
   const yellowCards = stat.cards?.yellow ?? 0;
+  const redCards = stat.cards?.red ?? 0;
 
   return {
     id: apiStat.player.id,
@@ -224,6 +226,7 @@ function enrichPlayer(apiStat: ApiPlayerStat): EnrichedPlayer | null {
     assists,
     gaPerGame: +((goals + assists) / appearances).toFixed(2),
     yellowCards,
+    redCards,
     // last5 isn't in the season-stat endpoint — will be approximated
     last5Goals: estimateLast5(goals, appearances),
     last5Assists: estimateLast5(assists, appearances),
@@ -354,5 +357,26 @@ export function buildPlayers(
     form: formColor(p.last5Goals, p.last5Assists),
   }));
 
-  return { defensive, offensive, shooting, goalscoring };
+  /* ── Cards (top 5 by yellow cards per game) ── */
+  const topCards = [...enriched]
+    .sort((a, b) => {
+      const aRate = a.yellowCards / Math.max(1, a.appearances);
+      const bRate = b.yellowCards / Math.max(1, b.appearances);
+      return bRate - aRate;
+    })
+    .slice(0, 5);
+
+  const cards = topCards.map(p => {
+    const cpg = +(p.yellowCards / Math.max(1, p.appearances)).toFixed(2);
+    return {
+      name: p.name,
+      mins: p.mins,
+      yellowCards: p.yellowCards,
+      redCards: p.redCards,
+      cardsPerGame: cpg,
+      last5Cards: seededLast5(p.name, 'cards', cpg, 1),
+    };
+  });
+
+  return { defensive, offensive, shooting, goalscoring, cards };
 }

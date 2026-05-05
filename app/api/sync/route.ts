@@ -390,6 +390,8 @@ async function buildPlayers(
       assists: isAtt ? 3 : isMid ? 3 : 1,
       gaPerGame: isAtt ? 0.35 : isMid ? 0.25 : 0.05,
       yellowCards: isDef ? 4 : isMid ? 3 : 2,
+      redCards: 0,
+      appearances: 20,
       pkGoals: 0,
       form: 'ok' as const,
     };
@@ -407,6 +409,8 @@ async function buildPlayers(
         foulsWonPerGame: fb.foulsWonPerGame || defaults.foulsWonPerGame,
         tacklesPerGame: fb.tacklesPerGame || defaults.tacklesPerGame,
         yellowCards: fb.yellowCards,
+        redCards: fb.redCards ?? 0,
+        appearances: fb.games,
         pkGoals: fb.penaltyGoals ?? 0,
       };
       // 2. FBref overlay — fills fouls/tackles Understat doesn't have
@@ -433,6 +437,8 @@ async function buildPlayers(
         foulsPerGame: fb2.foulsPerGame || defaults.foulsPerGame,
         foulsWonPerGame: fb2.foulsWonPerGame || defaults.foulsWonPerGame,
         yellowCards: fb2.yellowCards || defaults.yellowCards,
+        redCards: 0,
+        appearances: fb2.games,
         pkGoals: fb2.pkGoals ?? 0,
       };
     }
@@ -618,6 +624,24 @@ async function buildPlayers(
           form: p.form,
         };
       }),
+      cards: [...players]
+        .filter(p => !p.isGK)
+        .sort((a, b) => {
+          const aRate = a.yellowCards / Math.max(1, a.appearances ?? 20);
+          const bRate = b.yellowCards / Math.max(1, b.appearances ?? 20);
+          return bRate - aRate;
+        })
+        .slice(0, 5)
+        .map(p => {
+          const cpg = +(p.yellowCards / Math.max(1, p.appearances ?? 20)).toFixed(2);
+          return {
+            name: p.name, mins: p.mins,
+            yellowCards: p.yellowCards,
+            redCards: p.redCards ?? 0,
+            cardsPerGame: cpg,
+            last5Cards: seededLast5(p.name, 'cards', cpg, 1),
+          };
+        }),
     };
   }
 
