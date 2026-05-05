@@ -33,8 +33,12 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 // ── Auth ───────────────────────────────────────────────────────────────────
-function isAuthorized(_req: NextRequest) {
-  return true; // TEMP: auth bypassed for manual resync
+function isAuthorized(req: NextRequest) {
+  const querySec = req.nextUrl.searchParams.get('secret');
+  if (querySec && querySec === process.env.SYNC_SECRET) return true;
+  const authHeader = req.headers.get('authorization');
+  if (authHeader === `Bearer ${process.env.CRON_SECRET}`) return true;
+  return false;
 }
 
 // ── Probability helpers ────────────────────────────────────────────────────
@@ -630,13 +634,19 @@ async function buildPlayers(
         };
       }),
       shooting: top5(players, 'sotPerGame').map(p => {
-        const sot = espnAvg(p.espnId, 'sot') ?? p.sotPerGame;
-        const sh  = espnAvg(p.espnId, 'shots') ?? p.shotsPerGame;
+        const sotEspn = espnAvg(p.espnId, 'sot');
+        const shEspn  = espnAvg(p.espnId, 'shots');
+        // ESPN historical summaries return 0 for outfield player SOT/shots (data missing).
+        // Only trust a positive ESPN value; otherwise fall back to Understat.
+        const sot = (sotEspn != null && sotEspn > 0) ? sotEspn : p.sotPerGame;
+        const sh  = (shEspn  != null && shEspn  > 0) ? shEspn  : p.shotsPerGame;
+        const useEspnSotLast5 = sotEspn != null && sotEspn > 0;
+        const useEspnShLast5  = shEspn  != null && shEspn  > 0;
         return {
           name: p.name, mins: p.mins, sotPerGame: +sot.toFixed(2),
-          last5SoT:     espnLast5(p.espnId, 'sot',   1) ?? getLast5(p, 'shots1'),
+          last5SoT:     (useEspnSotLast5 ? espnLast5(p.espnId, 'sot',   1) : null) ?? getLast5(p, 'shots1'),
           shotsPerGame: +sh.toFixed(2),
-          last5Shots:   espnLast5(p.espnId, 'shots', 2) ?? getLast5(p, 'shots2'),
+          last5Shots:   (useEspnShLast5  ? espnLast5(p.espnId, 'shots', 2) : null) ?? getLast5(p, 'shots2'),
           badges: (p.pkGoals ?? 0) >= 1 ? ['PK'] : [],
           form: p.form,
         };
@@ -1001,6 +1011,7 @@ async function runSync() {
     log(`[stats] ${homeName}: corners=${homeStats.cornersFor} shots=${homeStats.shotsFor} fouls=${homeStats.foulsCommitted}`);
     log(`[stats] ${awayName}: corners=${awayStats.cornersFor} shots=${awayStats.shotsFor} fouls=${awayStats.foulsCommitted}`);
     const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory, fbrefV2Idx);
+    log(`[buildPlayers] ${players.diag}`);
 
     const matchData = {
       competition: (typeof match.competition === 'string' ? match.competition : match.competition?.name) || 'Football', stage,
