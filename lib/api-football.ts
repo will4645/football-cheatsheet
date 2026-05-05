@@ -191,6 +191,12 @@ export interface TeamSeasonStats {
   gamesCount: number;
 }
 
+// Normalize an ESPN stat name to a lookup key (lowercase, alphanumeric only).
+// "Corner Kicks" → "cornerkicks", "Shots on Target" → "shotsontarget", etc.
+function normKey(s: string): string {
+  return (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function extractBoxscoreTeamStats(summary: any, teamId: string): { mine: Record<string, number>; opp: Record<string, number> } | null {
   const teams: any[] = summary?.boxscore?.teams ?? [];
   if (teams.length < 2) return null;
@@ -199,8 +205,10 @@ function extractBoxscoreTeamStats(summary: any, teamId: string): { mine: Record<
     const out: Record<string, number> = {};
     for (const s of (t?.statistics ?? [])) {
       const raw = s.displayValue ?? String(s.value ?? 0);
-      const val = parseFloat(raw.replace('%', '')) || 0;
-      out[s.name ?? ''] = val;
+      const val = parseFloat(raw.replace(/[%,]/g, '')) || 0;
+      // Store under normalized key so camelCase/space/dash variants all match
+      const key = normKey(s.name ?? s.abbreviation ?? '');
+      if (key) out[key] = val;
     }
     return out;
   }
@@ -208,10 +216,36 @@ function extractBoxscoreTeamStats(summary: any, teamId: string): { mine: Record<
   const teamA = teams.find((t: any) => t.team?.id === teamId || t.team?.id === String(teamId));
   const teamB = teams.find((t: any) => t.team?.id !== teamId && t.team?.id !== String(teamId));
   if (!teamA || !teamB) {
-    // fallback: use homeAway — but we don't know if our team is home or away here
     return { mine: parseTeam(teams[0]), opp: parseTeam(teams[1]) };
   }
   return { mine: parseTeam(teamA), opp: parseTeam(teamB) };
+}
+
+// ── ESPN team season statistics endpoint ──────────────────────────────────
+// Returns a map of normalized stat keys → values (per-game averages when available).
+// Tries the /teams/{id}/statistics endpoint which gives season totals or averages directly.
+async function fetchEspnTeamSeasonStats(teamId: string, league: string): Promise<Record<string, number>> {
+  try {
+    const data = await espnFetch(
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/teams/${teamId}/statistics`
+    );
+    const out: Record<string, number> = {};
+    // ESPN splits structure varies — try common response shapes
+    const cats: any[] =
+      data?.splits?.categories ??
+      data?.statistics?.splits?.categories ??
+      [];
+    const allStats: any[] = cats.length > 0
+      ? cats.flatMap((c: any) => c.stats ?? [])
+      : (data?.statistics ?? data?.stats ?? []);
+    for (const s of allStats) {
+      const raw = s.displayValue ?? String(s.value ?? '0');
+      const val = parseFloat(raw.replace(/[%,]/g, '')) || 0;
+      const key = normKey(s.name ?? s.abbreviation ?? '');
+      if (key && val > 0) out[key] = val;
+    }
+    return out;
+  } catch { return {}; }
 }
 
 // ── Fetch per-player game history for a team across all competitions ───────
@@ -251,29 +285,60 @@ export async function fetchTeamPlayerHistory(
     }
   }
 
-  let seasonStats: TeamSeasonStats | null = null;
-  if (teamStatSamples.length > 0) {
-    const n = teamStatSamples.length;
-    const avg = (key: string, side: 'mine' | 'opp') =>
-      +( teamStatSamples.reduce((s, g) => s + (g[side][key] ?? 0), 0) / n ).toFixed(2);
+  // Try ESPN team statistics endpoint — gives season averages directly, no boxscore needed
+  const endpointStats = await fetchEspnTeamSeasonStats(teamId, primaryLeague);
+  if (domestic && domestic !== primaryLeague) {
+    // Merge domestic stats for fields not yet populated by primary league endpoint
+    const domStats = await fetchEspnTeamSeasonStats(teamId, domestic);
+    for (const [k, v] of Object.entries(domStats)) {
+      if (!endpointStats[k] && v > 0) endpointStats[k] = v;
+    }
+  }
 
+  let seasonStats: TeamSeasonStats | null = null;
+  const n = teamStatSamples.length;
+
+  // Pick best value: ESPN season endpoint first, then boxscore per-game average
+  function getBestStat(side: 'mine' | 'opp', ...aliases: string[]): number {
+    const normAliases = aliases.map(normKey);
+    // 1. Try endpoint stats (season averages)
+    for (const k of normAliases) {
+      const v = endpointStats[k];
+      if (v != null && v > 0) return +v.toFixed(2);
+    }
+    // 2. Try per-game average from boxscore samples
+    if (n > 0) {
+      for (const k of normAliases) {
+        const sum = teamStatSamples.reduce((s, g) => s + (g[side][k] ?? 0), 0);
+        if (sum > 0) return +(sum / n).toFixed(2);
+      }
+    }
+    return 0;
+  }
+
+  if (n > 0 || Object.keys(endpointStats).length > 0) {
     seasonStats = {
-      goalsFor:       0, // computed below from player goals
+      goalsFor:       0,
       goalsAgainst:   0,
-      cornersFor:     avg('wonCorners', 'mine'),
-      cornersAgainst: avg('wonCorners', 'opp'),
-      shotsFor:       avg('totalShots', 'mine'),
-      shotsAgainst:   avg('totalShots', 'opp'),
-      sotFor:         avg('shotsOnTarget', 'mine'),
-      sotAgainst:     avg('shotsOnTarget', 'opp'),
-      foulsCommitted: avg('foulsCommitted', 'mine'),
-      foulsWon:       avg('foulsCommitted', 'opp'),
-      cardsFor:       avg('yellowCards', 'mine'),
-      cardsAgainst:   avg('yellowCards', 'opp'),
+      // ESPN boxscore: "Corner Kicks" → cornerkicks; endpoint may use "avgCornerKicks" → avgcornerkicks
+      cornersFor:     getBestStat('mine', 'cornerkicks', 'Corner Kicks', 'corners', 'avgcornerkicks', 'woncorners', 'totalcorners'),
+      cornersAgainst: getBestStat('opp',  'cornerkicks', 'Corner Kicks', 'corners', 'avgcornerkicks', 'woncorners', 'totalcorners'),
+      // ESPN boxscore: "Shots" → shots; endpoint may use "avgShots"
+      shotsFor:       getBestStat('mine', 'shots', 'Shots', 'totalshots', 'avgshots', 'shotattempts'),
+      shotsAgainst:   getBestStat('opp',  'shots', 'Shots', 'totalshots', 'avgshots', 'shotattempts'),
+      // ESPN boxscore: "Shots on Target" or "Shots on Goal" → shotsontarget / shotsongoal
+      sotFor:         getBestStat('mine', 'shotsontarget', 'Shots on Target', 'shotsongoal', 'Shots on Goal', 'avgshotsontarget', 'ontarget', 'sog'),
+      sotAgainst:     getBestStat('opp',  'shotsontarget', 'Shots on Target', 'shotsongoal', 'Shots on Goal', 'avgshotsontarget', 'ontarget', 'sog'),
+      // ESPN boxscore: "Fouls" → fouls; "Fouls Committed" → foulscommitted
+      foulsCommitted: getBestStat('mine', 'fouls', 'Fouls', 'foulscommitted', 'Fouls Committed', 'avgfouls', 'totalfouls'),
+      foulsWon:       getBestStat('opp',  'fouls', 'Fouls', 'foulscommitted', 'Fouls Committed', 'avgfouls', 'totalfouls'),
+      // ESPN boxscore: "Yellow Cards" → yellowcards
+      cardsFor:       getBestStat('mine', 'yellowcards', 'Yellow Cards', 'avgyellowcards', 'bookings', 'cards'),
+      cardsAgainst:   getBestStat('opp',  'yellowcards', 'Yellow Cards', 'avgyellowcards', 'bookings', 'cards'),
       gamesCount:     n,
     };
 
-    // Goals: sum player totalGoals per game for our team
+    // Goals from player stats summed per game
     const myGoalsPerGame = result.size > 0
       ? Array.from(result.values()).reduce((sum, games) => {
           games.forEach((g, i) => { if (!sum[i]) sum[i] = 0; sum[i] += g.goals; });
@@ -284,10 +349,8 @@ export async function fetchTeamPlayerHistory(
       ? +(myGoalsPerGame.reduce((a, b) => a + b, 0) / myGoalsPerGame.length).toFixed(2)
       : 0;
 
-    // goalsAgainst not easily derivable from our player stats alone — use opponent's player stats if available
-    // For now derive as: opponent's shots * goals_per_shot ratio approximation
-    // Will be overridden if we have opponent data
-    seasonStats.goalsAgainst = +(avg('totalShots', 'opp') * 0.12).toFixed(2);
+    // goalsAgainst approximated from opponent shots
+    seasonStats.goalsAgainst = +(getBestStat('opp', 'shots', 'Shots', 'totalshots') * 0.12).toFixed(2);
   }
 
   return {

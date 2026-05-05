@@ -363,16 +363,18 @@ function buildTeamStats(
   const e = espnStats;
   const o = oppEspnStats;
 
-  const cornersFor     = e?.cornersFor     ?? 5.0;
-  const cornersAgainst = e?.cornersAgainst ?? (o?.cornersFor ?? 5.0);
-  const shotsFor       = e?.shotsFor       ?? 13.0;
-  const shotsAgainst   = e?.shotsAgainst   ?? (o?.shotsFor   ?? 11.0);
-  const sotFor         = e?.sotFor         ?? 4.5;
-  const sotAgainst     = e?.sotAgainst     ?? (o?.sotFor     ?? 3.8);
-  const foulsCommitted = e?.foulsCommitted ?? 11.0;
-  const foulsWon       = e?.foulsWon       ?? (o?.foulsCommitted ?? 11.0);
-  const cardsFor       = e?.cardsFor       ?? 1.8;
-  const cardsAgainst   = e?.cardsAgainst   ?? (o?.cardsFor   ?? 1.8);
+  // Use || (not ??) so ESPN-returned 0 (field lookup failure) falls through to default.
+  // Corners/shots/fouls can never genuinely be 0 over a season of football.
+  const cornersFor     = e?.cornersFor     || o?.cornersAgainst || 5.0;
+  const cornersAgainst = e?.cornersAgainst || o?.cornersFor     || 5.0;
+  const shotsFor       = e?.shotsFor       || o?.shotsAgainst   || 13.0;
+  const shotsAgainst   = e?.shotsAgainst   || o?.shotsFor       || 11.0;
+  const sotFor         = e?.sotFor         || o?.sotAgainst     || 4.5;
+  const sotAgainst     = e?.sotAgainst     || o?.sotFor         || 3.8;
+  const foulsCommitted = e?.foulsCommitted || o?.foulsWon       || 11.0;
+  const foulsWon       = e?.foulsWon       || o?.foulsCommitted || 11.0;
+  const cardsFor       = e?.cardsFor       || o?.cardsAgainst   || 1.8;
+  const cardsAgainst   = e?.cardsAgainst   || o?.cardsFor       || 1.8;
 
   return {
     goalsFor: +avgFor.toFixed(2), goalsAgainst: +avgAgainst.toFixed(2),
@@ -457,13 +459,16 @@ async function buildPlayers(
         appearances: fb.games,
         pkGoals: fb.penaltyGoals ?? 0,
       };
-      // 2. FBref overlay — fills fouls/tackles Understat doesn't have
+      // 2. FBref overlay — real fouls/SoT/redCards that Understat doesn't have
       const fb2 = lookupFBref(fbrefV2Idx, name);
       if (fb2 && fb2.games >= 3) {
         if (!result.foulsPerGame)    result.foulsPerGame    = fb2.foulsPerGame;
         if (!result.foulsWonPerGame) result.foulsWonPerGame = fb2.foulsWonPerGame;
         if (!result.yellowCards)     result.yellowCards     = fb2.yellowCards;
         if (!result.pkGoals)         result.pkGoals         = fb2.pkGoals ?? 0;
+        // Prefer FBref real SoT over Understat's shots*0.37 estimate
+        if (fb2.sotPerGame > 0)      result.sotPerGame      = fb2.sotPerGame;
+        if (fb2.redCards > 0)        result.redCards        = fb2.redCards;
       }
       return { ...result, hasRealData: true };
     }
@@ -477,11 +482,12 @@ async function buildPlayers(
         mins: fb2.minsPerGame || defaults.mins,
         goals: fb2.goals, assists: fb2.assists, gaPerGame,
         shotsPerGame: fb2.shotsPerGame || defaults.shotsPerGame,
-        sotPerGame: fb2.shotsPerGame ? +(fb2.shotsPerGame * 0.37).toFixed(2) : defaults.sotPerGame,
+        // Use real FBref SoT; fall back to shots*0.37 estimate only if SoT unavailable
+        sotPerGame: fb2.sotPerGame || (fb2.shotsPerGame ? +(fb2.shotsPerGame * 0.37).toFixed(2) : defaults.sotPerGame),
         foulsPerGame: fb2.foulsPerGame || defaults.foulsPerGame,
         foulsWonPerGame: fb2.foulsWonPerGame || defaults.foulsWonPerGame,
         yellowCards: fb2.yellowCards || defaults.yellowCards,
-        redCards: 0,
+        redCards: fb2.redCards ?? 0,
         appearances: fb2.games,
         pkGoals: fb2.pkGoals ?? 0,
         hasRealData: true,
