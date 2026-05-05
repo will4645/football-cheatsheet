@@ -918,8 +918,8 @@ async function runSync() {
         if (espnMeta?.league && espnMeta.homeTeamId && espnMeta.awayTeamId) {
           log(`[sync] Fetching ESPN history — league:${espnMeta.league} home:${espnMeta.homeTeamId} away:${espnMeta.awayTeamId}`);
           const [homeResult, awayResult] = await Promise.all([
-            fetchTeamPlayerHistory(espnMeta.homeTeamId, espnMeta.league),
-            fetchTeamPlayerHistory(espnMeta.awayTeamId, espnMeta.league),
+            fetchTeamPlayerHistory(espnMeta.homeTeamId, espnMeta.league, homeName),
+            fetchTeamPlayerHistory(espnMeta.awayTeamId, espnMeta.league, awayName),
           ]);
           homeResult.history.forEach((v, k) => espnHistory.set(k, v));
           awayResult.history.forEach((v, k) => espnHistory.set(k, v));

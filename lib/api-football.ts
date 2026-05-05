@@ -17,6 +17,22 @@ const ESPN_LEAGUES = [
   'fra.1',               // Ligue 1
 ];
 
+// Maps team name patterns to their domestic ESPN league slug
+const DOMESTIC_LEAGUE_HINTS: [RegExp, string][] = [
+  [/arsenal|chelsea|liverpool|manchester|tottenham|brighton|aston villa|west ham|newcastle|brentford|fulham|everton|wolves|wolverhampton|crystal palace|bournemouth|nottingham|ipswich|leicester|southampton/i, 'eng.1'],
+  [/atlético|atletico|real madrid|barcelona|sevilla|villarreal|betis|osasuna|girona|athletic|valencia|celta|getafe|mallorca/i, 'esp.1'],
+  [/psg|paris|lyon|marseille|monaco|lille|nice|lens|rennes|nantes|strasbourg|toulouse/i, 'fra.1'],
+  [/bayern|dortmund|leverkusen|leipzig|frankfurt|freiburg|union berlin|wolfsburg|stuttgart|gladbach|monchengladbach|hoffenheim|augsburg/i, 'ger.1'],
+  [/juventus|inter milan|ac milan|napoli|roma|lazio|fiorentina|atalanta|torino|bologna|genoa|udinese|venezia/i, 'ita.1'],
+];
+
+function guessDomesticLeague(teamName: string): string {
+  for (const [re, league] of DOMESTIC_LEAGUE_HINTS) {
+    if (re.test(teamName)) return league;
+  }
+  return '';
+}
+
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
   'Accept': 'application/json',
@@ -128,30 +144,38 @@ function extractEventStats(summary: any): { stats: Map<string, PlayerGameStat>; 
   };
 }
 
-// ── Fetch last N completed event IDs for a team ───────────────────────────
-async function fetchTeamRecentEventIds(teamId: string, league: string, n = 10): Promise<{ ids: string[]; debug: string }> {
-  if (!teamId) return { ids: [], debug: 'no teamId' };
-  try {
-    const data = await espnFetch(
-      `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/teams/${teamId}/schedule`
-    );
-    const events: any[] = data?.events ?? [];
-    if (!events.length) {
-      const keys = Object.keys(data ?? {}).join(',');
-      return { ids: [], debug: `schedule returned 0 events (keys: ${keys})` };
-    }
-    const completed = events.filter(e => {
-      const st = e.competitions?.[0]?.status?.type ?? e.status?.type ?? {};
-      return st.completed === true || (st.name ?? '').includes('FINAL');
-    });
-    const ids = completed
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, n)
-      .map((e: any) => e.id);
-    return { ids, debug: `${events.length} events, ${completed.length} completed, returning ${ids.length}` };
-  } catch (err: any) {
-    return { ids: [], debug: `schedule error: ${err.message}` };
+// ── Fetch last N completed event IDs for a team across multiple leagues ───
+async function fetchTeamRecentEventIds(teamId: string, leagues: string[], n = 12): Promise<{ ids: string[]; leagueForId: Map<string, string>; debug: string }> {
+  if (!teamId) return { ids: [], leagueForId: new Map(), debug: 'no teamId' };
+  const allEvents: Array<{ id: string; date: string; league: string }> = [];
+  const foundLeagues: string[] = [];
+
+  for (const lg of leagues) {
+    try {
+      const data = await espnFetch(
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/${lg}/teams/${teamId}/schedule`
+      );
+      const events: any[] = data?.events ?? [];
+      const completed = events.filter(e => {
+        const st = e.competitions?.[0]?.status?.type ?? e.status?.type ?? {};
+        return st.completed === true || (st.name ?? '').includes('FINAL');
+      });
+      if (completed.length > 0) {
+        foundLeagues.push(lg);
+        completed.forEach(e => allEvents.push({ id: e.id, date: e.date ?? '', league: lg }));
+      }
+    } catch {}
   }
+
+  // Deduplicate by event ID, sort most-recent first, cap at n
+  const unique = Array.from(new Map(allEvents.map(e => [e.id, e])).values());
+  const sorted = unique
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, n);
+  const ids = sorted.map(e => e.id);
+  const leagueForId = new Map(sorted.map(e => [e.id, e.league]));
+
+  return { ids, leagueForId, debug: `${ids.length} events from [${foundLeagues.join(',')}]` };
 }
 
 export interface TeamSeasonStats {
@@ -193,22 +217,29 @@ function extractBoxscoreTeamStats(summary: any, teamId: string): { mine: Record<
   return { mine: parseTeam(teamA), opp: parseTeam(teamB) };
 }
 
-// ── Fetch per-player game history for a team (last 5 matches) ─────────────
+// ── Fetch per-player game history for a team across all competitions ───────
 // Returns { history, debug } — history is Map<espnAthleteId, PlayerGameStat[]> newest first
 export async function fetchTeamPlayerHistory(
   teamId: string,
-  league: string,
+  primaryLeague: string,
+  teamName: string = '',
 ): Promise<{ history: Map<string, PlayerGameStat[]>; seasonStats: TeamSeasonStats | null; debug: string }> {
   const result = new Map<string, PlayerGameStat[]>();
-  const { ids: eventIds, debug: scheduleDebug } = await fetchTeamRecentEventIds(teamId, league);
+  // Always fetch from primary league + domestic league so stats cover all competitions
+  const leaguesToFetch = [primaryLeague];
+  const domestic = guessDomesticLeague(teamName);
+  if (domestic && domestic !== primaryLeague) leaguesToFetch.push(domestic);
+
+  const { ids: eventIds, leagueForId, debug: scheduleDebug } = await fetchTeamRecentEventIds(teamId, leaguesToFetch);
   const eventDebugs: string[] = [];
 
   const teamStatSamples: Array<{ mine: Record<string, number>; opp: Record<string, number> }> = [];
 
   for (const eventId of eventIds) {
     try {
+      const evLeague = leagueForId.get(eventId) ?? primaryLeague;
       const summary = await espnFetch(
-        `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/summary?event=${eventId}`
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/${evLeague}/summary?event=${eventId}`
       );
       const { stats, debug: eDebug } = extractEventStats(summary);
       eventDebugs.push(`evt${eventId}:${eDebug}`);
