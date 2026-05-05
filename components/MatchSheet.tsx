@@ -499,8 +499,11 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
             </div>
           </div>
           {/* Tab scroll indicator — mobile only */}
-          <div className="lg:hidden px-3 py-1.5">
-            <div className="h-0.5 rounded-full relative" style={{ background: 'rgba(255,255,255,0.07)' }}>
+          <div className="lg:hidden px-3 py-1.5 flex items-center gap-2">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ color: compColor, opacity: 0.6, flexShrink: 0 }}>
+              <path d="M2 6h8M6 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <div className="flex-1 h-0.5 rounded-full relative" style={{ background: 'rgba(255,255,255,0.07)' }}>
               <div
                 ref={tabsThumbRef}
                 className="absolute top-0 h-full rounded-full"
