@@ -281,6 +281,7 @@ export function buildPlayers(
         assists: 0,
         gaPerGame: 0,
         yellowCards: 0,
+        redCards: 0,
         last5Goals: 0,
         last5Assists: 0,
       });
