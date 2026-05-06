@@ -3,6 +3,8 @@ import { getApiFootballLineups, fetchTeamPlayerHistory, findEspnFirstLeg, Player
 import type { TeamSeasonStats } from '@/lib/api-football';
 import { fetchFBrefIndex, buildFBrefNameIndex, lookupFBref } from '@/lib/fbref';
 import type { FBrefPlayer } from '@/lib/fbref';
+import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
+import type { ApiSportsPlayer } from '@/lib/api-sports';
 
 // Direct Supabase client for writes (bypasses store.ts to avoid fs-module caching issues)
 function getSb() {
@@ -342,6 +344,25 @@ async function getFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
   return new Map();
 }
 
+async function getApiSportsIndex(): Promise<Map<string, ApiSportsPlayer>> {
+  const apiKey = (process.env.API_SPORTS_KEY ?? '').trim();
+  if (!apiKey) return new Map();
+  const cached = await sbGet('api_sports_cache') as { scraped: number; players: ApiSportsPlayer[] } | null;
+  if (cached && Date.now() - cached.scraped < STATS_TTL) {
+    return buildApiSportsNameIndex(cached.players);
+  }
+  try {
+    const index = await fetchApiSportsIndex(apiKey);
+    const players = Array.from(index.values());
+    if (players.length > 0) {
+      await sbSet('api_sports_cache', { scraped: Date.now(), players });
+      return buildApiSportsNameIndex(players);
+    }
+  } catch {}
+  if (cached?.players?.length) return buildApiSportsNameIndex(cached.players);
+  return new Map();
+}
+
 // ── Build team stats ───────────────────────────────────────────────────────
 function buildTeamStats(
   fdMatches: any[],
@@ -412,6 +433,7 @@ async function buildPlayers(
   fbrefIdx: Map<string, any>,
   espnHistory: Map<string, PlayerGameStat[]> = new Map(),
   fbrefV2Idx: Map<string, FBrefPlayer> = new Map(),
+  apiSportsIdx: Map<string, ApiSportsPlayer> = new Map(),
 ) {
   function playerDefaults(p: any) {
     const name = p.name || p.person?.name || 'Unknown';
@@ -443,6 +465,28 @@ async function buildPlayers(
       pkGoals: 0,
       form: 'ok' as const,
     };
+    // 0. API-Sports — all competitions, real data, highest priority
+    const as = lookupApiSports(apiSportsIdx, name);
+    if (as && as.games >= 3) {
+      const gaPerGame = as.games > 0 ? +((as.goals + as.assists) / as.games).toFixed(2) : defaults.gaPerGame;
+      return {
+        ...defaults,
+        mins:            as.minsPerGame    || defaults.mins,
+        goals:           as.goals,
+        assists:         as.assists,
+        gaPerGame,
+        shotsPerGame:    as.shotsPerGame   || defaults.shotsPerGame,
+        sotPerGame:      as.sotPerGame     || defaults.sotPerGame,
+        foulsPerGame:    as.foulsPerGame   || defaults.foulsPerGame,
+        foulsWonPerGame: as.foulsWonPerGame || defaults.foulsWonPerGame,
+        yellowCards:     as.yellowCards,
+        redCards:        as.redCards,
+        appearances:     as.games,
+        pkGoals:         as.pkGoals,
+        hasRealData:     true,
+      };
+    }
+
     // 1. Understat (top 5 leagues — goals, assists, shots, xG)
     const fb = lookupPlayer(fbrefIdx, name);
     if (fb && fb.games >= 3) {
@@ -800,6 +844,8 @@ async function runSync() {
   log(`[sync] Understat index: ${fbrefIdx.size} name keys`);
   const fbrefV2Idx = await getFBrefIndex();
   log(`[sync] FBref index: ${fbrefV2Idx.size} name keys`);
+  const apiSportsIdx = await getApiSportsIndex();
+  log(`[sync] API-Sports index: ${apiSportsIdx.size} name keys`);
 
   const today = new Date();
   const twoDaysAgo = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000);
@@ -1029,7 +1075,7 @@ async function runSync() {
     const awayStats = buildTeamStats(awayResults?.matches, match.awayTeam.id, (espnHistory as any).__awayStats ?? null, (espnHistory as any).__homeStats ?? null);
     log(`[stats] ${homeName}: corners=${homeStats.cornersFor} shots=${homeStats.shotsFor} fouls=${homeStats.foulsCommitted}`);
     log(`[stats] ${awayName}: corners=${awayStats.cornersFor} shots=${awayStats.shotsFor} fouls=${awayStats.foulsCommitted}`);
-    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory, fbrefV2Idx);
+    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory, fbrefV2Idx, apiSportsIdx);
     log(`[buildPlayers] ${players.diag}`);
 
     const matchData = {
