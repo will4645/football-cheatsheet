@@ -733,9 +733,11 @@ async function buildPlayers(
       return null;
     }
 
-    // Best available rate for fouls/shots — AF first, then ESPN (min 3g), then season default
-    function bestRate(name: string, espnId: string, afField: keyof PlayerGameStat, fallback: number): number {
-      return afAvg(name, afField) ?? espnOrSafe(espnId, afField, fallback);
+    // Season average for the displayed number — ESPN history (min 3g) or FBref/API-Sports default.
+    // AF last-5 is intentionally excluded here: it covers only 5 games across ALL competitions,
+    // so one intense CL game can double a defender's fouls average. Use AF only for dots.
+    function bestRate(_name: string, espnId: string, _afField: keyof PlayerGameStat, fallback: number): number {
+      return espnOrSafe(espnId, _afField, fallback);
     }
 
     const defPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) =>
