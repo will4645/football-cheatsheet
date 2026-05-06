@@ -749,11 +749,11 @@ async function runSync() {
 
   const today = new Date();
   const twoDaysAgo = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000);
-  const in30d  = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const in7d   = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
   const fmt    = (d: Date) => d.toISOString().slice(0, 10);
 
   const data = await apiFetch(
-    `/matches?competitions=${COMPETITIONS.join(',')}&dateFrom=${fmt(twoDaysAgo)}&dateTo=${fmt(in30d)}`
+    `/matches?competitions=${COMPETITIONS.join(',')}&dateFrom=${fmt(twoDaysAgo)}&dateTo=${fmt(in7d)}`
   );
   // Don't abort if fd.org fails — ESPN supplement still handles CL/EL/ECL
   if (!data?.matches) log('[sync] fd.org: no matches returned (rate limit or API issue)');
