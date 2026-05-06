@@ -35,13 +35,13 @@ export async function GET() {
       const liveFiltered = (live.data?.value ?? []).filter((m: any) => {
         const ko = parseKickoff(m);
         if (!ko) return true;
-        return (now - ko.getTime()) < 3 * 60 * 60 * 1000;
+        return (now - ko.getTime()) < 4 * 60 * 60 * 1000;
       });
       const rawUpcoming = upcoming.data?.value ?? [];
       const upcomingFiltered = rawUpcoming.filter((m: any) => {
         const ko = parseKickoff(m);
         if (!ko) return true;
-        return ko.getTime() > now - 3 * 60 * 60 * 1000;
+        return ko.getTime() > now - 4 * 60 * 60 * 1000;
       });
       console.log('[matches] upcoming count:', rawUpcoming.length, '→', upcomingFiltered.length, '| now:', new Date(now).toISOString());
       return NextResponse.json({
