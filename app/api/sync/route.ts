@@ -34,8 +34,9 @@ export const maxDuration = 300;
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 function isAuthorized(req: NextRequest) {
-  const querySec = req.nextUrl.searchParams.get('secret');
-  if (querySec && querySec === (process.env.SYNC_SECRET ?? '').trim()) return true;
+  const syncSecret = (process.env.SYNC_SECRET ?? '').trim();
+  const queryVal = req.nextUrl.searchParams.get('secret') ?? req.nextUrl.searchParams.get('token');
+  if (queryVal && syncSecret && queryVal === syncSecret) return true;
   const authHeader = req.headers.get('authorization');
   const cronSecret = (process.env.CRON_SECRET ?? '').trim();
   if (cronSecret && authHeader === `Bearer ${cronSecret}`) return true;
@@ -1093,16 +1094,7 @@ async function runSync() {
 // ── Route handler ──────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
-    const authHeader = req.headers.get('authorization');
-    return NextResponse.json({
-      error: 'Unauthorized',
-      debug: {
-        authHeaderPresent: !!authHeader,
-        authHeaderPrefix: authHeader ? authHeader.substring(0, 10) : null,
-        cronSecretSet: !!process.env.CRON_SECRET,
-        cronSecretLength: (process.env.CRON_SECRET ?? '').length,
-      },
-    }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
     const logs = await runSync();
