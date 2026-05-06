@@ -19,14 +19,14 @@ const ESPN_LEAGUES = [
 
 // Maps team name patterns to their domestic ESPN league slug
 const DOMESTIC_LEAGUE_HINTS: [RegExp, string][] = [
-  [/arsenal|chelsea|liverpool|manchester|tottenham|brighton|aston villa|west ham|newcastle|brentford|fulham|everton|wolves|wolverhampton|crystal palace|bournemouth|nottingham|ipswich|leicester|southampton/i, 'eng.1'],
-  [/atlético|atletico|real madrid|barcelona|sevilla|villarreal|betis|osasuna|girona|athletic|valencia|celta|getafe|mallorca/i, 'esp.1'],
-  [/psg|paris|lyon|marseille|monaco|lille|nice|lens|rennes|nantes|strasbourg|toulouse/i, 'fra.1'],
-  [/bayern|dortmund|leverkusen|leipzig|frankfurt|freiburg|union berlin|wolfsburg|stuttgart|gladbach|monchengladbach|hoffenheim|augsburg/i, 'ger.1'],
-  [/juventus|inter milan|ac milan|napoli|roma|lazio|fiorentina|atalanta|torino|bologna|genoa|udinese|venezia/i, 'ita.1'],
+  [/arsenal|chelsea|liverpool|manchester|tottenham|brighton|aston villa|west ham|newcastle|brentford|fulham|everton|wolves|wolverhampton|crystal palace|bournemouth|nottingham|ipswich|leicester|southampton|sunderland|burnley|leeds|luton|sheffield|coventry|middlesbrough|norwich|swansea|cardiff|millwall|hull|derby/i, 'eng.1'],
+  [/atlético|atletico|real madrid|barcelona|sevilla|villarreal|betis|osasuna|girona|athletic bilbao|athletic club|valencia|celta|getafe|mallorca|levante|espanol|espanyol|oviedo|alaves|álaves|rayo vallecano|rayo|leganes|leganés|valladolid|granada|almeria|almería/i, 'esp.1'],
+  [/psg|paris saint|paris fc|lyon|marseille|monaco|lille|nice|lens|rennes|nantes|strasbourg|toulouse|auxerre|brest|metz|lorient|angers|havre|le havre|reims|montpellier|troyes|clermont|ajaccio|guingamp/i, 'fra.1'],
+  [/bayern|dortmund|leverkusen|leipzig|frankfurt|freiburg|union berlin|wolfsburg|stuttgart|gladbach|monchengladbach|hoffenheim|augsburg|hamburger|hamburgsv|hamburg sv|köln|koln|st pauli|pauli|heidenheim|mainz|werder|bremen|bochum|schalke|paderborn|sandhausen|dusseldorf|düsseldorf/i, 'ger.1'],
+  [/juventus|inter milan|inter fc|ac milan|napoli|roma|lazio|fiorentina|atalanta|torino|bologna|genoa|udinese|venezia|lecce|verona|hellas|parma|sassuolo|cagliari|cremonese|pisa|monza|salernitana|empoli|spezia|brescia|bari/i, 'ita.1'],
 ];
 
-function guessDomesticLeague(teamName: string): string {
+export function guessDomesticLeague(teamName: string): string {
   for (const [re, league] of DOMESTIC_LEAGUE_HINTS) {
     if (re.test(teamName)) return league;
   }
@@ -77,12 +77,13 @@ function transformRoster(roster: any[]): { lineup: any[]; startingEleven: any[] 
 
 // ── Per-player stat extraction from an event summary ─────────────��────────
 export interface PlayerGameStat {
-  fc: number;   // fouls committed
-  fd: number;   // fouls drawn/suffered
+  fc: number;       // fouls committed
+  fd: number;       // fouls drawn/suffered
   goals: number;
   assists: number;
   shots: number;
-  sot: number;  // shots on target
+  sot: number;      // shots on target
+  yellowCards: number;
 }
 
 function statIdx(names: string[], ...candidates: string[]): number {
@@ -125,12 +126,13 @@ function extractEventStats(summary: any): { stats: Map<string, PlayerGameStat>; 
       };
 
       map.set(id, {
-        fc:      getStat('foulscommitted', 'fc', 'fouls committed', 'fouls', 'foulscom'),
-        fd:      getStat('foulssuffered', 'foulsdrawn', 'fd', 'fouls drawn', 'foulswon', 'foulswonfree', 'foulsdrawn'),
-        goals:   getStat('totalgoals', 'goals', 'g', 'goalscored', 'goal', 'goalsscored', 'gls', 'goaltotal', 'goalsTotal'),
-        assists: getStat('goalassists', 'assists', 'a', 'keyassists', 'ast', 'assist', 'assiststotal', 'goalassist'),
-        shots:   getStat('totalshots', 'shots', 'sh', 'shotattempts', 'attemptedshots', 'totalattempts', 'totalShots', 'shotstotal'),
-        sot:     getStat('shotsontarget', 'sot', 'shotsongoal', 'shotongoal', 'ontargetattempts', 'ongoalattempts', 'sog', 'targetshots', 'shotsOnTarget'),
+        fc:          getStat('foulscommitted', 'fc', 'fouls committed', 'fouls', 'foulscom'),
+        fd:          getStat('foulssuffered', 'foulsdrawn', 'fd', 'fouls drawn', 'foulswon', 'foulswonfree', 'foulsdrawn'),
+        goals:       getStat('totalgoals', 'goals', 'g', 'goalscored', 'goal', 'goalsscored', 'gls', 'goaltotal', 'goalsTotal'),
+        assists:     getStat('goalassists', 'assists', 'a', 'keyassists', 'ast', 'assist', 'assiststotal', 'goalassist'),
+        shots:       getStat('totalshots', 'shots', 'sh', 'shotattempts', 'attemptedshots', 'totalattempts', 'totalShots', 'shotstotal'),
+        sot:         getStat('shotsontarget', 'sot', 'shotsongoal', 'shotongoal', 'ontargetattempts', 'ongoalattempts', 'sog', 'targetshots', 'shotsOnTarget'),
+        yellowCards: getStat('yellowcards', 'yellowcard', 'yc', 'yellow', 'booking'),
       });
     }
   }
@@ -479,4 +481,176 @@ export async function findEspnFirstLeg(
     } catch {}
   }
   return null;
+}
+
+// ── API-Football fixture player stats (real last-5 game data) ────────────
+const AF_BASE = 'https://v3.football.api-sports.io';
+
+async function afFetch(path: string, apiKey: string): Promise<any> {
+  await new Promise(r => setTimeout(r, 250));
+  const res = await fetch(`${AF_BASE}${path}`, {
+    headers: { 'x-apisports-key': apiKey },
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`AF ${res.status}: ${path}`);
+  return res.json();
+}
+
+function cleanForSearch(name: string): string {
+  return name
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\b(FC|CF|SC|RFC|RC|GFC|AFC|BFC|SSC|AC|AS|RB|VfB|VfL|TSV|SV|FSV|Borussia|Club|del|de|des|du|der|van|den|het)\b\.?/gi, ' ')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ').trim()
+    .split(' ').filter(w => w.length >= 2).slice(0, 3).join(' ');
+}
+
+function guessDomesticLeagueId(teamName: string): number {
+  const league = guessDomesticLeague(teamName);
+  const map: Record<string, number> = {
+    'eng.1': 39, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135, 'fra.1': 61,
+  };
+  return map[league] ?? 0;
+}
+
+export async function fetchApiFootballTeamHistory(
+  teamName: string,
+  apiKey: string,
+): Promise<{ history: Map<string, PlayerGameStat[]>; debug: string }> {
+  if (!apiKey) return { history: new Map(), debug: 'no key' };
+  const result = new Map<string, PlayerGameStat[]>();
+  try {
+    const searchName = cleanForSearch(teamName);
+    const leagueId = guessDomesticLeagueId(teamName);
+    const leagueParam = leagueId ? `&league=${leagueId}` : '';
+    // Note: no season= in /teams search — it conflicts with the search param and blocks results
+    const td = await afFetch(
+      `/teams?search=${encodeURIComponent(searchName)}${leagueParam}`,
+      apiKey,
+    );
+    const teams: any[] = td?.response ?? [];
+    if (!teams.length && leagueParam) {
+      // Retry without league filter
+      const td2 = await afFetch(`/teams?search=${encodeURIComponent(searchName)}`, apiKey);
+      teams.push(...(td2?.response ?? []));
+    }
+    if (!teams.length) {
+      // Last resort: search by first keyword only
+      const firstWord = searchName.split(' ').find(w => w.length >= 5) ?? searchName.split(' ')[0];
+      const td3 = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}${leagueParam}`, apiKey);
+      teams.push(...(td3?.response ?? []));
+    }
+    if (!teams.length) return { history: new Map(), debug: `no team: ${searchName}` };
+
+    const tNorm = norm(teamName);
+    const best = teams.find(t => {
+      const n = norm(t.team?.name ?? '');
+      return n === tNorm || tNorm.split(' ').filter(w => w.length > 3).some(w => n.includes(w));
+    }) ?? teams[0];
+    const teamId: number = best?.team?.id;
+    if (!teamId) return { history: new Map(), debug: `no id: ${searchName}` };
+
+    let fd = await afFetch(`/fixtures?team=${teamId}&last=5&season=2025`, apiKey);
+    let fixtures: any[] = fd?.response ?? [];
+    if (!fixtures.length) {
+      // Fallback to 2024 season (covers summer-start leagues like MLS, Brasileirão, J-League)
+      fd = await afFetch(`/fixtures?team=${teamId}&last=5&season=2024`, apiKey);
+      fixtures = fd?.response ?? [];
+    }
+    if (!fixtures.length) return { history: new Map(), debug: `no fixtures: ${teamId}` };
+
+    const sorted = [...fixtures].sort((a: any, b: any) =>
+      new Date(b.fixture?.date ?? '').getTime() - new Date(a.fixture?.date ?? '').getTime()
+    );
+
+    for (const fix of sorted) {
+      const fid: number = fix.fixture?.id;
+      if (!fid) continue;
+      const pd = await afFetch(`/fixtures/players?fixture=${fid}&team=${teamId}`, apiKey);
+      const teamStats = pd?.response?.[0];
+      if (!teamStats?.players) continue;
+      for (const p of (teamStats.players as any[])) {
+        const pName: string = p.player?.name ?? '';
+        if (!pName) continue;
+        const s = p.statistics?.[0];
+        if (!s) continue;
+        const stat: PlayerGameStat = {
+          goals:       s.goals?.total     ?? 0,
+          assists:     s.goals?.assists   ?? 0,
+          shots:       s.shots?.total     ?? 0,
+          sot:         s.shots?.on        ?? 0,
+          fc:          s.fouls?.committed ?? 0,
+          fd:          s.fouls?.drawn     ?? 0,
+          yellowCards: s.cards?.yellow    ?? 0,
+        };
+        const key = norm(pName);
+        if (!result.has(key)) result.set(key, []);
+        result.get(key)!.push(stat); // newest first
+      }
+    }
+
+    return {
+      history: result,
+      debug: `team ${teamId}(${best?.team?.name}): ${sorted.length} fixtures, ${result.size} players`,
+    };
+  } catch (e: any) {
+    return { history: new Map(), debug: `err: ${e.message}` };
+  }
+}
+
+// ── ESPN domestic roster stats (season totals for one league) ─────────────
+export interface EspnRosterPlayer {
+  id: string;
+  name: string;
+  appearances: number;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+  foulsCommitted: number;
+  foulsSuffered: number;
+  shotsOnTarget: number;
+  totalShots: number;
+}
+
+export async function fetchEspnRosterStats(
+  teamId: string,
+  leagueSlug: string,
+): Promise<Map<string, EspnRosterPlayer>> {
+  const result = new Map<string, EspnRosterPlayer>();
+  if (!teamId || !leagueSlug) return result;
+  try {
+    const data = await espnFetch(
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/${leagueSlug}/teams/${teamId}/roster`
+    );
+    const athletes: any[] = data.athletes ?? [];
+    for (const a of athletes) {
+      const cats: any[] = a.statistics?.splits?.categories ?? [];
+      const gen = cats.find((c: any) => c.name === 'general');
+      const off = cats.find((c: any) => c.name === 'offensive');
+      const getStat = (cat: any, name: string): number =>
+        cat?.stats?.find((s: any) => s.name === name)?.value ?? 0;
+
+      const appearances = getStat(gen, 'appearances');
+      if (!appearances) continue;
+
+      const player: EspnRosterPlayer = {
+        id:             String(a.id ?? ''),
+        name:           a.displayName ?? '',
+        appearances,
+        goals:          getStat(off, 'totalGoals'),
+        assists:        getStat(off, 'goalAssists'),
+        yellowCards:    getStat(gen, 'yellowCards'),
+        redCards:       getStat(gen, 'redCards'),
+        foulsCommitted: getStat(gen, 'foulsCommitted'),
+        foulsSuffered:  getStat(gen, 'foulsSuffered'),
+        shotsOnTarget:  getStat(off, 'shotsOnTarget'),
+        totalShots:     getStat(off, 'totalShots'),
+      };
+      result.set(norm(player.name), player);
+    }
+  } catch (err: any) {
+    console.warn(`[roster] ESPN ${leagueSlug} team ${teamId}: ${err.message}`);
+  }
+  return result;
 }
