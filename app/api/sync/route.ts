@@ -347,7 +347,7 @@ async function getFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
 async function getApiSportsIndex(): Promise<Map<string, ApiSportsPlayer>> {
   const apiKey = (process.env.API_SPORTS_KEY ?? '').trim();
   if (!apiKey) return new Map();
-  const cached = await sbGet('api_sports_cache') as { scraped: number; players: ApiSportsPlayer[] } | null;
+  const cached = await sbGet('api_sports_v2_cache') as { scraped: number; players: ApiSportsPlayer[] } | null;
   if (cached && Date.now() - cached.scraped < STATS_TTL) {
     return buildApiSportsNameIndex(cached.players);
   }
@@ -355,7 +355,7 @@ async function getApiSportsIndex(): Promise<Map<string, ApiSportsPlayer>> {
     const index = await fetchApiSportsIndex(apiKey);
     const players = Array.from(index.values());
     if (players.length > 0) {
-      await sbSet('api_sports_cache', { scraped: Date.now(), players });
+      await sbSet('api_sports_v2_cache', { scraped: Date.now(), players });
       return buildApiSportsNameIndex(players);
     }
   } catch {}
