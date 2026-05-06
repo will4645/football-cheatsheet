@@ -873,7 +873,6 @@ async function runSync() {
         if (seenIds.has(id) || seenNormIds.has(nid)) continue;
         seenIds.add(id);
         seenNormIds.add(nid);
-        const koTime = new Date(ev.date).getTime();
         const hoursAway = (koTime - Date.now()) / 3_600_000;
         if (hoursAway < -2) continue;
         const notes: any[] = comp?.notes ?? [];
