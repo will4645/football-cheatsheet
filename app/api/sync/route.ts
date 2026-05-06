@@ -562,6 +562,14 @@ async function buildPlayers(
       return espnOrSafe(espnId, _afField, fallback);
     }
 
+    // Log which players have real AF history vs falling back — appears in Vercel logs
+    const afCoverage = starters.map((p: any) => {
+      const name = p.name || p.person?.name || '';
+      const games = lookupAF(name);
+      return `${name.split(' ').pop()}:${games ? games.length + 'g' : 'MISS'}`;
+    });
+    console.log(`[af-coverage] ${afCoverage.join(' | ')}`);
+
     const defPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) =>
       bestRate(b.name, b.espnId, 'fc', b.foulsPerGame) - bestRate(a.name, a.espnId, 'fc', a.foulsPerGame)
     ).slice(0, 5);
@@ -629,7 +637,7 @@ async function buildPlayers(
             yellowCards: p.yellowCards,
             redCards: p.redCards ?? 0,
             cardsPerGame: cpg,
-            last5Cards: afLast5(p.name, 'yellowCards', 1) ?? seededLast5(p.name, 'cards', cpg, 1),
+            last5Cards: afLast5(p.name, 'yellowCards', 1) ?? espnLast5Safe(p.espnId, 'yellowCards', 1) ?? seededLast5(p.name, 'cards', cpg, 1),
           };
         }),
     };
