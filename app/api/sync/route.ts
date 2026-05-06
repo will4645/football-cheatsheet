@@ -874,7 +874,7 @@ async function runSync() {
         seenIds.add(id);
         seenNormIds.add(nid);
         const hoursAway = (koTime - Date.now()) / 3_600_000;
-        if (hoursAway < -2) continue;
+        if (hoursAway < -3) continue;
         const notes: any[] = comp?.notes ?? [];
         const stage = notes[0]?.headline || (comp?.type?.abbreviation ? `${comp.type.abbreviation}` : 'Match');
         const homeEspnId = homeComp.team.id;
