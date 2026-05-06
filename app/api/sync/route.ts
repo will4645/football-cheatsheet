@@ -776,7 +776,7 @@ async function runSync() {
     if (apiMatchIds.has(m.id)) return false;
     const kickoff = new Date(m.utcDate ?? 0).getTime();
     const hoursFromKo = (Date.now() - kickoff) / 3_600_000;
-    return hoursFromKo > 3; // only remove if >3h since kickoff
+    return hoursFromKo > 4; // only remove if >4h since kickoff
   });
   for (const m of stale) {
     const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${m.id}`);
@@ -794,8 +794,8 @@ async function runSync() {
     const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
 
     // Skip and clean up matches that are finished & old, or simply too old
-    const tooOld = !(hoursAway > -3);
-    const oldFinished = FINISHED_STATUSES.has(status) && !(hoursAway > -3);
+    const tooOld = !(hoursAway > -4);
+    const oldFinished = FINISHED_STATUSES.has(status) && !(hoursAway > -4);
     if (tooOld || oldFinished) {
       const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${id}`);
       const updated = liveMatches.filter((m: any) => m.id !== id);
@@ -862,7 +862,7 @@ async function runSync() {
         // Allow recently-finished matches through (within 3h) so the cheat sheet stays visible post-match
         const koTime = new Date(ev.date).getTime();
         const hoursFromKo = (Date.now() - koTime) / 3_600_000;
-        if (comp?.status?.type?.completed && hoursFromKo > 3) continue;
+        if (comp?.status?.type?.completed && hoursFromKo > 4) continue;
         const homeComp = comp?.competitors?.find((c: any) => c.homeAway === 'home');
         const awayComp = comp?.competitors?.find((c: any) => c.homeAway === 'away');
         const homeName = homeComp?.team?.displayName;
@@ -874,7 +874,7 @@ async function runSync() {
         seenIds.add(id);
         seenNormIds.add(nid);
         const hoursAway = (koTime - Date.now()) / 3_600_000;
-        if (hoursAway < -3) continue;
+        if (hoursAway < -4) continue;
         const notes: any[] = comp?.notes ?? [];
         const stage = notes[0]?.headline || (comp?.type?.abbreviation ? `${comp.type.abbreviation}` : 'Match');
         const homeEspnId = homeComp.team.id;
@@ -959,7 +959,7 @@ async function runSync() {
 
     if (!hasLineups) {
       log(`[sync] No lineups yet: ${homeName} vs ${awayName}`);
-      if (hoursAway > -3 && !liveMatches.find((m: any) => m.id === id)) {
+      if (hoursAway > -4 && !liveMatches.find((m: any) => m.id === id)) {
         pendingList.push({
           id, competition: match.competition?.name || 'Football', stage,
           utcDate: match.utcDate,
