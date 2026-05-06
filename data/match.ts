@@ -10,11 +10,11 @@ export interface OffensivePlayer {
 }
 export interface ShootingPlayer {
   name: string; mins: number; sotPerGame: number; last5SoT?: boolean[] | null;
-  shotsPerGame: number; last5Shots?: boolean[] | null; badges?: string[]; form: Form;
+  shotsPerGame: number; last5Shots?: boolean[] | null; form: Form;
 }
 export interface GoalscoringPlayer {
   name: string; mins: number; goals: number; assists: number;
-  gaPerGame: number; badges?: string[];
+  gaPerGame: number;
   last5Goals?: boolean[] | null; last5Assists?: boolean[] | null; form: Form;
 }
 export interface CardsPlayer {
@@ -81,18 +81,18 @@ export const matchData: {
         { name: 'Koke',             mins: 69, foulsWonPerGame: 0.73, last5FoulsWon: [true,true,false,false,true], potentialOpponent: 'Olmo',           form: 'poor' },
       ],
       shooting: [
-        { name: 'Antoine Griezmann', mins: 42, sotPerGame: 1.51, last5SoT: [true,true,false,true,true],   shotsPerGame: 2.81, last5Shots: [true,true,true,false,true],   badges: [],      form: 'ok' },
-        { name: 'Julián Álvarez',    mins: 70, sotPerGame: 1.39, last5SoT: [true,false,true,true,true],   shotsPerGame: 2.85, last5Shots: [true,true,false,true,true],   badges: ['PK'],  form: 'good' },
-        { name: 'Ademola Lookman',   mins: 48, sotPerGame: 0.86, last5SoT: [true,false,false,true,true],  shotsPerGame: 2.86, last5Shots: [true,false,true,true,false],  badges: [],         form: 'ok' },
-        { name: 'Giovanni Simeone',  mins: 75, sotPerGame: 0.55, last5SoT: [false,true,false,false,true], shotsPerGame: 1.71, last5Shots: [true,false,true,false,true],  badges: [],         form: 'good' },
-        { name: 'Marcos Llorente',   mins: 76, sotPerGame: 0.33, last5SoT: [false,false,true,false,false],shotsPerGame: 0.85, last5Shots: [false,true,false,false,false],badges: [],         form: 'poor' },
+        { name: 'Antoine Griezmann', mins: 42, sotPerGame: 1.51, last5SoT: [true,true,false,true,true],   shotsPerGame: 2.81, last5Shots: [true,true,true,false,true],        form: 'ok' },
+        { name: 'Julián Álvarez',    mins: 70, sotPerGame: 1.39, last5SoT: [true,false,true,true,true],   shotsPerGame: 2.85, last5Shots: [true,true,false,true,true],   form: 'good' },
+        { name: 'Ademola Lookman',   mins: 48, sotPerGame: 0.86, last5SoT: [true,false,false,true,true],  shotsPerGame: 2.86, last5Shots: [true,false,true,true,false],          form: 'ok' },
+        { name: 'Giovanni Simeone',  mins: 75, sotPerGame: 0.55, last5SoT: [false,true,false,false,true], shotsPerGame: 1.71, last5Shots: [true,false,true,false,true],          form: 'good' },
+        { name: 'Marcos Llorente',   mins: 76, sotPerGame: 0.33, last5SoT: [false,false,true,false,false],shotsPerGame: 0.85, last5Shots: [false,true,false,false,false],form: 'poor' },
       ],
       goalscoring: [
-        { name: 'Julián Álvarez',    mins: 70, goals: 17, assists: 8,  gaPerGame: 0.77, badges: ['PK'],     last5Goals: [true,true,false,true,false],  last5Assists: [false,true,false,false,false], form: 'good' },
-        { name: 'Antoine Griezmann', mins: 42, goals: 8,  assists: 4,  gaPerGame: 0.65, badges: [],          last5Goals: [true,false,true,false,false],  last5Assists: [false,true,false,true,false],  form: 'ok' },
-        { name: 'Giovanni Simeone',  mins: 75, goals: 6,  assists: 7,  gaPerGame: 0.40, badges: [],          last5Goals: [false,true,false,false,false],  last5Assists: [true,false,false,false,false], form: 'ok' },
-        { name: 'Marcos Llorente',   mins: 76, goals: 4,  assists: 4,  gaPerGame: 0.26, badges: [],          last5Goals: [false,false,true,false,false],  last5Assists: [false,false,false,true,false], form: 'poor' },
-        { name: 'Robin Le Normand',  mins: 61, goals: 3,  assists: 0,  gaPerGame: 0.13, badges: [],          last5Goals: [false,false,false,false,false], last5Assists: [false,false,false,false,false],form: 'poor' },
+        { name: 'Julián Álvarez',    mins: 70, goals: 17, assists: 8,  gaPerGame: 0.77,    last5Goals: [true,true,false,true,false],  last5Assists: [false,true,false,false,false], form: 'good' },
+        { name: 'Antoine Griezmann', mins: 42, goals: 8,  assists: 4,  gaPerGame: 0.65,          last5Goals: [true,false,true,false,false],  last5Assists: [false,true,false,true,false],  form: 'ok' },
+        { name: 'Giovanni Simeone',  mins: 75, goals: 6,  assists: 7,  gaPerGame: 0.40,          last5Goals: [false,true,false,false,false],  last5Assists: [true,false,false,false,false], form: 'ok' },
+        { name: 'Marcos Llorente',   mins: 76, goals: 4,  assists: 4,  gaPerGame: 0.26,          last5Goals: [false,false,true,false,false],  last5Assists: [false,false,false,true,false], form: 'poor' },
+        { name: 'Robin Le Normand',  mins: 61, goals: 3,  assists: 0,  gaPerGame: 0.13,          last5Goals: [false,false,false,false,false], last5Assists: [false,false,false,false,false],form: 'poor' },
       ],
       cards: [
         { name: 'Marcos Ruggeri',   appearances: 25, yellowCards: 6, redCards: 0, cardsPerGame: 0.24, last5Cards: [false,true,true,false,true]  },
@@ -132,18 +132,18 @@ export const matchData: {
         { name: 'Jules Koundé', mins: 77, foulsWonPerGame: 1.00, last5FoulsWon: [false,true,true,false,true],potentialOpponent: 'Lookman',        form: 'ok' },
       ],
       shooting: [
-        { name: 'Ferran Torres', mins: 53, sotPerGame: 1.69, last5SoT: [true,true,true,false,true],  shotsPerGame: 3.37, last5Shots: [true,true,true,true,true],  badges: [],     form: 'good' },
-        { name: 'Lamine Yamal',  mins: 83, sotPerGame: 1.47, last5SoT: [true,false,true,true,true],  shotsPerGame: 4.34, last5Shots: [true,true,true,false,true],  badges: [],     form: 'good' },
-        { name: 'Fermín López',  mins: 62, sotPerGame: 1.28, last5SoT: [true,true,false,true,true],  shotsPerGame: 3.22, last5Shots: [true,true,false,true,true],  badges: [],          form: 'good' },
-        { name: 'Dani Olmo',     mins: 56, sotPerGame: 1.05, last5SoT: [false,true,true,true,true],  shotsPerGame: 3.19, last5Shots: [true,false,true,true,true],  badges: [],          form: 'good' },
-        { name: 'João Cancelo',  mins: 66, sotPerGame: 0.45, last5SoT: [false,true,false,false,true],shotsPerGame: 1.59, last5Shots: [false,false,true,false,false],badges: [],          form: 'poor' },
+        { name: 'Ferran Torres', mins: 53, sotPerGame: 1.69, last5SoT: [true,true,true,false,true],  shotsPerGame: 3.37, last5Shots: [true,true,true,true,true],      form: 'good' },
+        { name: 'Lamine Yamal',  mins: 83, sotPerGame: 1.47, last5SoT: [true,false,true,true,true],  shotsPerGame: 4.34, last5Shots: [true,true,true,false,true],      form: 'good' },
+        { name: 'Fermín López',  mins: 62, sotPerGame: 1.28, last5SoT: [true,true,false,true,true],  shotsPerGame: 3.22, last5Shots: [true,true,false,true,true],           form: 'good' },
+        { name: 'Dani Olmo',     mins: 56, sotPerGame: 1.05, last5SoT: [false,true,true,true,true],  shotsPerGame: 3.19, last5Shots: [true,false,true,true,true],           form: 'good' },
+        { name: 'João Cancelo',  mins: 66, sotPerGame: 0.45, last5SoT: [false,true,false,false,true],shotsPerGame: 1.59, last5Shots: [false,false,true,false,false], form: 'poor' },
       ],
       goalscoring: [
-        { name: 'Lamine Yamal',  mins: 83, goals: 20, assists: 15, gaPerGame: 1.05, badges: [],         last5Goals: [true,true,false,true,true],  last5Assists: [true,true,false,true,false], form: 'good' },
-        { name: 'Ferran Torres', mins: 53, goals: 16, assists: 1,  gaPerGame: 0.77, badges: [],          last5Goals: [true,false,true,false,true],  last5Assists: [false,false,false,false,false],form: 'good' },
-        { name: 'Fermín López',  mins: 62, goals: 11, assists: 12, gaPerGame: 0.95, badges: [],          last5Goals: [false,true,false,true,false],  last5Assists: [true,false,true,false,false],  form: 'good' },
-        { name: 'Dani Olmo',     mins: 56, goals: 8,  assists: 7,  gaPerGame: 0.68, badges: [],          last5Goals: [true,false,false,true,false],  last5Assists: [false,true,false,false,true],  form: 'good' },
-        { name: 'Jules Koundé',  mins: 77, goals: 3,  assists: 4,  gaPerGame: 0.23, badges: [],          last5Goals: [false,false,false,false,false], last5Assists: [false,true,false,false,false], form: 'ok' },
+        { name: 'Lamine Yamal',  mins: 83, goals: 20, assists: 15, gaPerGame: 1.05,         last5Goals: [true,true,false,true,true],  last5Assists: [true,true,false,true,false], form: 'good' },
+        { name: 'Ferran Torres', mins: 53, goals: 16, assists: 1,  gaPerGame: 0.77,          last5Goals: [true,false,true,false,true],  last5Assists: [false,false,false,false,false],form: 'good' },
+        { name: 'Fermín López',  mins: 62, goals: 11, assists: 12, gaPerGame: 0.95,          last5Goals: [false,true,false,true,false],  last5Assists: [true,false,true,false,false],  form: 'good' },
+        { name: 'Dani Olmo',     mins: 56, goals: 8,  assists: 7,  gaPerGame: 0.68,          last5Goals: [true,false,false,true,false],  last5Assists: [false,true,false,false,true],  form: 'good' },
+        { name: 'Jules Koundé',  mins: 77, goals: 3,  assists: 4,  gaPerGame: 0.23,          last5Goals: [false,false,false,false,false], last5Assists: [false,true,false,false,false], form: 'ok' },
       ],
       cards: [
         { name: 'Fermín López', appearances: 28, yellowCards: 5, redCards: 0, cardsPerGame: 0.18, last5Cards: [true,false,false,true,false]  },
