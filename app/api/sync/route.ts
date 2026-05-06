@@ -741,11 +741,11 @@ async function runSync() {
 
   const today = new Date();
   const twoDaysAgo = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000);
-  const in7d   = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const in30d  = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
   const fmt    = (d: Date) => d.toISOString().slice(0, 10);
 
   const data = await apiFetch(
-    `/matches?competitions=${COMPETITIONS.join(',')}&dateFrom=${fmt(twoDaysAgo)}&dateTo=${fmt(in7d)}`
+    `/matches?competitions=${COMPETITIONS.join(',')}&dateFrom=${fmt(twoDaysAgo)}&dateTo=${fmt(in30d)}`
   );
   if (!data?.matches) { log('[sync] No matches returned'); return logs; }
 
@@ -828,12 +828,13 @@ async function runSync() {
     ...liveMatches.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
   ]);
   for (const { league, compName } of ESPN_COMP_LEAGUES) {
-    for (let d = 0; d < 8; d++) {
+    for (let d = 0; d < 30; d++) {
       const dt = new Date(Date.now() + d * 86_400_000);
       const ds = `${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}`;
       let board: any;
       try {
-        await new Promise(r => setTimeout(r, 300));
+        // Only throttle near-term days; far-future fixture discovery doesn't need the delay
+        if (d < 8) await new Promise(r => setTimeout(r, 300));
         const res = await fetch(
           `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${ds}&_cb=${Date.now()}`,
           { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36', 'Accept': 'application/json' }, cache: 'no-store' }
