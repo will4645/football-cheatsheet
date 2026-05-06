@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiFootballLineups, fetchTeamPlayerHistory, findEspnFirstLeg, PlayerGameStat } from '@/lib/api-football';
-import type { TeamSeasonStats } from '@/lib/api-football';
+import { getApiFootballLineups, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, guessDomesticLeague, PlayerGameStat } from '@/lib/api-football';
+import type { TeamSeasonStats, EspnRosterPlayer } from '@/lib/api-football';
 import { fetchFBrefIndex, buildFBrefNameIndex, lookupFBref } from '@/lib/fbref';
 import type { FBrefPlayer } from '@/lib/fbref';
 import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
@@ -434,7 +434,25 @@ async function buildPlayers(
   espnHistory: Map<string, PlayerGameStat[]> = new Map(),
   fbrefV2Idx: Map<string, FBrefPlayer> = new Map(),
   apiSportsIdx: Map<string, ApiSportsPlayer> = new Map(),
+  espnRosterMap: Map<string, EspnRosterPlayer> = new Map(),
+  afHistoryHome: Map<string, PlayerGameStat[]> = new Map(),
+  afHistoryAway: Map<string, PlayerGameStat[]> = new Map(),
 ) {
+  function normName(n: string) {
+    return (n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function lookupRoster(name: string): EspnRosterPlayer | null {
+    const n = normName(name);
+    if (espnRosterMap.has(n)) return espnRosterMap.get(n)!;
+    const parts = n.split(' ');
+    const last = parts[parts.length - 1];
+    if (last.length > 3) {
+      for (const [k, v] of Array.from(espnRosterMap)) {
+        if (k.includes(last) || last.includes(k.split(' ').pop()!)) return v;
+      }
+    }
+    return null;
+  }
   function playerDefaults(p: any) {
     const name = p.name || p.person?.name || 'Unknown';
     const pos = (p.position || 'Midfielder').toLowerCase();
@@ -465,23 +483,30 @@ async function buildPlayers(
       pkGoals: 0,
       form: 'ok' as const,
     };
-    // 0. API-Sports — all competitions, real data, highest priority
+    // 0. API-Sports for rate stats (fouls, shots) + ESPN roster for counting stats (goals, assists, appearances, cards)
     const as = lookupApiSports(apiSportsIdx, name);
+    const roster = lookupRoster(name);
     if (as && as.games >= 3) {
-      const gaPerGame = as.games > 0 ? +((as.goals + as.assists) / as.games).toFixed(2) : defaults.gaPerGame;
+      // Use ESPN roster for counting stats when available (more reliable than API-Sports cross-competition data)
+      const goals       = roster ? roster.goals       : as.goals;
+      const assists     = roster ? roster.assists      : as.assists;
+      const appearances = roster ? roster.appearances  : as.games;
+      const yellowCards = roster ? roster.yellowCards  : as.yellowCards;
+      const redCards    = roster ? roster.redCards     : as.redCards;
+      const gaPerGame   = appearances > 0 ? +((goals + assists) / appearances).toFixed(2) : defaults.gaPerGame;
       return {
         ...defaults,
         mins:            as.minsPerGame    || defaults.mins,
-        goals:           as.goals,
-        assists:         as.assists,
+        goals,
+        assists,
         gaPerGame,
         shotsPerGame:    as.shotsPerGame   || defaults.shotsPerGame,
         sotPerGame:      as.sotPerGame     || defaults.sotPerGame,
         foulsPerGame:    as.foulsPerGame   || defaults.foulsPerGame,
         foulsWonPerGame: as.foulsWonPerGame || defaults.foulsWonPerGame,
-        yellowCards:     as.yellowCards,
-        redCards:        as.redCards,
-        appearances:     as.games,
+        yellowCards,
+        redCards,
+        appearances,
         pkGoals:         as.pkGoals,
         hasRealData:     true,
       };
@@ -638,20 +663,48 @@ async function buildPlayers(
     }).slice(0, 5);
   }
 
-  function buildSide(starters: any[], opp: any[]) {
+  function buildSide(starters: any[], opp: any[], afHistory: Map<string, PlayerGameStat[]>) {
     const players    = starters.map(p => playerDefaults(p));
     const oppPlayers = opp.map(p => playerDefaults(p));
 
-    // Compute per-game average from ESPN history
-    function espnAvg(espnId: string, field: 'fc' | 'fd' | 'goals' | 'assists' | 'sot' | 'shots'): number | null {
+    // ── API-Football real last-5 helpers (highest priority) ────────────────
+    function lookupAF(name: string): PlayerGameStat[] | null {
+      const key = normName(name);
+      if (afHistory.has(key)) return afHistory.get(key)!;
+      const parts = key.split(' ');
+      const last = parts[parts.length - 1];
+      if (last.length > 3) {
+        for (const [k, v] of Array.from(afHistory)) {
+          if (k.includes(last) || k.endsWith(last)) return v;
+        }
+      }
+      return null;
+    }
+    // Require ≥2 games before using as per-game average (avoids 1-game extremes)
+    function afAvg(name: string, field: keyof PlayerGameStat): number | null {
+      const games = lookupAF(name);
+      if (!games || games.length < 2) return null;
+      const sum = games.reduce((s, g) => s + (g[field] ?? 0), 0);
+      return +(sum / games.length).toFixed(2);
+    }
+    function afLast5(name: string, field: keyof PlayerGameStat, threshold = 1): boolean[] | null {
+      const games = lookupAF(name);
+      if (!games?.length) return null;
+      const slice = games.slice(0, 5); // newest first
+      const result: boolean[] = [];
+      for (let i = 0; i < 5 - slice.length; i++) result.push(false);
+      for (const g of [...slice].reverse()) result.push((g[field] ?? 0) >= threshold);
+      return result;
+    }
+
+    // ── ESPN history helpers (fallback — require ≥3 games for averages) ────
+    function espnAvg(espnId: string, field: keyof PlayerGameStat): number | null {
       const games = espnId ? espnHistory.get(espnId) : undefined;
       if (!games?.length) return null;
       const sum = games.reduce((s, g) => s + (g[field] ?? 0), 0);
       return +(sum / games.length).toFixed(2);
     }
-
-    // Build a boolean[5] from ESPN per-game history (newest game = index 4)
-    function espnLast5(espnId: string, field: 'fc' | 'fd' | 'goals' | 'assists' | 'sot' | 'shots', threshold = 1): boolean[] | null {
+    function espnLast5(espnId: string, field: keyof PlayerGameStat, threshold = 1): boolean[] | null {
       const games = espnId ? espnHistory.get(espnId) : undefined;
       if (!games?.length) return null;
       const slice = games.slice(0, 5);
@@ -660,6 +713,19 @@ async function buildPlayers(
       for (const g of [...slice].reverse()) result.push((g[field] ?? 0) >= threshold);
       return result;
     }
+    // Only use ESPN average if ≥3 games exist (prevents single-game extremes like 4.00 fouls)
+    function espnOrSafe(espnId: string, field: keyof PlayerGameStat, fallback: number): number {
+      const games = espnId ? espnHistory.get(espnId) : undefined;
+      if (!games || games.length < 3) return fallback;
+      const sum = games.reduce((s, g) => s + (g[field] ?? 0), 0);
+      const v = sum / games.length;
+      return v > 0 ? +v.toFixed(2) : fallback;
+    }
+    function espnLast5Safe(espnId: string, field: keyof PlayerGameStat, threshold = 1): boolean[] | null {
+      const games = espnId ? espnHistory.get(espnId) : undefined;
+      if (!games || games.length < 3) return null;
+      return espnLast5(espnId, field, threshold);
+    }
 
     function getLast5(p: any, stat: 'goals' | 'assists' | 'shots2' | 'shots1'): boolean[] | null {
       const games = p.understatId ? gamesMap.get(p.understatId) : undefined;
@@ -667,55 +733,48 @@ async function buildPlayers(
       return null;
     }
 
-    // ESPN only has 1 game of data per player — only trust non-zero values
-    function espnOr(espnId: string, field: 'fc' | 'fd' | 'goals' | 'assists' | 'sot' | 'shots', fallback: number): number {
-      const v = espnAvg(espnId, field);
-      return (v != null && v > 0) ? v : fallback;
-    }
-    function espnLast5If(espnId: string, field: 'fc' | 'fd' | 'goals' | 'assists' | 'sot' | 'shots', threshold = 1): boolean[] | null {
-      const v = espnAvg(espnId, field);
-      if (v == null || v <= 0) return null;
-      return espnLast5(espnId, field, threshold);
+    // Best available rate for fouls/shots — AF first, then ESPN (min 3g), then season default
+    function bestRate(name: string, espnId: string, afField: keyof PlayerGameStat, fallback: number): number {
+      return afAvg(name, afField) ?? espnOrSafe(espnId, afField, fallback);
     }
 
     const defPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) =>
-      espnOr(b.espnId, 'fc', b.foulsPerGame) - espnOr(a.espnId, 'fc', a.foulsPerGame)
+      bestRate(b.name, b.espnId, 'fc', b.foulsPerGame) - bestRate(a.name, a.espnId, 'fc', a.foulsPerGame)
     ).slice(0, 5);
 
     const offPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) =>
-      espnOr(b.espnId, 'fd', b.foulsWonPerGame) - espnOr(a.espnId, 'fd', a.foulsWonPerGame)
+      bestRate(b.name, b.espnId, 'fd', b.foulsWonPerGame) - bestRate(a.name, a.espnId, 'fd', a.foulsWonPerGame)
     ).slice(0, 5);
 
     return {
       defensive: defPlayers.map(p => {
-        const fc = espnOr(p.espnId, 'fc', p.foulsPerGame);
+        const fc = bestRate(p.name, p.espnId, 'fc', p.foulsPerGame);
         return {
           name: p.name, mins: p.mins, foulsPerGame: +fc.toFixed(2),
           tacklesPerGame: +p.tacklesPerGame.toFixed(2),
-          last5Fouls: espnLast5If(p.espnId, 'fc') ?? seededLast5(p.name, 'fouls', fc, 1),
+          last5Fouls: afLast5(p.name, 'fc', 1) ?? espnLast5Safe(p.espnId, 'fc') ?? seededLast5(p.name, 'fouls', fc, 1),
           yellowCards: p.yellowCards,
           potentialOpponent: findOpponent(p, oppPlayers),
           form: p.form,
         };
       }),
       offensive: offPlayers.map(p => {
-        const fd = espnOr(p.espnId, 'fd', p.foulsWonPerGame);
+        const fd = bestRate(p.name, p.espnId, 'fd', p.foulsWonPerGame);
         return {
           name: p.name, mins: p.mins, foulsWonPerGame: +fd.toFixed(2),
-          last5FoulsWon: espnLast5If(p.espnId, 'fd') ?? seededLast5(p.name, 'foulsWon', fd, 1),
+          last5FoulsWon: afLast5(p.name, 'fd', 1) ?? espnLast5Safe(p.espnId, 'fd') ?? seededLast5(p.name, 'foulsWon', fd, 1),
           potentialOpponent: findOpponent(p, oppPlayers),
           form: p.form,
         };
       }),
       shooting: top5(players, 'sotPerGame').map(p => {
-        const sot = espnOr(p.espnId, 'sot', p.sotPerGame);
-        const sh  = espnOr(p.espnId, 'shots', p.shotsPerGame);
+        const sot = bestRate(p.name, p.espnId, 'sot', p.sotPerGame);
+        const sh  = bestRate(p.name, p.espnId, 'shots', p.shotsPerGame);
         return {
           name: p.name, mins: p.mins, sotPerGame: +sot.toFixed(2),
-          last5SoT:   espnLast5If(p.espnId, 'sot', 1) ?? getLast5(p, 'shots1') ?? seededLast5(p.name, 'sot', sot, 1),
+          last5SoT:   afLast5(p.name, 'sot', 1) ?? espnLast5Safe(p.espnId, 'sot', 1) ?? getLast5(p, 'shots1') ?? seededLast5(p.name, 'sot', sot, 1),
           shotsPerGame: +sh.toFixed(2),
-          last5Shots: espnLast5If(p.espnId, 'shots', 2) ?? getLast5(p, 'shots2') ?? seededLast5(p.name, 'shots', sh, 2),
-          badges: (p.pkGoals ?? 0) >= 1 ? ['PK'] : [],
+          last5Shots: afLast5(p.name, 'shots', 2) ?? espnLast5Safe(p.espnId, 'shots', 2) ?? getLast5(p, 'shots2') ?? seededLast5(p.name, 'shots', sh, 2),
           form: p.form,
         };
       }),
@@ -725,9 +784,8 @@ async function buildPlayers(
         return {
           name: p.name, mins: p.mins, goals: p.goals, assists: p.assists,
           gaPerGame: +p.gaPerGame.toFixed(2),
-          badges: (p.pkGoals ?? 0) >= 1 ? ['PK'] : [],
-          last5Goals:   espnLast5If(p.espnId, 'goals',   1) ?? getLast5(p, 'goals')   ?? seededLast5(p.name, 'goals',   goalRate,   1),
-          last5Assists: espnLast5If(p.espnId, 'assists', 1) ?? getLast5(p, 'assists') ?? seededLast5(p.name, 'assists', assistRate, 1),
+          last5Goals:   afLast5(p.name, 'goals', 1) ?? espnLast5Safe(p.espnId, 'goals', 1) ?? getLast5(p, 'goals')   ?? seededLast5(p.name, 'goals',   goalRate,   1),
+          last5Assists: afLast5(p.name, 'assists', 1) ?? espnLast5Safe(p.espnId, 'assists', 1) ?? getLast5(p, 'assists') ?? seededLast5(p.name, 'assists', assistRate, 1),
           form: p.form,
         };
       }),
@@ -747,7 +805,7 @@ async function buildPlayers(
             yellowCards: p.yellowCards,
             redCards: p.redCards ?? 0,
             cardsPerGame: cpg,
-            last5Cards: null,
+            last5Cards: afLast5(p.name, 'yellowCards', 1) ?? seededLast5(p.name, 'cards', cpg, 1),
           };
         }),
     };
@@ -768,7 +826,18 @@ async function buildPlayers(
   }
   const diag = `espnIds in lineup:${lineupIds.length} matched:${matchedIds.length} | nonZero:${nonZeroSample}`;
 
-  return { home: buildSide(homeStarters, awayStarters), away: buildSide(awayStarters, homeStarters), diag };
+  // Log how many lineup players have AF history (name-match check)
+  const homeMatched = homeStarters.filter((p: any) => {
+    const n = normName(p.name || p.person?.name || '');
+    return afHistoryHome.has(n) || (n.split(' ').pop()?.length ?? 0) > 3 && Array.from(afHistoryHome.keys()).some(k => k.includes(n.split(' ').pop()!));
+  }).length;
+  const awayMatched = awayStarters.filter((p: any) => {
+    const n = normName(p.name || p.person?.name || '');
+    return afHistoryAway.has(n) || (n.split(' ').pop()?.length ?? 0) > 3 && Array.from(afHistoryAway.keys()).some(k => k.includes(n.split(' ').pop()!));
+  }).length;
+  const afDiag = `AF matched: home ${homeMatched}/${homeStarters.length}, away ${awayMatched}/${awayStarters.length}`;
+
+  return { home: buildSide(homeStarters, awayStarters, afHistoryHome), away: buildSide(awayStarters, homeStarters, afHistoryAway), diag: diag + ' | ' + afDiag };
 }
 
 // ── Date helpers ───────────────────────────────────────────────────────────
@@ -1075,7 +1144,26 @@ async function runSync() {
     const awayStats = buildTeamStats(awayResults?.matches, match.awayTeam.id, (espnHistory as any).__awayStats ?? null, (espnHistory as any).__homeStats ?? null);
     log(`[stats] ${homeName}: corners=${homeStats.cornersFor} shots=${homeStats.shotsFor} fouls=${homeStats.foulsCommitted}`);
     log(`[stats] ${awayName}: corners=${awayStats.cornersFor} shots=${awayStats.shotsFor} fouls=${awayStats.foulsCommitted}`);
-    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory, fbrefV2Idx, apiSportsIdx);
+    // Fetch ESPN domestic roster stats for accurate season counting stats
+    const [homeRosterMap, awayRosterMap] = await Promise.all([
+      confirmedEspnMeta ? fetchEspnRosterStats(confirmedEspnMeta.homeTeamId, guessDomesticLeague(homeName) || confirmedEspnMeta.league) : Promise.resolve(new Map<string, EspnRosterPlayer>()),
+      confirmedEspnMeta ? fetchEspnRosterStats(confirmedEspnMeta.awayTeamId, guessDomesticLeague(awayName) || confirmedEspnMeta.league) : Promise.resolve(new Map<string, EspnRosterPlayer>()),
+    ]);
+    const combinedRosterMap = new Map<string, EspnRosterPlayer>();
+    homeRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
+    awayRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
+    log(`[roster] ESPN domestic stats: ${combinedRosterMap.size} players`);
+
+    // Fetch real last-5-game player stats from API-Football fixtures
+    const afApiKey = (process.env.API_SPORTS_KEY ?? '').trim();
+    const [homeAfResult, awayAfResult] = await Promise.all([
+      afApiKey ? fetchApiFootballTeamHistory(homeName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), debug: 'no key' }),
+      afApiKey ? fetchApiFootballTeamHistory(awayName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), debug: 'no key' }),
+    ]);
+    log(`[af-history] home: ${homeAfResult.debug}`);
+    log(`[af-history] away: ${awayAfResult.debug}`);
+
+    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory, fbrefV2Idx, apiSportsIdx, combinedRosterMap, homeAfResult.history, awayAfResult.history);
     log(`[buildPlayers] ${players.diag}`);
 
     const matchData = {

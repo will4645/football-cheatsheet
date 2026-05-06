@@ -108,15 +108,6 @@ function Last5Dots({ data, hitColor = '#22c55e', missColor = '#ef4444' }: {
   );
 }
 
-/* ── Badge pill ──────────────────────────────────────── */
-function Badge({ label, color }: { label: string; color: string }) {
-  return (
-    <span className="text-[8px] font-black px-1 py-0.5 rounded"
-          style={{ backgroundColor: color + '25', color, border: `1px solid ${color}40` }}>
-      {label}
-    </span>
-  );
-}
 
 /* ── Stat column (bordered box wrapping header + values) ─ */
 function StatCol({ width, header, right = false, children }: {
@@ -210,7 +201,6 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
           {ps.map((p, i) => (
             <div key={i} className="flex items-center h-8 gap-1 overflow-hidden">
               <span className="text-[11px] font-medium truncate" style={{ color: last5Color(p.last5SoT) }}>{p.name}</span>
-              {p.badges?.map(b => <Badge key={b} label={b} color={c} />)}
             </div>
           ))}
         </div>
@@ -277,7 +267,6 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
         {ps.map((p, i) => (
           <div key={i} className="flex items-center h-8 gap-1 overflow-hidden">
             <span className="text-[11px] font-medium truncate" style={{ color: last5Color(p.last5Goals) }}>{p.name}</span>
-            {p.badges?.map(b => <Badge key={b} label={b} color={c} />)}
           </div>
         ))}
       </div>

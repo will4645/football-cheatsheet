@@ -91,9 +91,9 @@ export async function fetchApiSportsIndex(apiKey: string): Promise<Map<string, A
         const playerName: string = entry.player?.name ?? '';
         if (!playerName) continue;
 
-        // API returns one stats entry per competition; filter to this comp to be safe
+        // Filter to this competition AND this season — API can return multi-season rows
         const statEntries: any[] = (entry.statistics ?? []).filter(
-          (s: any) => s.league?.id === comp.id,
+          (s: any) => s.league?.id === comp.id && s.league?.season === SEASON,
         );
 
         for (const s of statEntries) {
