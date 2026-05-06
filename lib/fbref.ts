@@ -155,31 +155,81 @@ const COMPS = [
   },
 ];
 
+interface RawAccumulator {
+  name: string;
+  games: number;
+  minsTotal: number;
+  goals: number;
+  assists: number;
+  shots: number;
+  shotsOT: number;
+  yellowCards: number;
+  redCards: number;
+  fouls: number;
+  fouled: number;
+  pkGoals: number;
+}
+
 export async function fetchFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
-  const index = new Map<string, FBrefPlayer>();
+  // Accumulate raw totals across all competitions before computing per-game averages.
+  // This ensures a PL player's CL/EL stats are included rather than discarded.
+  const raw = new Map<string, RawAccumulator>();
 
   for (const comp of COMPS) {
     const stdMap = await fetchStandard(comp.stdUrls);
     const miscMap = await fetchMisc(comp.miscUrls);
 
     for (const [key, s] of Array.from(stdMap)) {
-      if (index.has(key)) continue; // already have from a higher-priority comp
       const m = miscMap.get(key);
-      index.set(key, {
-        name: s.name,
-        games: s.games,
-        minsPerGame: s.mins,
-        goals: s.goals,
-        assists: s.assists,
-        shotsPerGame: s.games > 0 ? +(s.shots / s.games).toFixed(2) : 0,
-        sotPerGame: s.games > 0 ? +(s.shotsOT / s.games).toFixed(2) : 0,
-        yellowCards: s.yellowCards,
-        redCards: s.redCards,
-        foulsPerGame: m && m.games > 0 ? +(m.fouls / m.games).toFixed(2) : 0,
-        foulsWonPerGame: m && m.games > 0 ? +(m.fouled / m.games).toFixed(2) : 0,
-        pkGoals: s.pkGoals,
-      });
+      const existing = raw.get(key);
+      if (existing) {
+        existing.games       += s.games;
+        existing.minsTotal   += s.mins * s.games;
+        existing.goals       += s.goals;
+        existing.assists     += s.assists;
+        existing.shots       += s.shots;
+        existing.shotsOT     += s.shotsOT;
+        existing.yellowCards += s.yellowCards;
+        existing.redCards    += s.redCards;
+        existing.fouls       += m?.fouls ?? 0;
+        existing.fouled      += m?.fouled ?? 0;
+        existing.pkGoals     += s.pkGoals;
+      } else {
+        raw.set(key, {
+          name: s.name,
+          games: s.games,
+          minsTotal: s.mins * s.games,
+          goals: s.goals,
+          assists: s.assists,
+          shots: s.shots,
+          shotsOT: s.shotsOT,
+          yellowCards: s.yellowCards,
+          redCards: s.redCards,
+          fouls: m?.fouls ?? 0,
+          fouled: m?.fouled ?? 0,
+          pkGoals: s.pkGoals,
+        });
+      }
     }
+  }
+
+  const index = new Map<string, FBrefPlayer>();
+  for (const [key, acc] of Array.from(raw)) {
+    const g = acc.games;
+    index.set(key, {
+      name: acc.name,
+      games: g,
+      minsPerGame: g > 0 ? Math.round(acc.minsTotal / g) : 75,
+      goals: acc.goals,
+      assists: acc.assists,
+      shotsPerGame: g > 0 ? +(acc.shots / g).toFixed(2) : 0,
+      sotPerGame: g > 0 ? +(acc.shotsOT / g).toFixed(2) : 0,
+      yellowCards: acc.yellowCards,
+      redCards: acc.redCards,
+      foulsPerGame: g > 0 ? +(acc.fouls / g).toFixed(2) : 0,
+      foulsWonPerGame: g > 0 ? +(acc.fouled / g).toFixed(2) : 0,
+      pkGoals: acc.pkGoals,
+    });
   }
 
   return index;

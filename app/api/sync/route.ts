@@ -35,9 +35,10 @@ export const maxDuration = 300;
 // ── Auth ───────────────────────────────────────────────────────────────────
 function isAuthorized(req: NextRequest) {
   const querySec = req.nextUrl.searchParams.get('secret');
-  if (querySec && querySec === process.env.SYNC_SECRET) return true;
+  if (querySec && querySec === (process.env.SYNC_SECRET ?? '').trim()) return true;
   const authHeader = req.headers.get('authorization');
-  if (authHeader === `Bearer ${process.env.CRON_SECRET}`) return true;
+  const cronSecret = (process.env.CRON_SECRET ?? '').trim();
+  if (cronSecret && authHeader === `Bearer ${cronSecret}`) return true;
   return false;
 }
 
@@ -323,7 +324,7 @@ async function getStatsIndex(): Promise<Map<string, any>> {
 }
 
 async function getFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
-  const cached = await sbGet('fbref_v2_cache') as { scraped: number; players: FBrefPlayer[] } | null;
+  const cached = await sbGet('fbref_v3_cache') as { scraped: number; players: FBrefPlayer[] } | null;
   if (cached && Date.now() - cached.scraped < STATS_TTL) {
     return buildFBrefNameIndex(cached.players);
   }
@@ -331,7 +332,7 @@ async function getFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
     const index = await fetchFBrefIndex();
     const players = Array.from(index.values());
     if (players.length > 0) {
-      await sbSet('fbref_v2_cache', { scraped: Date.now(), players });
+      await sbSet('fbref_v3_cache', { scraped: Date.now(), players });
       return buildFBrefNameIndex(players);
     }
   } catch {}
@@ -459,16 +460,20 @@ async function buildPlayers(
         appearances: fb.games,
         pkGoals: fb.penaltyGoals ?? 0,
       };
-      // 2. FBref overlay — real fouls/SoT/redCards that Understat doesn't have
+      // 2. FBref overlay — covers ALL competitions (Big5 + CL + EL).
+      // Prefer FBref totals over Understat domestic-only for goals/assists/appearances/cards.
       const fb2 = lookupFBref(fbrefV2Idx, name);
       if (fb2 && fb2.games >= 3) {
+        result.goals       = fb2.goals;
+        result.assists     = fb2.assists;
+        result.appearances = fb2.games;
+        result.gaPerGame   = fb2.games > 0 ? +((fb2.goals + fb2.assists) / fb2.games).toFixed(2) : result.gaPerGame;
+        result.yellowCards = fb2.yellowCards;
+        result.redCards    = fb2.redCards;
+        result.pkGoals     = fb2.pkGoals ?? 0;
         if (!result.foulsPerGame)    result.foulsPerGame    = fb2.foulsPerGame;
         if (!result.foulsWonPerGame) result.foulsWonPerGame = fb2.foulsWonPerGame;
-        if (!result.yellowCards)     result.yellowCards     = fb2.yellowCards;
-        if (!result.pkGoals)         result.pkGoals         = fb2.pkGoals ?? 0;
-        // Prefer FBref real SoT over Understat's shots*0.37 estimate
         if (fb2.sotPerGame > 0)      result.sotPerGame      = fb2.sotPerGame;
-        if (fb2.redCards > 0)        result.redCards        = fb2.redCards;
       }
       return { ...result, hasRealData: true };
     }
