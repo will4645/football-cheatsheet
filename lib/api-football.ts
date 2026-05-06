@@ -550,12 +550,23 @@ export async function fetchApiFootballTeamHistory(
     const teamId: number = best?.team?.id;
     if (!teamId) return { history: new Map(), debug: `no id: ${searchName}` };
 
-    let fd = await afFetch(`/fixtures?team=${teamId}&last=5&season=2025`, apiKey);
+    // Prefer domestic-league-only fixtures so dots match domestic stats sites
+    const fixtureLeagueFilter = leagueId ? `&league=${leagueId}` : '';
+    let fd = await afFetch(`/fixtures?team=${teamId}&last=5&season=2025${fixtureLeagueFilter}`, apiKey);
     let fixtures: any[] = fd?.response ?? [];
+    if (!fixtures.length && fixtureLeagueFilter) {
+      // No domestic fixtures found — fall back to all competitions
+      fd = await afFetch(`/fixtures?team=${teamId}&last=5&season=2025`, apiKey);
+      fixtures = fd?.response ?? [];
+    }
     if (!fixtures.length) {
       // Fallback to 2024 season (covers summer-start leagues like MLS, Brasileirão, J-League)
-      fd = await afFetch(`/fixtures?team=${teamId}&last=5&season=2024`, apiKey);
-      fixtures = fd?.response ?? [];
+      const fd24League = await afFetch(`/fixtures?team=${teamId}&last=5&season=2024${fixtureLeagueFilter}`, apiKey);
+      fixtures = fd24League?.response ?? [];
+      if (!fixtures.length) {
+        const fd24 = await afFetch(`/fixtures?team=${teamId}&last=5&season=2024`, apiKey);
+        fixtures = fd24?.response ?? [];
+      }
     }
     if (!fixtures.length) return { history: new Map(), debug: `no fixtures: ${teamId}` };
 
