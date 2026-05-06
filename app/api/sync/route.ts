@@ -755,9 +755,10 @@ async function runSync() {
   const data = await apiFetch(
     `/matches?competitions=${COMPETITIONS.join(',')}&dateFrom=${fmt(twoDaysAgo)}&dateTo=${fmt(in30d)}`
   );
-  if (!data?.matches) { log('[sync] No matches returned'); return logs; }
+  // Don't abort if fd.org fails — ESPN supplement still handles CL/EL/ECL
+  if (!data?.matches) log('[sync] fd.org: no matches returned (rate limit or API issue)');
 
-  log(`[sync] Found ${data.matches.length} matches`);
+  log(`[sync] Found ${data?.matches?.length ?? 0} matches`);
 
   const LIVE_STATUSES = new Set(['IN_PLAY', 'PAUSED', 'HALF_TIME', 'EXTRA_TIME', 'PENALTY']);
 
@@ -784,7 +785,7 @@ async function runSync() {
   }
 
   // Phase 1: fast pass — classify matches without any API calls
-  for (const match of data.matches) {
+  for (const match of (data?.matches ?? [])) {
     // Skip matches with null team names (fd.org tier restriction — ESPN will cover these)
     if (!match.homeTeam?.name || !match.awayTeam?.name) continue;
     const id     = matchId(match.homeTeam.name, match.awayTeam.name);
