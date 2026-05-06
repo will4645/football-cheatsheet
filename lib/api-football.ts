@@ -718,7 +718,7 @@ export async function fetchApiFootballSquadStats(
     const teamId: number = best?.team?.id;
     if (!teamId) return { stats: new Map(), debug: `no id: ${searchName}` };
 
-    async function fetchAllPages(season: number): Promise<any[]> {
+    const fetchAllPages = async (season: number): Promise<any[]> => {
       const all: any[] = [];
       let page = 1;
       while (true) {
@@ -730,7 +730,7 @@ export async function fetchApiFootballSquadStats(
         page++;
       }
       return all;
-    }
+    };
     let players = await fetchAllPages(2025);
     if (!players.length) players = await fetchAllPages(2024);
     if (!players.length) return { stats: new Map(), debug: `no players: ${teamId}` };
