@@ -595,6 +595,12 @@ export async function fetchApiFootballTeamHistory(
         const key = norm(pName);
         if (!result.has(key)) result.set(key, []);
         result.get(key)!.push(stat); // newest first
+        // Alias by last name so "J. Tah" (key "j tah") is also findable as "tah"
+        const kParts = key.split(' ');
+        const kLast = kParts[kParts.length - 1];
+        if (kParts.length >= 2 && kLast.length >= 3 && !result.has(kLast)) {
+          result.set(kLast, result.get(key)!);
+        }
       }
     }
 
@@ -763,7 +769,7 @@ export async function fetchApiFootballSquadStats(
       result.set(key, p);
       const parts = key.split(' ');
       const last = parts[parts.length - 1];
-      if (last.length > 3 && !result.has(last)) result.set(last, p);
+      if (last.length >= 3 && !result.has(last)) result.set(last, p);
     }
 
     return { stats: result, debug: `squad ${teamId}(${best?.team?.name}): ${players.length} players, ${result.size} keys` };

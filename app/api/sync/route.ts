@@ -196,7 +196,7 @@ function lookupPlayer(idx: Map<string, any>, name: string) {
   const norm = normName(name); const parts = norm.split(' ');
   const last = parts[parts.length - 1];
   if (idx.has(norm)) return idx.get(norm);
-  if (idx.has(last) && last.length > 3) return idx.get(last);
+  if (idx.has(last) && last.length >= 3) return idx.get(last);
   const fl = `${parts[0]} ${last}`;
   if (idx.has(fl)) return idx.get(fl);
   if (last.length > 4) { for (const [k, v] of Array.from(idx)) { if (k.includes(last)) return v; } }
@@ -308,7 +308,7 @@ async function buildPlayers(
     if (espnRosterMap.has(n)) return espnRosterMap.get(n)!;
     const parts = n.split(' ');
     const last = parts[parts.length - 1];
-    if (last.length > 3) {
+    if (last.length >= 3) {
       for (const [k, v] of Array.from(espnRosterMap)) {
         if (k.includes(last) || last.includes(k.split(' ').pop()!)) return v;
       }
@@ -460,7 +460,7 @@ async function buildPlayers(
       if (afSquad.has(key)) return afSquad.get(key)!;
       const parts = key.split(' ');
       const last = parts[parts.length - 1];
-      if (last.length > 3) {
+      if (last.length >= 3) {
         for (const [k, v] of Array.from(afSquad)) {
           if (k === last || k.endsWith(' ' + last)) return v;
         }
@@ -501,7 +501,7 @@ async function buildPlayers(
       if (afHistory.has(key)) return afHistory.get(key)!;
       const parts = key.split(' ');
       const last = parts[parts.length - 1];
-      if (last.length > 3) {
+      if (last.length >= 3) {
         for (const [k, v] of Array.from(afHistory)) {
           if (k.includes(last) || k.endsWith(last)) return v;
         }
