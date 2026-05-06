@@ -767,7 +767,7 @@ async function runSync() {
   const nearTermMatches: any[] = [];
 
   const apiMatchIds = new Set(
-    data.matches
+    (data?.matches ?? [])
       .filter((m: any) => m.homeTeam?.name && m.awayTeam?.name)
       .map((m: any) => matchId(m.homeTeam.name, m.awayTeam.name))
   );
