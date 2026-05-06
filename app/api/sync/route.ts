@@ -770,7 +770,13 @@ async function runSync() {
       .filter((m: any) => m.homeTeam?.name && m.awayTeam?.name)
       .map((m: any) => matchId(m.homeTeam.name, m.awayTeam.name))
   );
-  const stale = liveMatches.filter((m: any) => !apiMatchIds.has(m.id));
+  // Keep recently-finished ESPN matches (CL/EL/ECL don't appear in fd.org so they'd always be stale)
+  const stale = liveMatches.filter((m: any) => {
+    if (apiMatchIds.has(m.id)) return false;
+    const kickoff = new Date(m.utcDate ?? 0).getTime();
+    const hoursFromKo = (Date.now() - kickoff) / 3_600_000;
+    return hoursFromKo > 3; // only remove if >3h since kickoff
+  });
   for (const m of stale) {
     const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${m.id}`);
     liveMatches.splice(liveMatches.findIndex((x: any) => x.id === m.id), 1);
@@ -852,7 +858,10 @@ async function runSync() {
       } catch { continue; }
       for (const ev of board?.events ?? []) {
         const comp = ev.competitions?.[0];
-        if (comp?.status?.type?.completed) continue;
+        // Allow recently-finished matches through (within 3h) so the cheat sheet stays visible post-match
+        const koTime = new Date(ev.date).getTime();
+        const hoursFromKo = (Date.now() - koTime) / 3_600_000;
+        if (comp?.status?.type?.completed && hoursFromKo > 3) continue;
         const homeComp = comp?.competitors?.find((c: any) => c.homeAway === 'home');
         const awayComp = comp?.competitors?.find((c: any) => c.homeAway === 'away');
         const homeName = homeComp?.team?.displayName;
@@ -1047,6 +1056,7 @@ async function runSync() {
     if (!liveMatches.find((m: any) => m.id === id)) {
       liveMatches.push({
         id, competition: matchData.competition, stage, date: matchData.date, kickoff: matchData.kickoff,
+        utcDate: match.utcDate,
         homeTeam: { name: homeName, badge: homeBadge, primaryColor: getTeamColor(homeName) },
         awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
       });
