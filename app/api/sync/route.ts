@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiFootballLineups, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, guessDomesticLeague, PlayerGameStat } from '@/lib/api-football';
-import type { TeamSeasonStats, EspnRosterPlayer } from '@/lib/api-football';
-import { fetchFBrefIndex, buildFBrefNameIndex, lookupFBref } from '@/lib/fbref';
-import type { FBrefPlayer } from '@/lib/fbref';
+import { getApiFootballLineups, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, guessDomesticLeague, PlayerGameStat } from '@/lib/api-football';
+import type { TeamSeasonStats, EspnRosterPlayer, AfSquadPlayer } from '@/lib/api-football';
 import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
 import type { ApiSportsPlayer } from '@/lib/api-sports';
 
@@ -205,144 +203,8 @@ function lookupPlayer(idx: Map<string, any>, name: string) {
   return null;
 }
 
-// ── FBref/Understat cache ──────────────────────────────────────────────────
+// ── API-Sports cache (paid API — no scraping) ─────────────────────────────
 const STATS_TTL = 23 * 60 * 60 * 1000;
-const LEAGUES = [
-  { id: 'EPL', name: 'Premier League' }, { id: 'La_liga', name: 'La Liga' },
-  { id: 'Bundesliga', name: 'Bundesliga' }, { id: 'Serie_A', name: 'Serie A' },
-  { id: 'Ligue_1', name: 'Ligue 1' },
-];
-
-async function fetchLeague(league: { id: string; name: string }) {
-  await new Promise(r => setTimeout(r, 800 + Math.random() * 800));
-  const res = await fetch('https://understat.com/main/getPlayersStats/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
-      'X-Requested-With': 'XMLHttpRequest',
-      'Referer': `https://understat.com/league/${league.id}`,
-    },
-    body: `league=${league.id}&season=2025`,
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const { players } = await res.json();
-  return (players as any[]).map(p => {
-    const games = parseInt(p.games) || 1;
-    const goals = parseFloat(p.goals) || 0;
-    const assts = parseFloat(p.assists) || 0;
-    const shots = parseFloat(p.shots) || 0;
-    const npg = parseFloat(p.npg) || 0;
-    return {
-      id: p.id,
-      name: p.player_name, games,
-      avgMins: Math.round((parseInt(p.time) || 0) / games),
-      goals, assists: assts, xg: +(parseFloat(p.npxG) || 0).toFixed(2),
-      penaltyGoals: Math.max(0, Math.round(goals - npg)),
-      yellowCards: parseInt(p.yellow_cards) || 0,
-      redCards: parseInt(p.red_cards) || 0,
-      shotsPerGame: +(shots / games).toFixed(2),
-      sotPerGame: +(shots / games * 0.37).toFixed(2),
-      gaPerGame: +((goals + assts) / games).toFixed(2),
-      foulsPerGame: 0, foulsWonPerGame: 0, tacklesPerGame: 0,
-    };
-  });
-}
-
-// ── Per-player match history ───────────────────────────────────────────────
-async function fetchPlayerGames(playerId: string): Promise<any[]> {
-  try {
-    await new Promise(r => setTimeout(r, 300));
-    const res = await fetch(`https://understat.com/player/${playerId}`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Referer': 'https://understat.com/',
-      },
-    });
-    if (!res.ok) return [];
-    const html = await res.text();
-    const m = html.match(/var matchesData\s*=\s*JSON\.parse\('([\s\S]+?)'\)/);
-    if (!m) return [];
-    const raw = m[1].replace(/\\x([0-9a-fA-F]{2})/g, (_: string, h: string) => String.fromCharCode(parseInt(h, 16)));
-    const games: any[] = JSON.parse(raw);
-    return games
-      .filter(g => g.season === '2025' && parseInt(g.time) > 0)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  } catch {
-    return [];
-  }
-}
-
-// Build a boolean[5] from real game data.
-// Index 0 = oldest of last 5, index 4 = most recent (rightmost dot).
-function actualLast5(games: any[], stat: 'goals' | 'assists' | 'shots2' | 'shots1'): boolean[] {
-  const last5 = games.slice(0, 5).reverse(); // oldest first
-  const result: boolean[] = [];
-  for (let i = 0; i < 5; i++) {
-    const g = last5[i + (last5.length - 5 < 0 ? last5.length - 5 : 0)];
-    if (!g || last5.length < 5 - i) { result.push(false); continue; }
-    switch (stat) {
-      case 'goals':   result.push(parseInt(g.goals)   > 0); break;
-      case 'assists': result.push(parseInt(g.assists) > 0); break;
-      case 'shots2':  result.push(parseInt(g.shots)  >= 2); break;
-      case 'shots1':  result.push(parseInt(g.shots)  >= 1); break;
-    }
-  }
-  return result;
-}
-
-function gamesLast5(games: any[], stat: 'goals' | 'assists' | 'shots2' | 'shots1'): boolean[] {
-  if (!games.length) return [false, false, false, false, false];
-  // games is sorted newest-first; take up to 5
-  const slice = games.slice(0, 5); // [newest, ..., oldest]
-  const padded: (any | null)[] = [];
-  // Pad on the left with nulls so index 4 = most recent
-  for (let i = 0; i < 5 - slice.length; i++) padded.push(null);
-  padded.push(...[...slice].reverse()); // oldest → most recent
-  return padded.map(g => {
-    if (!g) return false;
-    switch (stat) {
-      case 'goals':   return parseInt(g.goals)   > 0;
-      case 'assists': return parseInt(g.assists) > 0;
-      case 'shots2':  return parseInt(g.shots)  >= 2;
-      case 'shots1':  return parseInt(g.shots)  >= 1;
-    }
-  });
-}
-
-async function getStatsIndex(): Promise<Map<string, any>> {
-  const cached = await sbGet('fbref_cache') as { scraped: number; players: any[] } | null;
-  if (cached && Date.now() - cached.scraped < STATS_TTL) {
-    return buildNameIndex(cached.players);
-  }
-  const all: any[] = [];
-  for (const league of LEAGUES) {
-    try { all.push(...await fetchLeague(league)); } catch { /* skip */ }
-  }
-  if (all.length > 0) {
-    await sbSet('fbref_cache', { scraped: Date.now(), players: all });
-  }
-  return buildNameIndex(all);
-}
-
-async function getFBrefIndex(): Promise<Map<string, FBrefPlayer>> {
-  const cached = await sbGet('fbref_v3_cache') as { scraped: number; players: FBrefPlayer[] } | null;
-  if (cached && Date.now() - cached.scraped < STATS_TTL) {
-    return buildFBrefNameIndex(cached.players);
-  }
-  try {
-    const index = await fetchFBrefIndex();
-    const players = Array.from(index.values());
-    if (players.length > 0) {
-      await sbSet('fbref_v3_cache', { scraped: Date.now(), players });
-      return buildFBrefNameIndex(players);
-    }
-  } catch {}
-  // Fresh scrape failed (FBref blocked or changed) — use stale cache if available
-  if (cached?.players?.length) return buildFBrefNameIndex(cached.players);
-  return new Map();
-}
 
 async function getApiSportsIndex(): Promise<Map<string, ApiSportsPlayer>> {
   const apiKey = (process.env.API_SPORTS_KEY ?? '').trim();
@@ -430,13 +292,13 @@ function defaultStats() {
 async function buildPlayers(
   homeLineup: any,
   awayLineup: any,
-  fbrefIdx: Map<string, any>,
   espnHistory: Map<string, PlayerGameStat[]> = new Map(),
-  fbrefV2Idx: Map<string, FBrefPlayer> = new Map(),
   apiSportsIdx: Map<string, ApiSportsPlayer> = new Map(),
   espnRosterMap: Map<string, EspnRosterPlayer> = new Map(),
   afHistoryHome: Map<string, PlayerGameStat[]> = new Map(),
   afHistoryAway: Map<string, PlayerGameStat[]> = new Map(),
+  afSquadHome: Map<string, AfSquadPlayer> = new Map(),
+  afSquadAway: Map<string, AfSquadPlayer> = new Map(),
 ) {
   function normName(n: string) {
     return (n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -483,11 +345,10 @@ async function buildPlayers(
       pkGoals: 0,
       form: 'ok' as const,
     };
-    // 0. API-Sports for rate stats (fouls, shots) + ESPN roster for counting stats (goals, assists, appearances, cards)
+    // API-Sports global index — fallback when squad stats don't cover this player
     const as = lookupApiSports(apiSportsIdx, name);
     const roster = lookupRoster(name);
     if (as && as.games >= 3) {
-      // Use ESPN roster for counting stats when available (more reliable than API-Sports cross-competition data)
       const goals       = roster ? roster.goals       : as.goals;
       const assists     = roster ? roster.assists      : as.assists;
       const appearances = roster ? roster.appearances  : as.games;
@@ -496,97 +357,24 @@ async function buildPlayers(
       const gaPerGame   = appearances > 0 ? +((goals + assists) / appearances).toFixed(2) : defaults.gaPerGame;
       return {
         ...defaults,
-        mins:            as.minsPerGame    || defaults.mins,
-        goals,
-        assists,
-        gaPerGame,
-        shotsPerGame:    as.shotsPerGame   || defaults.shotsPerGame,
-        sotPerGame:      as.sotPerGame     || defaults.sotPerGame,
-        foulsPerGame:    as.foulsPerGame   || defaults.foulsPerGame,
+        mins:            as.minsPerGame     || defaults.mins,
+        goals, assists, gaPerGame,
+        shotsPerGame:    as.shotsPerGame    || defaults.shotsPerGame,
+        sotPerGame:      as.sotPerGame      || defaults.sotPerGame,
+        foulsPerGame:    as.foulsPerGame    || defaults.foulsPerGame,
         foulsWonPerGame: as.foulsWonPerGame || defaults.foulsWonPerGame,
-        yellowCards,
-        redCards,
-        appearances,
+        yellowCards, redCards, appearances,
         pkGoals:         as.pkGoals,
         hasRealData:     true,
       };
     }
 
-    // 1. Understat (top 5 leagues — goals, assists, shots, xG)
-    const fb = lookupPlayer(fbrefIdx, name);
-    if (fb && fb.games >= 3) {
-      const result = {
-        ...defaults,
-        understatId: fb.id ?? '',
-        mins: fb.avgMins || defaults.mins,
-        goals: fb.goals, assists: fb.assists, gaPerGame: fb.gaPerGame,
-        shotsPerGame: fb.shotsPerGame || defaults.shotsPerGame,
-        sotPerGame: fb.sotPerGame || defaults.sotPerGame,
-        foulsPerGame: fb.foulsPerGame || defaults.foulsPerGame,
-        foulsWonPerGame: fb.foulsWonPerGame || defaults.foulsWonPerGame,
-        tacklesPerGame: fb.tacklesPerGame || defaults.tacklesPerGame,
-        yellowCards: fb.yellowCards,
-        redCards: fb.redCards ?? 0,
-        appearances: fb.games,
-        pkGoals: fb.penaltyGoals ?? 0,
-      };
-      // 2. FBref overlay — covers ALL competitions (Big5 + CL + EL).
-      // Prefer FBref totals over Understat domestic-only for goals/assists/appearances/cards.
-      const fb2 = lookupFBref(fbrefV2Idx, name);
-      if (fb2 && fb2.games >= 3) {
-        result.goals       = fb2.goals;
-        result.assists     = fb2.assists;
-        result.appearances = fb2.games;
-        result.gaPerGame   = fb2.games > 0 ? +((fb2.goals + fb2.assists) / fb2.games).toFixed(2) : result.gaPerGame;
-        result.yellowCards = fb2.yellowCards;
-        result.redCards    = fb2.redCards;
-        result.pkGoals     = fb2.pkGoals ?? 0;
-        if (!result.foulsPerGame)    result.foulsPerGame    = fb2.foulsPerGame;
-        if (!result.foulsWonPerGame) result.foulsWonPerGame = fb2.foulsWonPerGame;
-        if (fb2.sotPerGame > 0)      result.sotPerGame      = fb2.sotPerGame;
-      }
-      return { ...result, hasRealData: true };
-    }
-
-    // 2. FBref only (covers CL and players not in Understat top-5)
-    const fb2 = lookupFBref(fbrefV2Idx, name);
-    if (fb2 && fb2.games >= 3) {
-      const gaPerGame = fb2.games > 0 ? +((fb2.goals + fb2.assists) / fb2.games).toFixed(2) : defaults.gaPerGame;
-      return {
-        ...defaults,
-        mins: fb2.minsPerGame || defaults.mins,
-        goals: fb2.goals, assists: fb2.assists, gaPerGame,
-        shotsPerGame: fb2.shotsPerGame || defaults.shotsPerGame,
-        // Use real FBref SoT; fall back to shots*0.37 estimate only if SoT unavailable
-        sotPerGame: fb2.sotPerGame || (fb2.shotsPerGame ? +(fb2.shotsPerGame * 0.37).toFixed(2) : defaults.sotPerGame),
-        foulsPerGame: fb2.foulsPerGame || defaults.foulsPerGame,
-        foulsWonPerGame: fb2.foulsWonPerGame || defaults.foulsWonPerGame,
-        yellowCards: fb2.yellowCards || defaults.yellowCards,
-        redCards: fb2.redCards ?? 0,
-        appearances: fb2.games,
-        pkGoals: fb2.pkGoals ?? 0,
-        hasRealData: true,
-      };
-    }
-
-    // 3. Position defaults (last resort)
+    // Position defaults (last resort)
     return { ...defaults, hasRealData: false };
   }
 
-  // Pre-fetch game histories for all players in both lineups
   const homeStarters = homeLineup.lineup || homeLineup.startingEleven || [];
   const awayStarters = awayLineup.lineup || awayLineup.startingEleven || [];
-  const allPlayers = [...homeStarters, ...awayStarters].map(p => playerDefaults(p));
-  const uniqueIds = Array.from(new Set(allPlayers.map(p => p.understatId).filter(Boolean)));
-
-  const gamesMap = new Map<string, any[]>();
-  await Promise.allSettled(
-    uniqueIds.map(async (id, idx) => {
-      await new Promise(r => setTimeout(r, idx * 150));
-      const games = await fetchPlayerGames(id);
-      if (games.length) gamesMap.set(id, games);
-    })
-  );
 
   // ── Positional opponent matching ─────────────────────────────────────────
   // targets = opposing positions to look for, count = how many names to return
@@ -663,8 +451,48 @@ async function buildPlayers(
     }).slice(0, 5);
   }
 
-  function buildSide(starters: any[], opp: any[], afHistory: Map<string, PlayerGameStat[]>) {
-    const players    = starters.map(p => playerDefaults(p));
+  function buildSide(starters: any[], opp: any[], afHistory: Map<string, PlayerGameStat[]>, afSquad: Map<string, AfSquadPlayer>) {
+    function normN(n: string) {
+      return (n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    function lookupSquad(name: string): AfSquadPlayer | null {
+      const key = normN(name);
+      if (afSquad.has(key)) return afSquad.get(key)!;
+      const parts = key.split(' ');
+      const last = parts[parts.length - 1];
+      if (last.length > 3) {
+        for (const [k, v] of Array.from(afSquad)) {
+          if (k === last || k.endsWith(' ' + last)) return v;
+        }
+      }
+      return null;
+    }
+
+    // Apply squad stats (paid API, team-specific) as primary source, overriding global index
+    function applySquad(base: any): any {
+      const sq = lookupSquad(base.name);
+      if (!sq || sq.games < 3) return base;
+      const roster = lookupRoster(base.name);
+      const goals       = roster?.goals       ?? sq.goals;
+      const assists     = roster?.assists      ?? sq.assists;
+      const yellowCards = roster?.yellowCards  ?? sq.yellowCards;
+      const appearances = roster?.appearances  ?? sq.games;
+      const gaPerGame   = appearances > 0 ? +((goals + assists) / appearances).toFixed(2) : base.gaPerGame;
+      return {
+        ...base,
+        mins:            sq.minsPerGame     || base.mins,
+        goals, assists, gaPerGame,
+        shotsPerGame:    sq.shotsPerGame    || base.shotsPerGame,
+        sotPerGame:      sq.sotPerGame      || base.sotPerGame,
+        foulsPerGame:    sq.foulsPerGame    || base.foulsPerGame,
+        foulsWonPerGame: sq.foulsWonPerGame || base.foulsWonPerGame,
+        yellowCards, redCards: sq.redCards,
+        appearances, pkGoals: sq.pkGoals,
+        hasRealData: true,
+      };
+    }
+
+    const players    = starters.map(p => applySquad(playerDefaults(p)));
     const oppPlayers = opp.map(p => playerDefaults(p));
 
     // ── API-Football real last-5 helpers (highest priority) ────────────────
@@ -727,13 +555,7 @@ async function buildPlayers(
       return espnLast5(espnId, field, threshold);
     }
 
-    function getLast5(p: any, stat: 'goals' | 'assists' | 'shots2' | 'shots1'): boolean[] | null {
-      const games = p.understatId ? gamesMap.get(p.understatId) : undefined;
-      if (games?.length) return gamesLast5(games, stat);
-      return null;
-    }
-
-    // Season average for the displayed number — ESPN history (min 3g) or FBref/API-Sports default.
+    // Season average for the displayed number — ESPN history (min 3g) or API-Sports default.
     // AF last-5 is intentionally excluded here: it covers only 5 games across ALL competitions,
     // so one intense CL game can double a defender's fouls average. Use AF only for dots.
     function bestRate(_name: string, espnId: string, _afField: keyof PlayerGameStat, fallback: number): number {
@@ -774,9 +596,9 @@ async function buildPlayers(
         const sh  = bestRate(p.name, p.espnId, 'shots', p.shotsPerGame);
         return {
           name: p.name, mins: p.mins, sotPerGame: +sot.toFixed(2),
-          last5SoT:   afLast5(p.name, 'sot', 1) ?? espnLast5Safe(p.espnId, 'sot', 1) ?? getLast5(p, 'shots1') ?? seededLast5(p.name, 'sot', sot, 1),
+          last5SoT:   afLast5(p.name, 'sot', 1) ?? espnLast5Safe(p.espnId, 'sot', 1) ?? seededLast5(p.name, 'sot', sot, 1),
           shotsPerGame: +sh.toFixed(2),
-          last5Shots: afLast5(p.name, 'shots', 2) ?? espnLast5Safe(p.espnId, 'shots', 2) ?? getLast5(p, 'shots2') ?? seededLast5(p.name, 'shots', sh, 2),
+          last5Shots: afLast5(p.name, 'shots', 2) ?? espnLast5Safe(p.espnId, 'shots', 2) ?? seededLast5(p.name, 'shots', sh, 2),
           form: p.form,
         };
       }),
@@ -786,8 +608,8 @@ async function buildPlayers(
         return {
           name: p.name, mins: p.mins, goals: p.goals, assists: p.assists,
           gaPerGame: +p.gaPerGame.toFixed(2),
-          last5Goals:   afLast5(p.name, 'goals', 1) ?? espnLast5Safe(p.espnId, 'goals', 1) ?? getLast5(p, 'goals')   ?? seededLast5(p.name, 'goals',   goalRate,   1),
-          last5Assists: afLast5(p.name, 'assists', 1) ?? espnLast5Safe(p.espnId, 'assists', 1) ?? getLast5(p, 'assists') ?? seededLast5(p.name, 'assists', assistRate, 1),
+          last5Goals:   afLast5(p.name, 'goals', 1) ?? espnLast5Safe(p.espnId, 'goals', 1) ?? seededLast5(p.name, 'goals',   goalRate,   1),
+          last5Assists: afLast5(p.name, 'assists', 1) ?? espnLast5Safe(p.espnId, 'assists', 1) ?? seededLast5(p.name, 'assists', assistRate, 1),
           form: p.form,
         };
       }),
@@ -813,20 +635,23 @@ async function buildPlayers(
     };
   }
 
-  const lineupIds = allPlayers.map(p => p.espnId).filter(Boolean);
-  const matchedIds = lineupIds.filter(id => espnHistory.has(id));
-  // Find a player with non-zero stats to verify data quality
+  const allLineupPlayers = [...homeStarters, ...awayStarters].map((p: any) => ({
+    espnId: (p.espnId ?? '') as string,
+    name: p.name || p.person?.name || '',
+  }));
+  const lineupIds = allLineupPlayers.map(p => p.espnId).filter(Boolean);
+  const matchedIds = lineupIds.filter((id: string) => espnHistory.has(id));
   let nonZeroSample = 'none';
   for (const id of matchedIds) {
     const games = espnHistory.get(id)!;
     const hasNonZero = games.some(g => g.fc > 0 || g.fd > 0 || g.goals > 0 || g.sot > 0);
     if (hasNonZero) {
-      const p = allPlayers.find(p => p.espnId === id);
-      nonZeroSample = `player:${p?.name ?? id} games:${JSON.stringify(games)}`;
+      const p = allLineupPlayers.find(p => p.espnId === id);
+      nonZeroSample = `player:${p?.name ?? id}`;
       break;
     }
   }
-  const diag = `espnIds in lineup:${lineupIds.length} matched:${matchedIds.length} | nonZero:${nonZeroSample}`;
+  const diag = `espnIds:${lineupIds.length} matched:${matchedIds.length} | nonZero:${nonZeroSample}`;
 
   // Log how many lineup players have AF history (name-match check)
   const homeMatched = homeStarters.filter((p: any) => {
@@ -839,7 +664,7 @@ async function buildPlayers(
   }).length;
   const afDiag = `AF matched: home ${homeMatched}/${homeStarters.length}, away ${awayMatched}/${awayStarters.length}`;
 
-  return { home: buildSide(homeStarters, awayStarters, afHistoryHome), away: buildSide(awayStarters, homeStarters, afHistoryAway), diag: diag + ' | ' + afDiag };
+  return { home: buildSide(homeStarters, awayStarters, afHistoryHome, afSquadHome), away: buildSide(awayStarters, homeStarters, afHistoryAway, afSquadAway), diag: diag + ' | ' + afDiag };
 }
 
 // ── Date helpers ───────────────────────────────────────────────────────────
@@ -910,11 +735,7 @@ async function runSync() {
 
   log(`[sync] Running — ${new Date().toISOString()}`);
 
-  // Load stats indexes
-  const fbrefIdx = await getStatsIndex();
-  log(`[sync] Understat index: ${fbrefIdx.size} name keys`);
-  const fbrefV2Idx = await getFBrefIndex();
-  log(`[sync] FBref index: ${fbrefV2Idx.size} name keys`);
+  // Load paid API-Sports global index (fallback for players not covered by squad stats)
   const apiSportsIdx = await getApiSportsIndex();
   log(`[sync] API-Sports index: ${apiSportsIdx.size} name keys`);
 
@@ -1156,16 +977,20 @@ async function runSync() {
     awayRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
     log(`[roster] ESPN domestic stats: ${combinedRosterMap.size} players`);
 
-    // Fetch real last-5-game player stats from API-Football fixtures
+    // Fetch real last-8-game dots + season squad stats from paid API-Football
     const afApiKey = (process.env.API_SPORTS_KEY ?? '').trim();
-    const [homeAfResult, awayAfResult] = await Promise.all([
+    const [homeAfResult, awayAfResult, homeSquadResult, awaySquadResult] = await Promise.all([
       afApiKey ? fetchApiFootballTeamHistory(homeName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), debug: 'no key' }),
       afApiKey ? fetchApiFootballTeamHistory(awayName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), debug: 'no key' }),
+      afApiKey ? fetchApiFootballSquadStats(homeName, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
+      afApiKey ? fetchApiFootballSquadStats(awayName, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
     ]);
     log(`[af-history] home: ${homeAfResult.debug}`);
     log(`[af-history] away: ${awayAfResult.debug}`);
+    log(`[af-squad] home: ${homeSquadResult.debug}`);
+    log(`[af-squad] away: ${awaySquadResult.debug}`);
 
-    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, fbrefIdx, espnHistory, fbrefV2Idx, apiSportsIdx, combinedRosterMap, homeAfResult.history, awayAfResult.history);
+    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, espnHistory, apiSportsIdx, combinedRosterMap, homeAfResult.history, awayAfResult.history, homeSquadResult.stats, awaySquadResult.stats);
     log(`[buildPlayers] ${players.diag}`);
 
     const matchData = {

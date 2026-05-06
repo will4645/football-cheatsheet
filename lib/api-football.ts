@@ -550,21 +550,19 @@ export async function fetchApiFootballTeamHistory(
     const teamId: number = best?.team?.id;
     if (!teamId) return { history: new Map(), debug: `no id: ${searchName}` };
 
-    // Prefer domestic-league-only fixtures so dots match domestic stats sites
+    // Fetch 8 domestic fixtures so players who missed one game still have 5 real data points
     const fixtureLeagueFilter = leagueId ? `&league=${leagueId}` : '';
-    let fd = await afFetch(`/fixtures?team=${teamId}&last=5&season=2025${fixtureLeagueFilter}`, apiKey);
+    let fd = await afFetch(`/fixtures?team=${teamId}&last=8&season=2025${fixtureLeagueFilter}`, apiKey);
     let fixtures: any[] = fd?.response ?? [];
     if (!fixtures.length && fixtureLeagueFilter) {
-      // No domestic fixtures found — fall back to all competitions
-      fd = await afFetch(`/fixtures?team=${teamId}&last=5&season=2025`, apiKey);
+      fd = await afFetch(`/fixtures?team=${teamId}&last=8&season=2025`, apiKey);
       fixtures = fd?.response ?? [];
     }
     if (!fixtures.length) {
-      // Fallback to 2024 season (covers summer-start leagues like MLS, Brasileirão, J-League)
-      const fd24League = await afFetch(`/fixtures?team=${teamId}&last=5&season=2024${fixtureLeagueFilter}`, apiKey);
+      const fd24League = await afFetch(`/fixtures?team=${teamId}&last=8&season=2024${fixtureLeagueFilter}`, apiKey);
       fixtures = fd24League?.response ?? [];
       if (!fixtures.length) {
-        const fd24 = await afFetch(`/fixtures?team=${teamId}&last=5&season=2024`, apiKey);
+        const fd24 = await afFetch(`/fixtures?team=${teamId}&last=8&season=2024`, apiKey);
         fixtures = fd24?.response ?? [];
       }
     }
@@ -664,4 +662,112 @@ export async function fetchEspnRosterStats(
     console.warn(`[roster] ESPN ${leagueSlug} team ${teamId}: ${err.message}`);
   }
   return result;
+}
+
+// ── API-Football per-team season player stats (paid API, no scraping) ────────
+export interface AfSquadPlayer {
+  name: string;
+  games: number;
+  minsPerGame: number;
+  goals: number;
+  assists: number;
+  shotsPerGame: number;
+  sotPerGame: number;
+  foulsPerGame: number;
+  foulsWonPerGame: number;
+  yellowCards: number;
+  redCards: number;
+  pkGoals: number;
+}
+
+export async function fetchApiFootballSquadStats(
+  teamName: string,
+  apiKey: string,
+): Promise<{ stats: Map<string, AfSquadPlayer>; debug: string }> {
+  if (!apiKey) return { stats: new Map(), debug: 'no key' };
+  const result = new Map<string, AfSquadPlayer>();
+  try {
+    const searchName = cleanForSearch(teamName);
+    const leagueId = guessDomesticLeagueId(teamName);
+    const leagueParam = leagueId ? `&league=${leagueId}` : '';
+
+    let td = await afFetch(`/teams?search=${encodeURIComponent(searchName)}${leagueParam}`, apiKey);
+    let teams: any[] = td?.response ?? [];
+    if (!teams.length && leagueParam) {
+      td = await afFetch(`/teams?search=${encodeURIComponent(searchName)}`, apiKey);
+      teams = td?.response ?? [];
+    }
+    if (!teams.length) {
+      const firstWord = searchName.split(' ').find(w => w.length >= 5) ?? searchName.split(' ')[0];
+      td = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}${leagueParam}`, apiKey);
+      teams = td?.response ?? [];
+    }
+    if (!teams.length) return { stats: new Map(), debug: `no team: ${searchName}` };
+
+    const tNorm = norm(teamName);
+    const best = teams.find(t => {
+      const n = norm(t.team?.name ?? '');
+      return n === tNorm || tNorm.split(' ').filter(w => w.length > 3).some(w => n.includes(w));
+    }) ?? teams[0];
+    const teamId: number = best?.team?.id;
+    if (!teamId) return { stats: new Map(), debug: `no id: ${searchName}` };
+
+    let pd = await afFetch(`/players?team=${teamId}&season=2025`, apiKey);
+    let players: any[] = pd?.response ?? [];
+    if (!players.length) {
+      pd = await afFetch(`/players?team=${teamId}&season=2024`, apiKey);
+      players = pd?.response ?? [];
+    }
+    if (!players.length) return { stats: new Map(), debug: `no players: ${teamId}` };
+
+    for (const entry of players) {
+      const player = entry.player;
+      const stats: any[] = entry.statistics ?? [];
+      if (!stats.length) continue;
+
+      // Prefer domestic league entry for per-game rates; fall back to first
+      const domestic = leagueId ? stats.find((s: any) => s.league?.id === leagueId) : null;
+      const rateSource = domestic ?? stats[0];
+      const rateGames = rateSource?.games?.appearences || 1;
+
+      // Sum totals across all competitions
+      let totalGames = 0, totalMins = 0, totalGoals = 0, totalAssists = 0;
+      let totalYellow = 0, totalRed = 0, totalPk = 0;
+      for (const s of stats) {
+        totalGames   += s.games?.appearences ?? 0;
+        totalMins    += s.games?.minutes     ?? 0;
+        totalGoals   += s.goals?.total       ?? 0;
+        totalAssists += s.goals?.assists     ?? 0;
+        totalYellow  += s.cards?.yellow      ?? 0;
+        totalRed     += s.cards?.red         ?? 0;
+        totalPk      += s.penalty?.scored    ?? 0;
+      }
+      if (totalGames < 1) continue;
+
+      const p: AfSquadPlayer = {
+        name:            player.name ?? '',
+        games:           totalGames,
+        minsPerGame:     Math.round(totalMins / totalGames),
+        goals:           totalGoals,
+        assists:         totalAssists,
+        shotsPerGame:    +((rateSource?.shots?.total    ?? 0) / rateGames).toFixed(2),
+        sotPerGame:      +((rateSource?.shots?.on       ?? 0) / rateGames).toFixed(2),
+        foulsPerGame:    +((rateSource?.fouls?.committed ?? 0) / rateGames).toFixed(2),
+        foulsWonPerGame: +((rateSource?.fouls?.drawn    ?? 0) / rateGames).toFixed(2),
+        yellowCards:     totalYellow,
+        redCards:        totalRed,
+        pkGoals:         totalPk,
+      };
+
+      const key = norm(p.name);
+      result.set(key, p);
+      const parts = key.split(' ');
+      const last = parts[parts.length - 1];
+      if (last.length > 3 && !result.has(last)) result.set(last, p);
+    }
+
+    return { stats: result, debug: `squad ${teamId}(${best?.team?.name}): ${players.length} players, ${result.size} keys` };
+  } catch (e: any) {
+    return { stats: new Map(), debug: `squad err: ${e.message}` };
+  }
 }
