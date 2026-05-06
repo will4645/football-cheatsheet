@@ -718,12 +718,21 @@ export async function fetchApiFootballSquadStats(
     const teamId: number = best?.team?.id;
     if (!teamId) return { stats: new Map(), debug: `no id: ${searchName}` };
 
-    let pd = await afFetch(`/players?team=${teamId}&season=2025`, apiKey);
-    let players: any[] = pd?.response ?? [];
-    if (!players.length) {
-      pd = await afFetch(`/players?team=${teamId}&season=2024`, apiKey);
-      players = pd?.response ?? [];
+    async function fetchAllPages(season: number): Promise<any[]> {
+      const all: any[] = [];
+      let page = 1;
+      while (true) {
+        const pd = await afFetch(`/players?team=${teamId}&season=${season}&page=${page}`, apiKey);
+        const results: any[] = pd?.response ?? [];
+        all.push(...results);
+        const totalPages: number = pd?.paging?.total ?? 1;
+        if (page >= totalPages) break;
+        page++;
+      }
+      return all;
     }
+    let players = await fetchAllPages(2025);
+    if (!players.length) players = await fetchAllPages(2024);
     if (!players.length) return { stats: new Map(), debug: `no players: ${teamId}` };
 
     for (const entry of players) {
