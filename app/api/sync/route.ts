@@ -1093,7 +1093,16 @@ async function runSync() {
 // ── Route handler ──────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authHeader = req.headers.get('authorization');
+    return NextResponse.json({
+      error: 'Unauthorized',
+      debug: {
+        authHeaderPresent: !!authHeader,
+        authHeaderPrefix: authHeader ? authHeader.substring(0, 10) : null,
+        cronSecretSet: !!process.env.CRON_SECRET,
+        cronSecretLength: (process.env.CRON_SECRET ?? '').length,
+      },
+    }, { status: 401 });
   }
   try {
     const logs = await runSync();
