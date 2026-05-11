@@ -25,11 +25,8 @@ export async function POST(req: NextRequest) {
         : null);
     if (!clerkUserId) return;
 
-    const rawEnd =
-      (sub as any).current_period_end ??
-      (sub as any).billing?.current_period?.end ??
-      (sub as any).billing_details?.current_period?.end;
-    console.log('subscription keys:', Object.keys(sub), 'current_period_end:', rawEnd, 'billing:', (sub as any).billing);
+    // billing.current_period.end is a Unix timestamp in API 2026-04-22.dahlia
+    const rawEnd = (sub as any).billing?.current_period?.end ?? (sub as any).current_period_end;
     const currentPeriodEnd =
       typeof rawEnd === 'number' ? new Date(rawEnd * 1000) :
       rawEnd ? new Date(rawEnd) :
@@ -44,6 +41,10 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  async function retrieveWithBilling(subId: string) {
+    return stripe.subscriptions.retrieve(subId, { expand: ['billing'] } as any);
+  }
+
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
           ? session.subscription
           : (session.subscription as any)?.id;
         if (!subId) break;
-        const sub = await stripe.subscriptions.retrieve(subId);
+        const sub = await retrieveWithBilling(subId);
         if (!sub.metadata?.clerkUserId && session.metadata?.clerkUserId) {
           await stripe.subscriptions.update(subId, {
             metadata: { clerkUserId: session.metadata.clerkUserId },
@@ -65,7 +66,9 @@ export async function POST(req: NextRequest) {
       }
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        await handleSubscription(event.data.object as Stripe.Subscription);
+        const eventSub = event.data.object as Stripe.Subscription;
+        const sub = await retrieveWithBilling(eventSub.id);
+        await handleSubscription(sub);
         break;
       }
     }
