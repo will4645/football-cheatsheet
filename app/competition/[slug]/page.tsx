@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { slugToConfig } from '@/lib/competitions';
 
 interface AnyMatch {
@@ -26,9 +26,18 @@ export default function CompetitionPage() {
   const params = useParams();
   const slug = params.slug as string;
   const comp = slugToConfig(slug);
+  const router = useRouter();
 
   const [matches, setMatches] = useState<AnyMatch[]>([]);
   const [loaded, setLoaded] = useState(false);
+
+  // Subscription gate
+  useEffect(() => {
+    fetch('/api/user/subscription')
+      .then(r => r.json())
+      .then(({ subscribed }) => { if (!subscribed) router.replace('/pricing'); })
+      .catch(() => {});
+  }, [router]);
 
   useEffect(() => {
     if (!comp) return;
@@ -69,7 +78,7 @@ export default function CompetitionPage() {
     <div className="min-h-screen p-6 lg:p-10" style={{ background: '#080c14' }}>
       <div className="max-w-4xl mx-auto">
         <div className="mb-8 flex items-center gap-4">
-          <Link href="/" className="text-gray-600 hover:text-gray-400 transition-colors text-sm">
+          <Link href="/dashboard" className="text-gray-600 hover:text-gray-400 transition-colors text-sm">
             ← Back
           </Link>
           <div>

@@ -85,6 +85,11 @@ const DEFAULTS = {
   foulsWon:       11.0,
   cardsFor:       1.8,
   cardsAgainst:   1.8,
+  tacklesFor:     18.0, tacklesAgainst:     18.0, over345Tackles:    60,
+  offsidesFor:    2.0,  offsidesAgainst:    2.0,  over35Offsides:    50,
+  freeKicksFor:   10.0, freeKicksAgainst:   10.0, over195FreeKicks:  60,
+  goalKicksFor:   5.5,  goalKicksAgainst:   5.5,  over115GoalKicks:  55,
+  throwInsFor:    15.0, throwInsAgainst:    15.0, over295ThrowIns:   55,
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -149,6 +154,11 @@ export function buildTeamStats(apiStats: any): TeamData['stats'] {
     cardsFor:       +cardsFor.toFixed(2),
     cardsAgainst:   +cardsAgainst.toFixed(2),
     over45Cards:    overProb(cardsFor + cardsAgainst, 4.5),
+    tacklesFor:     DEFAULTS.tacklesFor,     tacklesAgainst:     DEFAULTS.tacklesAgainst,     over345Tackles:    DEFAULTS.over345Tackles,
+    offsidesFor:    DEFAULTS.offsidesFor,    offsidesAgainst:    DEFAULTS.offsidesAgainst,    over35Offsides:    DEFAULTS.over35Offsides,
+    freeKicksFor:   DEFAULTS.freeKicksFor,   freeKicksAgainst:   DEFAULTS.freeKicksAgainst,   over195FreeKicks:  DEFAULTS.over195FreeKicks,
+    goalKicksFor:   DEFAULTS.goalKicksFor,   goalKicksAgainst:   DEFAULTS.goalKicksAgainst,   over115GoalKicks:  DEFAULTS.over115GoalKicks,
+    throwInsFor:    DEFAULTS.throwInsFor,    throwInsAgainst:    DEFAULTS.throwInsAgainst,    over295ThrowIns:   DEFAULTS.over295ThrowIns,
   };
 }
 
@@ -362,5 +372,5 @@ export function buildPlayers(
     };
   });
 
-  return { defensive, offensive, shooting, goalscoring, cards };
+  return { defensive, offensive, shooting, goalscoring, cards, gk: [] };
 }

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { matchData as staticMatchData, TeamData, Form, CardsPlayer } from '@/data/match';
+import { matchData as staticMatchData, TeamData, Form, CardsPlayer, GkPlayer } from '@/data/match';
 import { nameToSlug, COMPETITION_CONFIG } from '@/lib/competitions';
 
 function competitionColor(name: string): string {
@@ -79,6 +79,11 @@ function TeamStatsPanel({ team, compColor }: { team: TeamData; compColor: string
         <StatGroup l1="Shots on Target For" v1={stats.sotFor} l2="Shots on Target Against" v2={stats.sotAgainst} overLabel="Over 6.5 Shots on Target" prob={stats.over95SoT} />
         <StatGroup l1="Fouls Committed" v1={stats.foulsCommitted} l2="Fouls Won" v2={stats.foulsWon} overLabel="Over 15.5 Fouls" prob={stats.over155Fouls} />
         <StatGroup l1="Cards For" v1={stats.cardsFor} l2="Cards Against" v2={stats.cardsAgainst} overLabel="Over 4.5 Cards" prob={stats.over45Cards} />
+        <StatGroup l1="Tackles For" v1={stats.tacklesFor} l2="Tackles Against" v2={stats.tacklesAgainst} overLabel="Over 34.5 Tackles" prob={stats.over345Tackles} />
+        <StatGroup l1="Offsides For" v1={stats.offsidesFor} l2="Offsides Against" v2={stats.offsidesAgainst} overLabel="Over 3.5 Offsides" prob={stats.over35Offsides} />
+        <StatGroup l1="Free Kicks For" v1={stats.freeKicksFor} l2="Free Kicks Against" v2={stats.freeKicksAgainst} overLabel="Over 19.5 Free Kicks" prob={stats.over195FreeKicks} />
+        <StatGroup l1="Goal Kicks For" v1={stats.goalKicksFor} l2="Goal Kicks Against" v2={stats.goalKicksAgainst} overLabel="Over 11.5 Goal Kicks" prob={stats.over115GoalKicks} />
+        <StatGroup l1="Throw Ins For" v1={stats.throwInsFor} l2="Throw Ins Against" v2={stats.throwInsAgainst} overLabel="Over 29.5 Throw Ins" prob={stats.over295ThrowIns} />
       </div>
     </div>
   );
@@ -126,7 +131,7 @@ function StatCol({ width, header, right = false, children }: {
 }
 
 /* ── Player tables ───────────────────────────────────── */
-type Tab = 'defensive' | 'offensive' | 'shooting' | 'goalscoring' | 'cards';
+type Tab = 'defensive' | 'offensive' | 'shooting' | 'goalscoring' | 'cards' | 'gk';
 
 function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
   const c = team.primaryColor;
@@ -254,6 +259,25 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
     );
   }
 
+  if (tab === 'gk') {
+    const ps: GkPlayer[] = team.players.gk ?? [];
+    if (!ps.length) return <p className="text-[11px] text-gray-600 py-4">No goalkeeper data</p>;
+    return (
+      <div className="flex gap-1.5">
+        <div className="flex flex-col flex-1 min-w-[120px]">
+          <div className="flex items-end h-9 pb-1.5 text-[9px] uppercase tracking-wide text-gray-500">Goalkeeper</div>
+          {ps.map((p, i) => <div key={i} className="flex items-center h-8"><span className="text-[11px] font-medium text-white truncate">{p.name}</span></div>)}
+        </div>
+        <StatCol width="w-[68px]" header="Saves p/g" right>
+          {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[11px] font-semibold text-white`}>{p.savesPerGame.toFixed(2)}</div>)}
+        </StatCol>
+        <StatCol width="w-[90px]" header="Last 5 (3+ Saves)">
+          {ps.map((p, i) => <div key={i} className={ROW}><Last5Dots data={p.last5Saves} hitColor="#22c55e" missColor="#ef4444" /></div>)}
+        </StatCol>
+      </div>
+    );
+  }
+
   // goalscoring
   const ps = team.players.goalscoring;
   return (
@@ -335,6 +359,7 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
     { key: 'shooting',    label: 'Shooting' },
     { key: 'goalscoring', label: 'Goalscoring' },
     { key: 'cards',       label: 'Cards' },
+    { key: 'gk',          label: 'GK' },
   ];
 
   const activeTeamData = activeTeam === 'home' ? homeTeam : awayTeam;
@@ -424,12 +449,12 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
               <div className="flex-1 grid grid-cols-2 gap-3 lg:flex lg:flex-col lg:gap-4">
                 <div>
                   <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Exp. Fouls</p>
-                  <p className="text-base font-bold text-white">{referee.matchAvg?.fouls ?? '—'}</p>
+                  <p className="text-base font-bold text-white">{referee.matchAvg?.fouls ?? '-'}</p>
                   <p className="text-[9px] text-gray-600 mt-0.5">Match avg</p>
                 </div>
                 <div>
                   <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Exp. Cards</p>
-                  <p className="text-base font-bold text-yellow-400">{referee.matchAvg?.cards ?? '—'}</p>
+                  <p className="text-base font-bold text-yellow-400">{referee.matchAvg?.cards ?? '-'}</p>
                   <p className="text-[9px] text-gray-600 mt-0.5">Match avg</p>
                 </div>
               </div>

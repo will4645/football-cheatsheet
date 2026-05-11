@@ -1,14 +1,23 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, notFound } from 'next/navigation';
+import { useParams, notFound, useRouter } from 'next/navigation';
 import MatchSheet from '@/components/MatchSheet';
 
 export default function MatchPage() {
   const params = useParams();
   const id = params.id as string;
+  const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [status, setStatus] = useState<'loading' | 'found' | 'notfound'>('loading');
+
+  // Subscription gate
+  useEffect(() => {
+    fetch('/api/user/subscription')
+      .then(r => r.json())
+      .then(({ subscribed }) => { if (!subscribed) router.replace('/pricing'); })
+      .catch(() => {});
+  }, [router]);
 
   useEffect(() => {
     function load() {

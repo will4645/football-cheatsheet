@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiFootballLineups, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, guessDomesticLeague, PlayerGameStat } from '@/lib/api-football';
-import type { TeamSeasonStats, EspnRosterPlayer, AfSquadPlayer } from '@/lib/api-football';
+import { getApiFootballLineups, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, guessDomesticLeague, PlayerGameStat } from '@/lib/api-football';
+import type { TeamSeasonStats, EspnRosterPlayer, AfSquadPlayer, AfTeamFixtureStats } from '@/lib/api-football';
 import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
 import type { ApiSportsPlayer } from '@/lib/api-sports';
 
@@ -231,6 +231,8 @@ function buildTeamStats(
   teamId: number,
   espnStats: TeamSeasonStats | null,
   oppEspnStats: TeamSeasonStats | null,
+  afStats: AfTeamFixtureStats | null = null,
+  oppAfStats: AfTeamFixtureStats | null = null,
 ): ReturnType<typeof defaultStats> {
   // Goals from football-data.org (most accurate — confirmed match scores)
   let goalsFor = 0, goalsAgainst = 0, count = 0;
@@ -247,33 +249,59 @@ function buildTeamStats(
 
   const e = espnStats;
   const o = oppEspnStats;
+  const af = afStats;
+  const oaf = oppAfStats;
 
-  // Use || (not ??) so ESPN-returned 0 (field lookup failure) falls through to default.
-  // Corners/shots/fouls can never genuinely be 0 over a season of football.
-  const cornersFor     = e?.cornersFor     || o?.cornersAgainst || 5.0;
-  const cornersAgainst = e?.cornersAgainst || o?.cornersFor     || 5.0;
-  const shotsFor       = e?.shotsFor       || o?.shotsAgainst   || 13.0;
-  const shotsAgainst   = e?.shotsAgainst   || o?.shotsFor       || 11.0;
-  const sotFor         = e?.sotFor         || o?.sotAgainst     || 4.5;
-  const sotAgainst     = e?.sotAgainst     || o?.sotFor         || 3.8;
-  const foulsCommitted = e?.foulsCommitted || o?.foulsWon       || 11.0;
-  const foulsWon       = e?.foulsWon       || o?.foulsCommitted || 11.0;
-  const cardsFor       = e?.cardsFor       || o?.cardsAgainst   || 1.8;
-  const cardsAgainst   = e?.cardsAgainst   || o?.cardsFor       || 1.8;
+  // Priority: AF fixture stats → ESPN season stats → opponent's mirrored stat → default
+  // AF fixture stats are most reliable as they come from the same source as player stats
+  const cornersFor      = af?.cornersFor     || e?.cornersFor      || o?.cornersAgainst   || oaf?.cornersFor     || 5.0;
+  const cornersAgainst  = oaf?.cornersFor    || e?.cornersAgainst  || o?.cornersFor       || af?.cornersFor      || 5.0;
+  const shotsFor        = af?.shotsFor       || e?.shotsFor        || o?.shotsAgainst     || oaf?.shotsFor       || 13.0;
+  const shotsAgainst    = oaf?.shotsFor      || e?.shotsAgainst    || o?.shotsFor         || af?.shotsFor        || 11.0;
+  const sotFor          = af?.sotFor         || e?.sotFor          || o?.sotAgainst       || oaf?.sotFor         || 4.5;
+  const sotAgainst      = oaf?.sotFor        || e?.sotAgainst      || o?.sotFor           || af?.sotFor          || 3.8;
+  // AF foulsFor = fouls committed by this team (= free kicks awarded to opponent)
+  // freeKicksFor = fouls drawn (won) = opponent's foulsFor
+  const foulsCommitted  = af?.foulsFor       || e?.foulsCommitted  || o?.foulsWon         || 11.0;
+  const foulsWon        = oaf?.foulsFor      || e?.foulsWon        || o?.foulsCommitted   || 11.0;
+  const cardsFor        = af?.yellowCardsFor || e?.cardsFor        || o?.cardsAgainst     || 1.8;
+  const cardsAgainst    = oaf?.yellowCardsFor|| e?.cardsAgainst    || o?.cardsFor         || 1.8;
+  const tacklesFor      = af?.tacklesFor     || e?.tacklesFor      || o?.tacklesAgainst   || oaf?.tacklesFor     || 18.0;
+  const tacklesAgainst  = oaf?.tacklesFor    || e?.tacklesAgainst  || o?.tacklesFor       || af?.tacklesFor      || 18.0;
+  const offsidesFor     = af?.offsidesFor    || e?.offsidesFor     || o?.offsidesAgainst  || oaf?.offsidesFor    || 2.0;
+  const offsidesAgainst = oaf?.offsidesFor   || e?.offsidesAgainst || o?.offsidesFor      || af?.offsidesFor     || 2.0;
+  // Free kicks: use AF foulsFor (committed fouls = free kicks conceded/given away)
+  // freeKicksFor = free kicks this team was awarded = opponent committed fouls
+  const freeKicksFor    = oaf?.foulsFor      || e?.freeKicksFor    || o?.freeKicksAgainst || foulsWon    || 10.0;
+  const freeKicksAgainst= af?.foulsFor       || e?.freeKicksAgainst|| o?.freeKicksFor     || foulsCommitted || 10.0;
+  const goalKicksFor    = af?.goalKicksFor    || oaf?.goalKicksFor   || e?.goalKicksFor    || o?.goalKicksAgainst || 5.5;
+  const goalKicksAgainst= oaf?.goalKicksFor  || af?.goalKicksFor    || e?.goalKicksAgainst|| o?.goalKicksFor     || 5.5;
+  const throwInsFor     = af?.throwInsFor    || oaf?.throwInsFor    || e?.throwInsFor     || o?.throwInsAgainst  || 15.0;
+  const throwInsAgainst = oaf?.throwInsFor   || af?.throwInsFor     || e?.throwInsAgainst || o?.throwInsFor      || 15.0;
 
   return {
     goalsFor: +avgFor.toFixed(2), goalsAgainst: +avgAgainst.toFixed(2),
-    over25Goals:   overProb(avgFor + avgAgainst, 2.5),
-    cornersFor:    +cornersFor.toFixed(2),    cornersAgainst: +cornersAgainst.toFixed(2),
-    over95Corners: overProb(cornersFor + cornersAgainst, 9.5),
-    shotsFor:      +shotsFor.toFixed(2),      shotsAgainst:   +shotsAgainst.toFixed(2),
-    over195Shots:  overProb(shotsFor + shotsAgainst, 19.5),
-    sotFor:        +sotFor.toFixed(2),        sotAgainst:     +sotAgainst.toFixed(2),
-    over95SoT:     overProb(sotFor + sotAgainst, 6.5),
-    foulsCommitted: +foulsCommitted.toFixed(2), foulsWon:      +foulsWon.toFixed(2),
-    over155Fouls:  overProb(foulsCommitted + foulsWon, 15.5),
-    cardsFor:      +cardsFor.toFixed(2),      cardsAgainst:   +cardsAgainst.toFixed(2),
-    over45Cards:   overProb(cardsFor + cardsAgainst, 4.5),
+    over25Goals:    overProb(avgFor + avgAgainst, 2.5),
+    cornersFor:     +cornersFor.toFixed(2),      cornersAgainst:    +cornersAgainst.toFixed(2),
+    over95Corners:  overProb(cornersFor + cornersAgainst, 9.5),
+    shotsFor:       +shotsFor.toFixed(2),        shotsAgainst:      +shotsAgainst.toFixed(2),
+    over195Shots:   overProb(shotsFor + shotsAgainst, 19.5),
+    sotFor:         +sotFor.toFixed(2),          sotAgainst:        +sotAgainst.toFixed(2),
+    over95SoT:      overProb(sotFor + sotAgainst, 6.5),
+    foulsCommitted: +foulsCommitted.toFixed(2),  foulsWon:          +foulsWon.toFixed(2),
+    over155Fouls:   overProb(foulsCommitted + foulsWon, 15.5),
+    cardsFor:       +cardsFor.toFixed(2),        cardsAgainst:      +cardsAgainst.toFixed(2),
+    over45Cards:    overProb(cardsFor + cardsAgainst, 4.5),
+    tacklesFor:     +tacklesFor.toFixed(2),      tacklesAgainst:    +tacklesAgainst.toFixed(2),
+    over345Tackles: overProb(tacklesFor + tacklesAgainst, 34.5),
+    offsidesFor:    +offsidesFor.toFixed(2),     offsidesAgainst:   +offsidesAgainst.toFixed(2),
+    over35Offsides: overProb(offsidesFor + offsidesAgainst, 3.5),
+    freeKicksFor:   +freeKicksFor.toFixed(2),    freeKicksAgainst:  +freeKicksAgainst.toFixed(2),
+    over195FreeKicks: overProb(freeKicksFor + freeKicksAgainst, 19.5),
+    goalKicksFor:   +goalKicksFor.toFixed(2),    goalKicksAgainst:  +goalKicksAgainst.toFixed(2),
+    over115GoalKicks: overProb(goalKicksFor + goalKicksAgainst, 11.5),
+    throwInsFor:    +throwInsFor.toFixed(2),      throwInsAgainst:   +throwInsAgainst.toFixed(2),
+    over295ThrowIns: overProb(throwInsFor + throwInsAgainst, 29.5),
   };
 }
 
@@ -285,6 +313,11 @@ function defaultStats() {
     sotFor: 4.5, sotAgainst: 3.8, over95SoT: 60,
     foulsCommitted: 11.0, foulsWon: 11.0, over155Fouls: 60,
     cardsFor: 1.8, cardsAgainst: 1.8, over45Cards: 40,
+    tacklesFor: 18.0, tacklesAgainst: 18.0, over345Tackles: 60,
+    offsidesFor: 2.0, offsidesAgainst: 2.0, over35Offsides: 50,
+    freeKicksFor: 10.0, freeKicksAgainst: 10.0, over195FreeKicks: 60,
+    goalKicksFor: 5.5, goalKicksAgainst: 5.5, over115GoalKicks: 55,
+    throwInsFor: 15.0, throwInsAgainst: 15.0, over295ThrowIns: 55,
   };
 }
 
@@ -433,22 +466,18 @@ async function buildPlayers(
     return found.join(', ');
   }
 
-  function top5(players: any[], key: string, excludeGK = true) {
-    const pool = (excludeGK ? players.filter(p => !p.isGK) : players).filter(p => p.hasRealData !== false);
-    // Sort by stat but prioritise players with >= 5 games to avoid small-sample flukes topping the list
+  function top10(players: any[], key: string, excludeGK = true) {
+    const pool = (excludeGK ? players.filter(p => !p.isGK) : players);
     return [...pool].sort((a, b) => {
-      const aGames = a.mins > 0 ? 1 : 0; // proxy: non-zero mins means real data
-      const bGames = b.mins > 0 ? 1 : 0;
       const aTotalGA = (a.goals ?? 0) + (a.assists ?? 0);
       const bTotalGA = (b.goals ?? 0) + (b.assists ?? 0);
       if (key === 'gaPerGame') {
-        // Penalise players with very few total G+A (likely small sample)
         const aScore = aTotalGA < 3 ? a[key] * 0.5 : a[key];
         const bScore = bTotalGA < 3 ? b[key] * 0.5 : b[key];
         return bScore - aScore;
       }
       return b[key] - a[key];
-    }).slice(0, 5);
+    }).slice(0, 10);
   }
 
   function buildSide(starters: any[], opp: any[], afHistory: Map<string, PlayerGameStat[]>, afSquad: Map<string, AfSquadPlayer>) {
@@ -570,13 +599,13 @@ async function buildPlayers(
     });
     console.log(`[af-coverage] ${afCoverage.join(' | ')}`);
 
-    const defPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) =>
+    const defPlayers = [...players].filter(p => !p.isGK).sort((a, b) =>
       bestRate(b.name, b.espnId, 'fc', b.foulsPerGame) - bestRate(a.name, a.espnId, 'fc', a.foulsPerGame)
-    ).slice(0, 5);
+    ).slice(0, 10);
 
-    const offPlayers = [...players].filter(p => !p.isGK && p.hasRealData !== false).sort((a, b) =>
+    const offPlayers = [...players].filter(p => !p.isGK).sort((a, b) =>
       bestRate(b.name, b.espnId, 'fd', b.foulsWonPerGame) - bestRate(a.name, a.espnId, 'fd', a.foulsWonPerGame)
-    ).slice(0, 5);
+    ).slice(0, 10);
 
     return {
       defensive: defPlayers.map(p => {
@@ -599,7 +628,7 @@ async function buildPlayers(
           form: p.form,
         };
       }),
-      shooting: top5(players, 'sotPerGame').map(p => {
+      shooting: top10(players, 'sotPerGame').map(p => {
         const sot = bestRate(p.name, p.espnId, 'sot', p.sotPerGame);
         const sh  = bestRate(p.name, p.espnId, 'shots', p.shotsPerGame);
         return {
@@ -610,7 +639,7 @@ async function buildPlayers(
           form: p.form,
         };
       }),
-      goalscoring: top5(players, 'gaPerGame').map(p => {
+      goalscoring: top10(players, 'gaPerGame').map(p => {
         const goalRate   = p.gaPerGame * (p.goals   / Math.max(p.goals + p.assists, 1));
         const assistRate = p.gaPerGame * (p.assists / Math.max(p.goals + p.assists, 1));
         return {
@@ -622,13 +651,13 @@ async function buildPlayers(
         };
       }),
       cards: [...players]
-        .filter(p => !p.isGK && p.hasRealData !== false)
+        .filter(p => !p.isGK)
         .sort((a, b) => {
           const aRate = a.yellowCards / Math.max(1, a.appearances ?? 20);
           const bRate = b.yellowCards / Math.max(1, b.appearances ?? 20);
           return bRate - aRate;
         })
-        .slice(0, 5)
+        .slice(0, 10)
         .map(p => {
           const apps = p.appearances ?? 20;
           const cpg = +(p.yellowCards / Math.max(1, apps)).toFixed(2);
@@ -637,9 +666,19 @@ async function buildPlayers(
             yellowCards: p.yellowCards,
             redCards: p.redCards ?? 0,
             cardsPerGame: cpg,
-            last5Cards: afLast5(p.name, 'yellowCards', 1) ?? espnLast5Safe(p.espnId, 'yellowCards', 1) ?? seededLast5(p.name, 'cards', cpg, 1),
+            last5Cards: afLast5(p.name, 'yellowCards', 1) ?? espnLast5Safe(p.espnId, 'yellowCards', 1) ?? null,
           };
         }),
+      gk: (() => {
+        const keeper = players.find(p => p.isGK);
+        if (!keeper) return [];
+        const savesPerGame = afAvg(keeper.name, 'saves') ?? espnAvg(keeper.espnId, 'saves') ?? 3.0;
+        return [{
+          name: keeper.name,
+          savesPerGame: +savesPerGame.toFixed(2),
+          last5Saves: afLast5(keeper.name, 'saves', 3) ?? espnLast5Safe(keeper.espnId, 'saves', 3) ?? seededLast5(keeper.name, 'saves', savesPerGame, 3),
+        }];
+      })(),
     };
   }
 
@@ -831,16 +870,16 @@ async function runSync() {
     { league: 'uefa.europa',      compName: 'UEFA Europa League' },
     { league: 'uefa.europa.conf', compName: 'UEFA Europa Conference League' },
   ];
+  // Exclude liveMatches from seenIds so ESPN-sourced EL/ECL/CL matches get re-processed
+  // every sync cycle (keeps referee, stats, etc. fresh throughout matchday)
   const seenIds = new Set([
     ...pendingList.map((m: any) => m.id),
     ...nearTermMatches.map((m: any) => matchId(m.homeTeam?.name, m.awayTeam?.name)),
-    ...liveMatches.map((m: any) => m.id),
   ]);
   let espnAdded = 0;
   const seenNormIds = new Set<string>([
     ...pendingList.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
     ...nearTermMatches.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
-    ...liveMatches.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
   ]);
   for (const { league, compName } of ESPN_COMP_LEAGUES) {
     for (let d = 0; d < 30; d++) {
@@ -918,6 +957,22 @@ async function runSync() {
     let lineupData = fromEspn ? null : await apiFetch(`/matches/${match.id}/lineups`, 2 * 60 * 1000);
     let hasLineups = lineupData?.homeTeam?.lineup?.length > 0 || lineupData?.homeTeam?.startingEleven?.length > 0;
 
+    // For ESPN supplement matches, fetch referee from event summary
+    let espnRefName = '';
+    if (fromEspn && match.id) {
+      try {
+        const espnLeague = (match as any)._espnLeague ?? 'uefa.europa';
+        const sumRes = await fetch(
+          `https://site.api.espn.com/apis/site/v2/sports/soccer/${espnLeague}/summary?event=${match.id}`,
+          { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, cache: 'no-store' }
+        );
+        if (sumRes.ok) {
+          const sumData = await sumRes.json();
+          espnRefName = sumData?.gameInfo?.officials?.[0]?.displayName ?? '';
+        }
+      } catch {}
+    }
+
     const homeName = match.homeTeam?.name;
     const awayName = match.awayTeam?.name;
     const homeBadge = (match as any)._homeBadge ?? teamBadge(match.homeTeam.id);
@@ -981,10 +1036,6 @@ async function runSync() {
           apiFetch(`/teams/${match.awayTeam.id}/matches?status=FINISHED&limit=10`, 60 * 60 * 1000),
         ]);
 
-    const homeStats = buildTeamStats(homeResults?.matches, match.homeTeam.id, (espnHistory as any).__homeStats ?? null, (espnHistory as any).__awayStats ?? null);
-    const awayStats = buildTeamStats(awayResults?.matches, match.awayTeam.id, (espnHistory as any).__awayStats ?? null, (espnHistory as any).__homeStats ?? null);
-    log(`[stats] ${homeName}: corners=${homeStats.cornersFor} shots=${homeStats.shotsFor} fouls=${homeStats.foulsCommitted}`);
-    log(`[stats] ${awayName}: corners=${awayStats.cornersFor} shots=${awayStats.shotsFor} fouls=${awayStats.foulsCommitted}`);
     // Fetch ESPN domestic roster stats for accurate season counting stats
     const [homeRosterMap, awayRosterMap] = await Promise.all([
       confirmedEspnMeta ? fetchEspnRosterStats(confirmedEspnMeta.homeTeamId, guessDomesticLeague(homeName) || confirmedEspnMeta.league) : Promise.resolve(new Map<string, EspnRosterPlayer>()),
@@ -997,16 +1048,32 @@ async function runSync() {
 
     // Fetch real last-8-game dots + season squad stats from paid API-Football
     const afApiKey = (process.env.API_SPORTS_KEY ?? '').trim();
-    const [homeAfResult, awayAfResult, homeSquadResult, awaySquadResult] = await Promise.all([
-      afApiKey ? fetchApiFootballTeamHistory(homeName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), debug: 'no key' }),
-      afApiKey ? fetchApiFootballTeamHistory(awayName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), debug: 'no key' }),
+    const [homeAfResult, awayAfResult, homeSquadResult, awaySquadResult, afReferee] = await Promise.all([
+      afApiKey ? fetchApiFootballTeamHistory(homeName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
+      afApiKey ? fetchApiFootballTeamHistory(awayName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
       afApiKey ? fetchApiFootballSquadStats(homeName, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
       afApiKey ? fetchApiFootballSquadStats(awayName, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
+      (() => {
+        if (!afApiKey) return Promise.resolve('');
+        if (fromEspn && match.utcDate) {
+          const espnLeagueToAfId: Record<string, number> = {
+            'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
+          };
+          const afLeagueId = espnLeagueToAfId[(match as any)._espnLeague ?? ''];
+          if (afLeagueId) return fetchApiFootballRefereeByLeague(afLeagueId, match.utcDate, homeName, awayName, afApiKey);
+        }
+        return fetchApiFootballReferee(homeName, afApiKey, match.utcDate);
+      })(),
     ]);
     log(`[af-history] home: ${homeAfResult.debug}`);
     log(`[af-history] away: ${awayAfResult.debug}`);
     log(`[af-squad] home: ${homeSquadResult.debug}`);
     log(`[af-squad] away: ${awaySquadResult.debug}`);
+
+    const homeStats = buildTeamStats(homeResults?.matches, match.homeTeam.id, (espnHistory as any).__homeStats ?? null, (espnHistory as any).__awayStats ?? null, homeAfResult.afTeamStats ?? null, awayAfResult.afTeamStats ?? null);
+    const awayStats = buildTeamStats(awayResults?.matches, match.awayTeam.id, (espnHistory as any).__awayStats ?? null, (espnHistory as any).__homeStats ?? null, awayAfResult.afTeamStats ?? null, homeAfResult.afTeamStats ?? null);
+    log(`[stats] ${homeName}: corners=${homeStats.cornersFor} shots=${homeStats.shotsFor} fouls=${homeStats.foulsCommitted}`);
+    log(`[stats] ${awayName}: corners=${awayStats.cornersFor} shots=${awayStats.shotsFor} fouls=${awayStats.foulsCommitted}`);
 
     const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, espnHistory, apiSportsIdx, combinedRosterMap, homeAfResult.history, awayAfResult.history, homeSquadResult.stats, awaySquadResult.stats);
     log(`[buildPlayers] ${players.diag}`);
@@ -1017,7 +1084,7 @@ async function runSync() {
       homeTeam: { name: homeName, primaryColor: getTeamColor(homeName), badge: homeBadge, stats: homeStats, players: players.home },
       awayTeam: { name: awayName, primaryColor: getTeamColor(awayName), badge: awayBadge, stats: awayStats, players: players.away },
       referee: {
-        name: match.referees?.[0]?.name || 'TBC',
+        name: espnRefName || afReferee || match.referees?.[0]?.name || 'TBC',
         matchAvg: {
           fouls: +(homeStats.foulsCommitted + awayStats.foulsCommitted).toFixed(1),
           cards:  +(homeStats.cardsFor      + awayStats.cardsFor).toFixed(1),

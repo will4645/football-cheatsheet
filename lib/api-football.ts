@@ -15,6 +15,11 @@ const ESPN_LEAGUES = [
   'ger.1',               // Bundesliga
   'ita.1',               // Serie A
   'fra.1',               // Ligue 1
+  'por.1',               // Primeira Liga
+  'ned.1',               // Eredivisie
+  'bel.1',               // Belgian Pro League
+  'sco.1',               // Scottish Premiership
+  'tur.1',               // Süper Lig
 ];
 
 // Maps team name patterns to their domestic ESPN league slug
@@ -24,6 +29,23 @@ const DOMESTIC_LEAGUE_HINTS: [RegExp, string][] = [
   [/psg|paris saint|paris fc|lyon|marseille|monaco|lille|nice|lens|rennes|nantes|strasbourg|toulouse|auxerre|brest|metz|lorient|angers|havre|le havre|reims|montpellier|troyes|clermont|ajaccio|guingamp/i, 'fra.1'],
   [/bayern|dortmund|leverkusen|leipzig|frankfurt|freiburg|union berlin|wolfsburg|stuttgart|gladbach|monchengladbach|hoffenheim|augsburg|hamburger|hamburgsv|hamburg sv|köln|koln|st pauli|pauli|heidenheim|mainz|werder|bremen|bochum|schalke|paderborn|sandhausen|dusseldorf|düsseldorf/i, 'ger.1'],
   [/juventus|inter milan|inter fc|ac milan|napoli|roma|lazio|fiorentina|atalanta|torino|bologna|genoa|udinese|venezia|lecce|verona|hellas|parma|sassuolo|cagliari|cremonese|pisa|monza|salernitana|empoli|spezia|brescia|bari/i, 'ita.1'],
+  [/benfica|porto|sporting cp|sporting lisbon|braga|sc braga|vitoria guimaraes|guimaraes|boavista|estoril|pacos ferreira|arouca|rio ave|famalicao|chaves|vizela|casa pia|gil vicente|moreirense/i, 'por.1'],
+  [/ajax|psv|feyenoord|az alkmaar|alkmaar|fc utrecht|twente|enschede|groningen|heerenveen|sparta rotterdam|heracles|almelo|nec nijmegen|excelsior|go ahead eagles|deventer|rkc waalwijk|cambuur|fortuna sittard|volendam/i, 'ned.1'],
+  [/club brugge|anderlecht|gent|standard liege|royal antwerp|sint truiden|mechelen|kortrijk|westerlo|oud heverlee leuven|cercle brugge|charleroi|eupen|genk|union sg|union saint gilloise|mouscron|beerschot/i, 'bel.1'],
+  [/celtic|rangers|hearts|hibernian|aberdeen|motherwell|livingston|st mirren|st johnstone|dundee|ross county|kilmarnock|inverness|hamilton/i, 'sco.1'],
+  [/galatasaray|fenerbahce|fenerbahçe|besiktas|beşiktaş|trabzonspor|alanyaspor|sivasspor|kasimpasa|kasımpaşa|adana demirspor|ankaragucu|ankaragücü|konyaspor|kayserispor|gaziantep|istanbulspor|hatayspor/i, 'tur.1'],
+  [/malmo|malmö|djurgarden|djurgården|hammarby|ifk göteborg|ifk goteborg|aik|kalmar|elfsborg|hacken|häcken|halmstad|mjallby|varberg|degerfors|sirius|osters|brage|brommapojkarna|helsingborg|norrkoping|norrköping|gif sundsvall|ostersund|östers/i, 'swe.1'],
+  [/fc copenhagen|kobenhavn|københavn|midtjylland|brondby|brøndby|aab aalborg|randers|agf aarhus|silkeborg|odense|sonderjyske|sønderjyske|vejle|hvidovre|lyngby|nordsjælland|nordsjaelland/i, 'den.1'],
+  [/bodo glimt|bodø|molde|rosenborg|viking|lillestrøm|lillestrom|brann|valerenga|vålerenga|stabæk|stabak|haugesund|tromso|tromsø|sarpsborg|odd|kristiansund|aalesund|ålesund/i, 'nor.1'],
+  [/red bull salzburg|fc salzburg|sturm graz|rapid wien|rapid vienna|austria wien|lask|wolfsberger|wolfsberg|ried|hartberg|klagenfurt|altach|blau weiss linz/i, 'aut.1'],
+  [/young boys|fc basel|servette|lugano|grasshopper|fc zürich|fc zurich|st gallen|fc sion|winterthur|lausanne sport|thun|aarau/i, 'sui.1'],
+  [/olympiacos|paok|aek athens|panathinaikos|asteras tripolis|aris thessaloniki|atromitos|ergotelis|ofi crete|panionios|panserraikos|pas giannina/i, 'gre.1'],
+  [/legia warsaw|legia|lech poznan|wisla krakow|wisła|piast gliwice|slask wroclaw|śląsk|jagiellonia|cracovia|zaglebie lubin|zagłębie|rakow czestochowa|raków|gornik zabrze/i, 'pol.1'],
+  [/dinamo zagreb|hajduk split|rijeka|osijek|gorica|varazdin|lokomotiva zagreb|sibenik|istra|šibenik/i, 'cro.1'],
+  [/red star belgrade|crvena zvezda|partizan|vojvodina|radnicki nis|cukaricki|čukarički|backa topola|bačka|spartak subotica/i, 'srb.1'],
+  [/shakhtar donetsk|shakhtar|dynamo kyiv|vorskla|zorya|dnipro|chornomorets|rukh lviv|metalist|desna/i, 'ukr.1'],
+  [/fcsb|cfr cluj|universitatea craiova|rapid bucharest|dinamo bucharest|sepsi|hermannstadt|astra giurgiu|poli iasi|fc arges|voluntari|chindia/i, 'rou.1'],
+  [/slavia prague|sparta prague|viktoria plzen|plzeň|plzen|banik ostrava|bohemians|slovacko|slovácko|jablonec|sigma olomouc|brno|zbrojovka|teplice|karvina|karviná|hradec kralove/i, 'cze.1'],
 ];
 
 export function guessDomesticLeague(teamName: string): string {
@@ -84,6 +106,7 @@ export interface PlayerGameStat {
   shots: number;
   sot: number;      // shots on target
   yellowCards: number;
+  saves: number;
 }
 
 function statIdx(names: string[], ...candidates: string[]): number {
@@ -133,6 +156,7 @@ function extractEventStats(summary: any): { stats: Map<string, PlayerGameStat>; 
         shots:       getStat('totalshots', 'shots', 'sh', 'shotattempts', 'attemptedshots', 'totalattempts', 'totalShots', 'shotstotal'),
         sot:         getStat('shotsontarget', 'sot', 'shotsongoal', 'shotongoal', 'ontargetattempts', 'ongoalattempts', 'sog', 'targetshots', 'shotsOnTarget'),
         yellowCards: getStat('yellowcards', 'yellowcard', 'yc', 'yellow', 'booking'),
+        saves:       getStat('saves', 'gksaves', 'savesmade', 'goalkeepersaves', 'gkSaves', 'savesTotal'),
       });
     }
   }
@@ -190,6 +214,16 @@ export interface TeamSeasonStats {
   foulsWon: number;
   cardsFor: number;
   cardsAgainst: number;
+  tacklesFor: number;
+  tacklesAgainst: number;
+  offsidesFor: number;
+  offsidesAgainst: number;
+  freeKicksFor: number;
+  freeKicksAgainst: number;
+  goalKicksFor: number;
+  goalKicksAgainst: number;
+  throwInsFor: number;
+  throwInsAgainst: number;
   gamesCount: number;
 }
 
@@ -337,6 +371,16 @@ export async function fetchTeamPlayerHistory(
       // ESPN boxscore: "Yellow Cards" → yellowcards
       cardsFor:       getBestStat('mine', 'yellowcards', 'Yellow Cards', 'avgyellowcards', 'bookings', 'cards'),
       cardsAgainst:   getBestStat('opp',  'yellowcards', 'Yellow Cards', 'avgyellowcards', 'bookings', 'cards'),
+      tacklesFor:     getBestStat('mine', 'tackles', 'Tackles', 'totaltackles', 'tacklesmade', 'avgtackles'),
+      tacklesAgainst: getBestStat('opp',  'tackles', 'Tackles', 'totaltackles', 'tacklesmade', 'avgtackles'),
+      offsidesFor:    getBestStat('mine', 'offsides', 'Offsides', 'offside', 'offsidescommitted', 'avgoffsides'),
+      offsidesAgainst:getBestStat('opp',  'offsides', 'Offsides', 'offside', 'offsidescommitted', 'avgoffsides'),
+      freeKicksFor:   getBestStat('mine', 'freekicks', 'Free Kicks', 'freekick', 'freekickswon') || getBestStat('opp', 'fouls', 'Fouls', 'foulscommitted'),
+      freeKicksAgainst:getBestStat('opp', 'freekicks', 'Free Kicks', 'freekick', 'freekickswon') || getBestStat('mine', 'fouls', 'Fouls', 'foulscommitted'),
+      goalKicksFor:   getBestStat('mine', 'goalkicks', 'Goal Kicks', 'goalkick', 'avggoalkicks'),
+      goalKicksAgainst:getBestStat('opp', 'goalkicks', 'Goal Kicks', 'goalkick', 'avggoalkicks'),
+      throwInsFor:    getBestStat('mine', 'throwins', 'Throw Ins', 'throwin', 'throwinkicks', 'throwinkick'),
+      throwInsAgainst:getBestStat('opp',  'throwins', 'Throw Ins', 'throwin', 'throwinkicks', 'throwinkick'),
       gamesCount:     n,
     };
 
@@ -508,16 +552,34 @@ function cleanForSearch(name: string): string {
 function guessDomesticLeagueId(teamName: string): number {
   const league = guessDomesticLeague(teamName);
   const map: Record<string, number> = {
-    'eng.1': 39, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135, 'fra.1': 61,
+    'eng.1': 39,  'esp.1': 140, 'ger.1': 78,  'ita.1': 135, 'fra.1': 61,
+    'por.1': 94,  'ned.1': 88,  'bel.1': 144, 'sco.1': 271, 'tur.1': 203,
+    'swe.1': 113, 'den.1': 119, 'nor.1': 103, 'aut.1': 218, 'sui.1': 169,
+    'gre.1': 197, 'pol.1': 106, 'cro.1': 210, 'srb.1': 286, 'ukr.1': 333,
+    'rou.1': 283, 'cze.1': 244,
   };
   return map[league] ?? 0;
+}
+
+export interface AfTeamFixtureStats {
+  cornersFor: number;
+  shotsFor: number;
+  sotFor: number;
+  foulsFor: number;
+  offsidesFor: number;
+  tacklesFor: number;
+  yellowCardsFor: number;
+  savesFor: number;
+  goalKicksFor: number;
+  throwInsFor: number;
+  fixtureCount: number;
 }
 
 export async function fetchApiFootballTeamHistory(
   teamName: string,
   apiKey: string,
-): Promise<{ history: Map<string, PlayerGameStat[]>; debug: string }> {
-  if (!apiKey) return { history: new Map(), debug: 'no key' };
+): Promise<{ history: Map<string, PlayerGameStat[]>; afTeamStats: AfTeamFixtureStats | null; debug: string }> {
+  if (!apiKey) return { history: new Map(), afTeamStats: null, debug: 'no key' };
   const result = new Map<string, PlayerGameStat[]>();
   try {
     const searchName = cleanForSearch(teamName);
@@ -540,7 +602,7 @@ export async function fetchApiFootballTeamHistory(
       const td3 = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}${leagueParam}`, apiKey);
       teams.push(...(td3?.response ?? []));
     }
-    if (!teams.length) return { history: new Map(), debug: `no team: ${searchName}` };
+    if (!teams.length) return { history: new Map(), afTeamStats: null, debug: `no team: ${searchName}` };
 
     const tNorm = norm(teamName);
     const best = teams.find(t => {
@@ -548,7 +610,7 @@ export async function fetchApiFootballTeamHistory(
       return n === tNorm || tNorm.split(' ').filter(w => w.length > 3).some(w => n.includes(w));
     }) ?? teams[0];
     const teamId: number = best?.team?.id;
-    if (!teamId) return { history: new Map(), debug: `no id: ${searchName}` };
+    if (!teamId) return { history: new Map(), afTeamStats: null, debug: `no id: ${searchName}` };
 
     // Fetch 8 domestic fixtures so players who missed one game still have 5 real data points
     const fixtureLeagueFilter = leagueId ? `&league=${leagueId}` : '';
@@ -566,50 +628,122 @@ export async function fetchApiFootballTeamHistory(
         fixtures = fd24?.response ?? [];
       }
     }
-    if (!fixtures.length) return { history: new Map(), debug: `no fixtures: ${teamId}` };
+    if (!fixtures.length) return { history: new Map(), afTeamStats: null, debug: `no fixtures: ${teamId}` };
 
     const sorted = [...fixtures].sort((a: any, b: any) =>
       new Date(b.fixture?.date ?? '').getTime() - new Date(a.fixture?.date ?? '').getTime()
     );
 
+    const fixtureTeamStatsList: Array<{
+      corners: number; shots: number; sot: number; fouls: number;
+      offsides: number; tackles: number; yellowCards: number; saves: number;
+      goalKicks: number; throwIns: number;
+    }> = [];
+
     for (const fix of sorted) {
       const fid: number = fix.fixture?.id;
       if (!fid) continue;
-      const pd = await afFetch(`/fixtures/players?fixture=${fid}&team=${teamId}`, apiKey);
-      const teamStats = pd?.response?.[0];
-      if (!teamStats?.players) continue;
-      for (const p of (teamStats.players as any[])) {
-        const pName: string = p.player?.name ?? '';
-        if (!pName) continue;
-        const s = p.statistics?.[0];
-        if (!s) continue;
-        const stat: PlayerGameStat = {
-          goals:       s.goals?.total     ?? 0,
-          assists:     s.goals?.assists   ?? 0,
-          shots:       s.shots?.total     ?? 0,
-          sot:         s.shots?.on        ?? 0,
-          fc:          s.fouls?.committed ?? 0,
-          fd:          s.fouls?.drawn     ?? 0,
-          yellowCards: s.cards?.yellow    ?? 0,
-        };
-        const key = norm(pName);
-        if (!result.has(key)) result.set(key, []);
-        result.get(key)!.push(stat); // newest first
-        // Alias by last name so "J. Tah" (key "j tah") is also findable as "tah"
-        const kParts = key.split(' ');
-        const kLast = kParts[kParts.length - 1];
-        if (kParts.length >= 2 && kLast.length >= 3 && !result.has(kLast)) {
-          result.set(kLast, result.get(key)!);
+
+      // Fetch player stats and team fixture stats in parallel for the same fixture
+      const [pd, sd] = await Promise.all([
+        afFetch(`/fixtures/players?fixture=${fid}&team=${teamId}`, apiKey),
+        afFetch(`/fixtures/statistics?fixture=${fid}&team=${teamId}`, apiKey),
+      ]);
+
+      // ── Player stats ──
+      const teamPlayers = pd?.response?.[0];
+      if (teamPlayers?.players) {
+        for (const p of (teamPlayers.players as any[])) {
+          const pName: string = p.player?.name ?? '';
+          if (!pName) continue;
+          const s = p.statistics?.[0];
+          if (!s) continue;
+          const stat: PlayerGameStat = {
+            goals:       s.goals?.total     ?? 0,
+            assists:     s.goals?.assists   ?? 0,
+            shots:       s.shots?.total     ?? 0,
+            sot:         s.shots?.on        ?? 0,
+            fc:          s.fouls?.committed ?? 0,
+            fd:          s.fouls?.drawn     ?? 0,
+            yellowCards: s.cards?.yellow    ?? 0,
+            saves:       s.goals?.saves     ?? s.goalkeeper?.saves ?? 0,
+          };
+          const key = norm(pName);
+          if (!result.has(key)) result.set(key, []);
+          result.get(key)!.push(stat);
+          const kParts = key.split(' ');
+          const kLast = kParts[kParts.length - 1];
+          if (kParts.length >= 2 && kLast.length >= 3 && !result.has(kLast)) {
+            result.set(kLast, result.get(key)!);
+          }
         }
       }
+
+      // ── Team fixture stats ──
+      const fixStatsArr: any[] = sd?.response ?? [];
+      // Response may contain both teams; find ours
+      const fixTeam = fixStatsArr.find((r: any) => r.team?.id === teamId || r.team?.id === String(teamId))
+        ?? fixStatsArr[0];
+      if (fixTeam?.statistics) {
+        const getFixStat = (type: string): number => {
+          const entry = (fixTeam.statistics as any[]).find((s: any) => s.type === type);
+          const val = entry?.value;
+          if (val === null || val === undefined) return 0;
+          if (typeof val === 'string' && val.endsWith('%')) return 0;
+          return typeof val === 'number' ? val : (parseInt(String(val)) || 0);
+        };
+        fixtureTeamStatsList.push({
+          corners:     getFixStat('Corner Kicks'),
+          shots:       getFixStat('Total Shots'),
+          sot:         getFixStat('Shots on Goal'),
+          fouls:       getFixStat('Fouls'),
+          offsides:    getFixStat('Offsides'),
+          tackles:     getFixStat('Tackles'),
+          yellowCards: getFixStat('Yellow Cards'),
+          saves:       getFixStat('Goalkeeper Saves'),
+          // These may not be present for all leagues — will be 0 if missing
+          goalKicks:   getFixStat('Goal Kicks'),
+          throwIns:    getFixStat('Throw Ins'),
+        });
+      }
+    }
+
+    // Aggregate fixture team stats into per-game averages
+    let afTeamStats: AfTeamFixtureStats | null = null;
+    if (fixtureTeamStatsList.length > 0) {
+      const n = fixtureTeamStatsList.length;
+      const sum = (key: keyof typeof fixtureTeamStatsList[0]) =>
+        fixtureTeamStatsList.reduce((acc, x) => acc + x[key], 0);
+      // For stats that may be absent (return 0) in some leagues, only average the
+      // fixtures where the stat was actually reported (value > 0), so a missing stat
+      // doesn't drag the average down to near-zero.
+      const avgOrNull = (key: keyof typeof fixtureTeamStatsList[0]): number => {
+        const present = fixtureTeamStatsList.filter(x => x[key] > 0);
+        if (present.length === 0) return 0;
+        return +(present.reduce((acc, x) => acc + x[key], 0) / present.length).toFixed(2);
+      };
+      afTeamStats = {
+        cornersFor:     +(sum('corners')     / n).toFixed(2),
+        shotsFor:       +(sum('shots')       / n).toFixed(2),
+        sotFor:         +(sum('sot')         / n).toFixed(2),
+        foulsFor:       +(sum('fouls')       / n).toFixed(2),
+        offsidesFor:    +(sum('offsides')    / n).toFixed(2),
+        tacklesFor:     avgOrNull('tackles'),
+        yellowCardsFor: +(sum('yellowCards') / n).toFixed(2),
+        savesFor:       +(sum('saves')       / n).toFixed(2),
+        goalKicksFor:   avgOrNull('goalKicks'),
+        throwInsFor:    avgOrNull('throwIns'),
+        fixtureCount:   n,
+      };
     }
 
     return {
       history: result,
-      debug: `team ${teamId}(${best?.team?.name}): ${sorted.length} fixtures, ${result.size} players`,
+      afTeamStats,
+      debug: `team ${teamId}(${best?.team?.name}): ${sorted.length} fixtures, ${result.size} players, afStats=${afTeamStats ? `${afTeamStats.fixtureCount}g` : 'none'}`,
     };
   } catch (e: any) {
-    return { history: new Map(), debug: `err: ${e.message}` };
+    return { history: new Map(), afTeamStats: null, debug: `err: ${e.message}` };
   }
 }
 
@@ -784,5 +918,72 @@ export async function fetchApiFootballSquadStats(
     return { stats: result, debug: `squad ${teamId}(${best?.team?.name}): ${players.length} players, ${result.size} keys` };
   } catch (e: any) {
     return { stats: new Map(), debug: `squad err: ${e.message}` };
+  }
+}
+
+// Lookup referee by scanning a specific league+date (most direct for CL/EL/ECL)
+export async function fetchApiFootballRefereeByLeague(
+  leagueId: number, matchDate: string, homeName: string, awayName: string, apiKey: string,
+): Promise<string> {
+  if (!apiKey) return '';
+  try {
+    const dateStr = matchDate.slice(0, 10);
+    const fd = await afFetch(`/fixtures?league=${leagueId}&date=${dateStr}&season=2025`, apiKey);
+    const fixtures: any[] = fd?.response ?? [];
+    if (!fixtures.length) return '';
+    const hNorm = norm(homeName);
+    const aNorm = norm(awayName);
+    const hit = fixtures.find(f => {
+      const fh = norm(f.teams?.home?.name ?? '');
+      const fa = norm(f.teams?.away?.name ?? '');
+      const homeMatch = fh === hNorm || hNorm.split(' ').filter(w => w.length > 3).some(w => fh.includes(w));
+      const awayMatch = fa === aNorm || aNorm.split(' ').filter(w => w.length > 3).some(w => fa.includes(w));
+      return homeMatch || awayMatch;
+    });
+    const raw: string = hit?.fixture?.referee ?? '';
+    return raw.split(',')[0].trim();
+  } catch {
+    return '';
+  }
+}
+
+export async function fetchApiFootballReferee(teamName: string, apiKey: string, matchDate?: string): Promise<string> {
+  if (!apiKey) return '';
+  try {
+    const searchName = cleanForSearch(teamName);
+    const leagueId = guessDomesticLeagueId(teamName);
+    const leagueParam = leagueId ? `&league=${leagueId}` : '';
+    let td = await afFetch(`/teams?search=${encodeURIComponent(searchName)}${leagueParam}`, apiKey);
+    let teams: any[] = td?.response ?? [];
+    if (!teams.length && leagueParam) {
+      td = await afFetch(`/teams?search=${encodeURIComponent(searchName)}`, apiKey);
+      teams = td?.response ?? [];
+    }
+    if (!teams.length) {
+      const firstWord = searchName.split(' ')[0];
+      if (firstWord !== searchName) {
+        td = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}${leagueParam}`, apiKey);
+        teams = td?.response ?? [];
+      }
+    }
+    if (!teams.length) return '';
+    const tNorm = norm(teamName);
+    const best = teams.find(t => {
+      const n = norm(t.team?.name ?? '');
+      return n === tNorm || tNorm.split(' ').filter(w => w.length > 3).some(w => n.includes(w));
+    }) ?? teams[0];
+    const teamId: number = best?.team?.id;
+    if (!teamId) return '';
+    const dateStr = matchDate
+      ? matchDate.slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+    const fd = await afFetch(`/fixtures?team=${teamId}&date=${dateStr}`, apiKey);
+    const fixtures: any[] = fd?.response ?? [];
+    const source = fixtures.length ? fixtures : (await afFetch(`/fixtures?team=${teamId}&next=1`, apiKey))?.response ?? [];
+    if (!source.length) return '';
+    const raw: string = source[0]?.fixture?.referee ?? '';
+    return raw.split(',')[0].trim();
+  } catch {
+    return '';
   }
 }

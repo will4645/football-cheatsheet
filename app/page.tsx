@@ -1,180 +1,141 @@
-'use client';
-
-import { useEffect, useState } from 'react';
+import { auth } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
+import { isSubscribed } from '@/lib/subscription';
 import Link from 'next/link';
-import { COMPETITION_CONFIG, nameToSlug } from '@/lib/competitions';
 
-interface MatchSummary {
-  id: string;
-  competition: string;
-  pending?: boolean;
-}
-
-const FAKE_MATCH = {
-  homeTeam: { name: 'Arsenal', primaryColor: '#EF0107', badge: 'https://resources.premierleague.com/premierleague/badges/t3.png' },
-  awayTeam: { name: 'Chelsea', primaryColor: '#034694', badge: 'https://resources.premierleague.com/premierleague/badges/t8.png' },
-  stage: 'Matchday 38', date: '11 May 2025', kickoff: '16:00 BST',
-};
-
-export default function Home() {
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [loaded, setLoaded] = useState(false);
-  const [showMods, setShowMods] = useState(false);
-  const [clickCount, setClickCount] = useState(0);
-
-  useEffect(() => {
-    function load() {
-      fetch('/api/matches', { cache: 'no-store' })
-        .then(r => r.json())
-        .then(({ live, upcoming }) => {
-          const all: MatchSummary[] = [
-            ...(live ?? []),
-            ...(upcoming ?? []).map((m: MatchSummary) => ({ ...m, pending: true })),
-          ];
-          const c: Record<string, number> = {};
-          for (const m of all) {
-            const slug = nameToSlug(m.competition);
-            if (slug) c[slug] = (c[slug] ?? 0) + 1;
-          }
-          setCounts(c);
-          setLoaded(true);
-        })
-        .catch(() => setLoaded(true));
-    }
-    load();
-    const interval = setInterval(load, 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
-  function handleTitleClick() {
-    const next = clickCount + 1;
-    setClickCount(next);
-    if (next >= 3) { setShowMods(v => !v); setClickCount(0); }
+export default async function LandingPage() {
+  // Send logged-in subscribers straight to dashboard
+  const { userId } = await auth();
+  if (userId && process.env.SUPABASE_SERVICE_ROLE_KEY && await isSubscribed(userId)) {
+    redirect('/dashboard');
   }
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 lg:p-10" style={{ background: '#080c14' }}>
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8 sm:mb-10 text-center">
-          <h1
-            className="text-2xl font-black text-white tracking-tight mb-1 cursor-default select-none"
-            onClick={handleTitleClick}
-          >
-            Cheat Sheets
-          </h1>
-          <p className="text-[11px] uppercase tracking-widest text-gray-600">Select a competition</p>
+    <div className="min-h-screen" style={{ background: '#080c14', color: '#fff' }}>
+
+      {/* Nav */}
+      <nav className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
+        <span className="text-base font-black tracking-tight text-white">Cheat Sheets</span>
+        <div className="flex items-center gap-3">
+          <Link href="/sign-in" className="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5">
+            Sign in
+          </Link>
+          <Link href="/sign-up" className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors"
+            style={{ background: '#16a34a', color: '#fff' }}>
+            Get Started
+          </Link>
         </div>
+      </nav>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          {COMPETITION_CONFIG.map(comp => {
-            const count = counts[comp.slug] ?? 0;
-            const hasFixtures = count > 0;
-            return (
-              <Link key={comp.slug} href={`/competition/${comp.slug}`}>
-                <div
-                  className="rounded-xl cursor-pointer transition-all hover:scale-[1.02] hover:brightness-110 flex items-center gap-3 p-4 sm:p-5"
-                  style={{
-                    background: '#111827',
-                    border: `1px solid ${comp.color}50`,
-                    boxShadow: hasFixtures ? `0 0 12px ${comp.color}18` : 'none',
-                  }}
-                >
-                  {/* Text content */}
-                  <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                    <p className="text-[10px] uppercase tracking-widest font-bold" style={{ color: comp.color }}>
-                      {comp.country}
-                    </p>
-                    <p className="text-sm sm:text-base font-black text-white leading-tight truncate">{comp.label}</p>
-                    <div className="mt-0.5">
-                      {hasFixtures ? (
-                        <span
-                          className="inline-block text-[10px] font-bold px-2 py-0.5 rounded"
-                          style={{ background: comp.color + '22', color: comp.color }}
-                        >
-                          {count} {count === 1 ? 'match' : 'matches'}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.18)' }}>
-                          {loaded ? 'No fixtures' : '—'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* League badge */}
-                  <div
-                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl shrink-0 flex items-center justify-center overflow-hidden"
-                    style={{ background: comp.color + '15', border: `1px solid ${comp.color}35` }}
-                  >
-                    <img
-                      src={comp.badge}
-                      alt={comp.label}
-                      className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
-                      onError={e => { (e.currentTarget as HTMLImageElement).style.opacity = '0'; }}
-                    />
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
+      {/* Hero */}
+      <section className="text-center px-6 pt-16 pb-20 max-w-3xl mx-auto">
+        <div className="inline-block text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-6"
+          style={{ background: 'rgba(22,163,74,0.15)', color: '#4ade80', border: '1px solid rgba(22,163,74,0.3)' }}>
+          Real-time football intelligence
         </div>
+        <h1 className="text-4xl sm:text-5xl font-black leading-tight mb-5 tracking-tight">
+          The Football Analyst's<br />
+          <span style={{ color: '#4ade80' }}>Cheat Sheet</span>
+        </h1>
+        <p className="text-base sm:text-lg text-gray-400 mb-8 leading-relaxed max-w-xl mx-auto">
+          Confirmed lineups, player form, and statistical analysis across every major competition. All in one place before kick-off.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Link href="/sign-up"
+            className="px-8 py-3 rounded-xl font-bold text-sm transition-all hover:scale-105"
+            style={{ background: '#16a34a', color: '#fff', boxShadow: '0 0 24px rgba(22,163,74,0.4)' }}>
+            Start for £9.99/month
+          </Link>
+          <Link href="/preview"
+            className="px-8 py-3 rounded-xl font-semibold text-sm border transition-colors hover:bg-white/5"
+            style={{ borderColor: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.7)' }}>
+            View live demo
+          </Link>
+        </div>
+      </section>
 
-        {showMods && (
-          <div className="mt-10">
-            <div className="flex items-center gap-3 mb-4">
-              <p className="text-[10px] uppercase tracking-widest font-bold text-gray-600">Modifications</p>
-              <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-              <button
-                onClick={() => setShowMods(false)}
-                className="text-[10px] uppercase tracking-widest text-gray-700 hover:text-gray-400 transition-colors"
-              >
-                Hide
-              </button>
+      {/* Feature strip */}
+      <section className="max-w-5xl mx-auto px-6 pb-20">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            {
+              title: 'Confirmed Lineups',
+              desc: 'Stats built from the actual starting XI. No guesswork, no wasted analysis.',
+              icon: '⚡',
+            },
+            {
+              title: 'Player Form Dots',
+              desc: 'Last 5 game dots for shots, fouls, cards and goals. Spot in-form players instantly.',
+              icon: '●',
+            },
+            {
+              title: '15+ Stat Markets',
+              desc: 'Corners, shots, tackles, offsides, throw-ins, goal kicks. All with Poisson probabilities.',
+              icon: '%',
+            },
+          ].map(f => (
+            <div key={f.title} className="rounded-xl p-5"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div className="text-2xl mb-3 font-black" style={{ color: '#4ade80', fontFamily: 'monospace' }}>{f.icon}</div>
+              <h3 className="font-bold text-sm text-white mb-1.5">{f.title}</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">{f.desc}</p>
             </div>
-            <Link href="/preview">
-              <div className="rounded-xl overflow-hidden cursor-pointer transition-all hover:scale-[1.01]"
-                   style={{ background: '#111827', border: '1px solid rgba(99,102,241,0.3)' }}>
-                <div className="px-5 py-2 flex items-center justify-between"
-                     style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
-                    Premier League &nbsp;•&nbsp; {FAKE_MATCH.stage} &nbsp;•&nbsp; {FAKE_MATCH.date} &nbsp;•&nbsp; {FAKE_MATCH.kickoff}
-                  </span>
-                  <span className="text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded"
-                        style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>
-                    Demo
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 items-center px-4 py-4 lg:px-8 lg:py-6">
-                  <div className="flex items-center gap-2 lg:gap-4">
-                    <div className="w-10 h-10 lg:w-16 lg:h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
-                         style={{ background: FAKE_MATCH.homeTeam.primaryColor + '12', border: `1px solid ${FAKE_MATCH.homeTeam.primaryColor}40` }}>
-                      <img src={FAKE_MATCH.homeTeam.badge} alt={FAKE_MATCH.homeTeam.name} className="w-8 h-8 lg:w-12 lg:h-12 object-contain" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm lg:text-base font-black text-white leading-tight">{FAKE_MATCH.homeTeam.name}</p>
-                      <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5 hidden sm:block">Home</p>
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-3xl lg:text-5xl font-black" style={{ color: 'rgba(255,255,255,0.06)' }}>VS</p>
-                  </div>
-                  <div className="flex items-center gap-2 lg:gap-4 justify-end">
-                    <div className="text-right min-w-0">
-                      <p className="text-sm lg:text-base font-black text-white leading-tight">{FAKE_MATCH.awayTeam.name}</p>
-                      <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5 hidden sm:block">Away</p>
-                    </div>
-                    <div className="w-10 h-10 lg:w-16 lg:h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
-                         style={{ background: FAKE_MATCH.awayTeam.primaryColor + '12', border: `1px solid ${FAKE_MATCH.awayTeam.primaryColor}40` }}>
-                      <img src={FAKE_MATCH.awayTeam.badge} alt={FAKE_MATCH.awayTeam.name} className="w-8 h-8 lg:w-12 lg:h-12 object-contain" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          </div>
-        )}
+          ))}
+        </div>
+      </section>
 
-      </div>
+      {/* Competitions */}
+      <section className="max-w-5xl mx-auto px-6 pb-20">
+        <p className="text-center text-[10px] uppercase tracking-widest text-gray-600 mb-6">Covers all major competitions</p>
+        <div className="flex flex-wrap gap-2 justify-center">
+          {['Premier League', 'Champions League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1', 'Europa League', 'FA Cup', 'Conference League'].map(c => (
+            <span key={c} className="text-[11px] font-medium px-3 py-1 rounded-full"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
+              {c}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section className="max-w-sm mx-auto px-6 pb-24 text-center">
+        <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-6">Pricing</p>
+        <div className="rounded-2xl p-8"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(22,163,74,0.3)' }}>
+          <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#4ade80' }}>Pro</p>
+          <div className="flex items-baseline justify-center gap-1 mb-1">
+            <span className="text-4xl font-black text-white">£9.99</span>
+            <span className="text-sm text-gray-500">/month</span>
+          </div>
+          <p className="text-xs text-gray-600 mb-6">Cancel any time</p>
+          <ul className="text-left space-y-2 mb-8">
+            {[
+              'All competitions & matches',
+              'Real-time lineup stats',
+              'Player form last-5 dots',
+              '15+ stat markets with probabilities',
+              'GK saves tracking',
+              'Automatic updates every 2 hours',
+            ].map(item => (
+              <li key={item} className="flex items-center gap-2 text-xs text-gray-300">
+                <span style={{ color: '#4ade80' }}>✓</span> {item}
+              </li>
+            ))}
+          </ul>
+          <Link href="/sign-up"
+            className="block w-full py-3 rounded-xl font-bold text-sm text-center transition-all hover:brightness-110"
+            style={{ background: '#16a34a', color: '#fff' }}>
+            Get Started
+          </Link>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="text-center pb-8 text-[11px] text-gray-700 space-x-4">
+        <span>© 2025 Cheat Sheets</span>
+        <Link href="/sign-in" className="hover:text-gray-500">Sign in</Link>
+      </footer>
+
     </div>
   );
 }
