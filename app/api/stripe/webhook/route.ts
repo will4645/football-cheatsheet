@@ -25,15 +25,22 @@ export async function POST(req: NextRequest) {
         : null);
     if (!clerkUserId) return;
 
+    const rawEnd =
+      (sub as any).current_period_end ??
+      (sub as any).billing?.current_period?.end ??
+      (sub as any).billing_details?.current_period?.end;
+    console.log('subscription keys:', Object.keys(sub), 'current_period_end:', rawEnd, 'billing:', (sub as any).billing);
+    const currentPeriodEnd =
+      typeof rawEnd === 'number' ? new Date(rawEnd * 1000) :
+      rawEnd ? new Date(rawEnd) :
+      new Date(Date.now() + 30 * 86400000);
+
     await upsertSubscription({
       clerkUserId,
       stripeCustomerId: typeof sub.customer === 'string' ? sub.customer : (sub.customer as any).id,
       stripeSubscriptionId: sub.id,
       status: sub.status,
-      currentPeriodEnd: (() => {
-        const raw = (sub as any).current_period_end;
-        return typeof raw === 'number' ? new Date(raw * 1000) : new Date(raw);
-      })(),
+      currentPeriodEnd,
     });
   }
 
