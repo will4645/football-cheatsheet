@@ -25,11 +25,10 @@ export async function POST(req: NextRequest) {
         : null);
     if (!clerkUserId) return;
 
-    // In API 2026-04-22.dahlia, period_end lives on the latest_invoice (expanded)
+    // In API 2026-04-22.dahlia, period_end lives on invoice line items, not invoice.period_end
     const invoice = (sub as any).latest_invoice;
-    const rawEnd =
-      (typeof invoice === 'object' ? invoice?.period_end : null) ??
-      (sub as any).current_period_end;
+    const lineEnd = invoice?.lines?.data?.[0]?.period?.end;
+    const rawEnd = lineEnd ?? (sub as any).current_period_end;
     const currentPeriodEnd =
       typeof rawEnd === 'number' ? new Date(rawEnd * 1000) :
       rawEnd ? new Date(rawEnd) :
@@ -45,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   async function retrieveWithExpand(subId: string) {
-    return stripe.subscriptions.retrieve(subId, { expand: ['latest_invoice'] } as any);
+    return stripe.subscriptions.retrieve(subId, { expand: ['latest_invoice.lines'] } as any);
   }
 
   try {
