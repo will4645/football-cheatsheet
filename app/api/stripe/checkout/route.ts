@@ -6,29 +6,31 @@ import { getSubscription } from '@/lib/subscription';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const { userId } = await auth();
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? 'https://football-cheatsheet.vercel.app';
+    const origin = req.headers.get('origin') ?? 'https://football-cheatsheet.vercel.app';
 
-  // Re-use existing customer if one exists
-  const existing = await getSubscription(userId);
-  const customerParams = existing?.stripe_customer_id
-    ? { customer: existing.stripe_customer_id }
-    : { customer_creation: 'always' as const };
+    const existing = await getSubscription(userId);
+    const customerParams = existing?.stripe_customer_id
+      ? { customer: existing.stripe_customer_id }
+      : { customer_creation: 'always' as const };
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    ...customerParams,
-    line_items: [{ price: process.env.STRIPE_PRICE_ID!, quantity: 1 }],
-    subscription_data: {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      ...customerParams,
+      line_items: [{ price: process.env.STRIPE_PRICE_ID!, quantity: 1 }],
+      subscription_data: { metadata: { clerkUserId: userId } },
       metadata: { clerkUserId: userId },
-    },
-    metadata: { clerkUserId: userId },
-    success_url: `${origin}/dashboard?subscribed=1`,
-    cancel_url:  `${origin}/pricing`,
-    allow_promotion_codes: true,
-  });
+      success_url: `${origin}/dashboard?subscribed=1`,
+      cancel_url: `${origin}/pricing`,
+      allow_promotion_codes: true,
+    });
 
-  return NextResponse.json({ url: session.url });
+    return NextResponse.json({ url: session.url });
+  } catch (e: any) {
+    console.error('Stripe checkout error:', e);
+    return NextResponse.json({ error: e.message ?? 'Stripe error' }, { status: 500 });
+  }
 }

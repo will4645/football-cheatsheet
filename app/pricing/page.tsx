@@ -6,15 +6,26 @@ import { useRouter } from 'next/navigation';
 
 export default function PricingPage() {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const router = useRouter();
 
   async function subscribe() {
     setLoading(true);
-    const res = await fetch('/api/stripe/checkout', { method: 'POST' });
-    if (res.status === 401) { router.push('/sign-up'); return; }
-    const { url } = await res.json();
-    if (url) window.location.href = url;
-    else setLoading(false);
+    setError('');
+    try {
+      const res = await fetch('/api/stripe/checkout', { method: 'POST' });
+      if (res.status === 401) { router.push('/sign-up'); return; }
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setError(data.error ?? 'Something went wrong. Please try again.');
+        setLoading(false);
+      }
+    } catch (e: any) {
+      setError(e.message ?? 'Something went wrong. Please try again.');
+      setLoading(false);
+    }
   }
 
   return (
@@ -66,6 +77,7 @@ export default function PricingPage() {
         >
           {loading ? 'Redirecting...' : 'Subscribe for £9.99/mo'}
         </button>
+        {error && <p className="text-red-400 text-xs text-center mt-3">{error}</p>}
         <p className="text-[10px] text-gray-700 text-center mt-3">Secure payment via Stripe</p>
       </div>
 
