@@ -38,8 +38,15 @@ export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id') ?? 'newcastle-united-fc-vs-afc-bournemouth';
   const { data: matchRow } = await sb.from('match_cache').select('value').eq('key', `match:${id}`).single();
 
+  const stripeKey = process.env.STRIPE_SECRET_KEY ?? '';
   return NextResponse.json({
     serverNow,
+    stripe: {
+      hasKey: !!stripeKey,
+      prefix: stripeKey.slice(0, 12),
+      suffix: stripeKey.slice(-4),
+      length: stripeKey.length,
+    },
     writeTest: {
       wrote: testTs,
       readBack: testReadBack,
