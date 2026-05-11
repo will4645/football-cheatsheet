@@ -30,33 +30,41 @@ export async function POST(req: NextRequest) {
       stripeCustomerId: typeof sub.customer === 'string' ? sub.customer : (sub.customer as any).id,
       stripeSubscriptionId: sub.id,
       status: sub.status,
-      currentPeriodEnd: new Date((sub as any).current_period_end * 1000),
+      currentPeriodEnd: (() => {
+        const raw = (sub as any).current_period_end;
+        return typeof raw === 'number' ? new Date(raw * 1000) : new Date(raw);
+      })(),
     });
   }
 
-  switch (event.type) {
-    case 'checkout.session.completed': {
-      const session = event.data.object as Stripe.Checkout.Session;
-      if (session.mode !== 'subscription') break;
-      const subId = typeof session.subscription === 'string'
-        ? session.subscription
-        : (session.subscription as any)?.id;
-      if (!subId) break;
-      const sub = await stripe.subscriptions.retrieve(subId);
-      if (!sub.metadata?.clerkUserId && session.metadata?.clerkUserId) {
-        await stripe.subscriptions.update(subId, {
-          metadata: { clerkUserId: session.metadata.clerkUserId },
-        });
-        (sub.metadata as any).clerkUserId = session.metadata.clerkUserId;
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.mode !== 'subscription') break;
+        const subId = typeof session.subscription === 'string'
+          ? session.subscription
+          : (session.subscription as any)?.id;
+        if (!subId) break;
+        const sub = await stripe.subscriptions.retrieve(subId);
+        if (!sub.metadata?.clerkUserId && session.metadata?.clerkUserId) {
+          await stripe.subscriptions.update(subId, {
+            metadata: { clerkUserId: session.metadata.clerkUserId },
+          });
+          (sub.metadata as any).clerkUserId = session.metadata.clerkUserId;
+        }
+        await handleSubscription(sub);
+        break;
       }
-      await handleSubscription(sub);
-      break;
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted': {
+        await handleSubscription(event.data.object as Stripe.Subscription);
+        break;
+      }
     }
-    case 'customer.subscription.updated':
-    case 'customer.subscription.deleted': {
-      await handleSubscription(event.data.object as Stripe.Subscription);
-      break;
-    }
+  } catch (err: any) {
+    console.error('Webhook handler error:', err?.message ?? err);
+    return NextResponse.json({ error: err?.message ?? 'handler error' }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
@@ -66,7 +74,7 @@ async function getClerkUserIdFromCustomer(customerId: string): Promise<string | 
   // Look up by stripe_customer_id in existing subscriptions table
   const { createClient } = await import('@supabase/supabase-js');
   const sb = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
   const { data } = await sb
