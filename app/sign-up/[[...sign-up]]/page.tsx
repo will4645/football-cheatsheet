@@ -30,8 +30,10 @@ export default function SignUpPage() {
     setError('');
     setLoading(true);
     try {
-      await signUp.create({ firstName, lastName, emailAddress: email, password });
-      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      const created = await signUp.create({ firstName, lastName, emailAddress: email, password });
+      if (created.verifications.emailAddress.status !== 'unverified') {
+        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      }
       setStage('verify');
     } catch (err: any) {
       setError(err.errors?.[0]?.message ?? 'Something went wrong.');
