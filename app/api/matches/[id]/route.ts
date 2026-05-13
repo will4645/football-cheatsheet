@@ -21,8 +21,8 @@ export async function GET(
     });
   }
 
-  // Fallback: serve the hardcoded Atletico vs Barcelona data
-  if (id === 'atletico-vs-barcelona' || id === 'atletico-de-madrid-vs-barcelona') {
+  // Fallback: serve the hardcoded demo data
+  if (id === 'fulham-vs-getafe-cf' || id === 'atletico-vs-barcelona' || id === 'atletico-de-madrid-vs-barcelona') {
     const { matchData } = await import('@/data/match');
     return NextResponse.json(matchData);
   }
