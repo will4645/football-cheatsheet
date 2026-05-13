@@ -1523,10 +1523,9 @@ async function runDemoSync() {
 
 // ── Route handler ──────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
   const demo = req.nextUrl.searchParams.get('demo');
+
+  // Demo sync is open — only generates the Fulham vs Getafe preview sheet
   if (demo === 'fulham-vs-getafe') {
     try {
       const logs = await runDemoSync();
@@ -1535,6 +1534,10 @@ export async function GET(req: NextRequest) {
       console.error('[demo-sync] Error:', e);
       return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
     }
+  }
+
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
     const logs = await runSync();
