@@ -112,6 +112,19 @@ function Last5Dots({ data, hitColor = '#22c55e', missColor = '#ef4444' }: {
   );
 }
 
+/* ── Card dots: yellow / red / empty ────────────────── */
+function CardDots({ data }: { data?: (boolean | 'yellow' | 'red' | false)[] | null }) {
+  const dots = [...(Array.isArray(data) ? data : []), false, false, false, false, false].slice(0, 5);
+  return (
+    <div className="flex items-center gap-1">
+      {dots.map((card, i) => {
+        const bg = card === 'red' ? '#ef4444' : (card === 'yellow' || card === true) ? '#facc15' : '#1f2937';
+        return <div key={i} className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: bg }} />;
+      })}
+    </div>
+  );
+}
+
 
 /* ── Stat column (bordered box wrapping header + values) ─ */
 function StatCol({ width, header, right = false, children }: {
@@ -252,7 +265,7 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
           {ps.map((p, i) => <div key={i} className={`${ROW} justify-end text-[11px] font-semibold text-white`}>{p.cardsPerGame.toFixed(2)}</div>)}
         </StatCol>
         <StatCol width="w-[96px]" header="Last 5 (Carded)">
-          {ps.map((p, i) => <div key={i} className={ROW}><Last5Dots data={p.last5Cards} hitColor="#facc15" missColor="#1f2937" /></div>)}
+          {ps.map((p, i) => <div key={i} className={ROW}><CardDots data={p.last5Cards} /></div>)}
         </StatCol>
       </div>
     );

@@ -20,7 +20,7 @@ export interface GoalscoringPlayer {
 export interface CardsPlayer {
   name: string; appearances: number;
   yellowCards: number; redCards: number; cardsPerGame: number;
-  last5Cards?: boolean[] | null;
+  last5Cards?: ('yellow' | 'red' | false)[] | null;
 }
 export interface GkPlayer {
   name: string;
@@ -129,16 +129,16 @@ export const matchData: {
         { name: 'Calvin Bassey',    mins: 86, goals: 0,  assists: 0, gaPerGame: 0.00, last5Goals: [false,false,false,false,false],last5Assists: [false,false,false,false,false], form: 'poor' },
       ],
       cards: [
-        { name: 'Sander Berge',     appearances: 33, yellowCards: 7, redCards: 0, cardsPerGame: 0.21, last5Cards: [false,true,false,true,false]  },
-        { name: 'Antonee Robinson', appearances: 32, yellowCards: 5, redCards: 1, cardsPerGame: 0.16, last5Cards: [false,false,true,false,false]  },
-        { name: 'Calvin Bassey',    appearances: 33, yellowCards: 5, redCards: 0, cardsPerGame: 0.15, last5Cards: [false,true,false,false,false]  },
-        { name: 'Joachim Andersen', appearances: 31, yellowCards: 4, redCards: 0, cardsPerGame: 0.13, last5Cards: [false,false,false,true,false]  },
-        { name: 'Andreas Pereira',  appearances: 32, yellowCards: 4, redCards: 0, cardsPerGame: 0.13, last5Cards: [true,false,false,false,false]  },
-        { name: 'Harry Wilson',     appearances: 30, yellowCards: 3, redCards: 0, cardsPerGame: 0.10, last5Cards: [false,false,true,false,false]  },
-        { name: 'Alex Iwobi',       appearances: 30, yellowCards: 2, redCards: 0, cardsPerGame: 0.07, last5Cards: [false,false,false,false,true]  },
-        { name: 'Raúl Jiménez',     appearances: 32, yellowCards: 2, redCards: 0, cardsPerGame: 0.06, last5Cards: [false,true,false,false,false]  },
-        { name: 'Emile Smith Rowe', appearances: 31, yellowCards: 2, redCards: 0, cardsPerGame: 0.06, last5Cards: [false,false,false,true,false]  },
-        { name: 'Kenny Tete',       appearances: 32, yellowCards: 2, redCards: 0, cardsPerGame: 0.06, last5Cards: [false,false,false,false,false]  },
+        { name: 'Sander Berge',     appearances: 33, yellowCards: 7, redCards: 0, cardsPerGame: 0.21, last5Cards: [false,'yellow',false,'yellow',false]  },
+        { name: 'Antonee Robinson', appearances: 32, yellowCards: 5, redCards: 1, cardsPerGame: 0.16, last5Cards: [false,false,'red',false,'yellow']     },
+        { name: 'Calvin Bassey',    appearances: 33, yellowCards: 5, redCards: 0, cardsPerGame: 0.15, last5Cards: [false,'yellow',false,false,false]      },
+        { name: 'Joachim Andersen', appearances: 31, yellowCards: 4, redCards: 0, cardsPerGame: 0.13, last5Cards: [false,false,false,'yellow',false]      },
+        { name: 'Andreas Pereira',  appearances: 32, yellowCards: 4, redCards: 0, cardsPerGame: 0.13, last5Cards: ['yellow',false,false,false,false]      },
+        { name: 'Harry Wilson',     appearances: 30, yellowCards: 3, redCards: 0, cardsPerGame: 0.10, last5Cards: [false,false,'yellow',false,false]      },
+        { name: 'Alex Iwobi',       appearances: 30, yellowCards: 2, redCards: 0, cardsPerGame: 0.07, last5Cards: [false,false,false,false,'yellow']      },
+        { name: 'Raúl Jiménez',     appearances: 32, yellowCards: 2, redCards: 0, cardsPerGame: 0.06, last5Cards: [false,'yellow',false,false,false]      },
+        { name: 'Emile Smith Rowe', appearances: 31, yellowCards: 2, redCards: 0, cardsPerGame: 0.06, last5Cards: [false,false,false,'yellow',false]      },
+        { name: 'Kenny Tete',       appearances: 32, yellowCards: 2, redCards: 0, cardsPerGame: 0.06, last5Cards: [false,false,false,false,false]         },
       ],
       gk: [
         { name: 'Bernd Leno', savesPerGame: 3.82, last5Saves: [true,false,true,true,false] },
@@ -212,16 +212,16 @@ export const matchData: {
         { name: 'Johan Alderete',     mins: 87, goals: 0,  assists: 0, gaPerGame: 0.00, last5Goals: [false,false,false,false,false],last5Assists: [false,false,false,false,false], form: 'poor' },
       ],
       cards: [
-        { name: 'Mauro Arambarri',    appearances: 29, yellowCards: 11, redCards: 1, cardsPerGame: 0.38, last5Cards: [false,true,false,true,false]  },
-        { name: 'Nemanja Maksimović', appearances: 31, yellowCards: 8,  redCards: 0, cardsPerGame: 0.26, last5Cards: [true,false,false,false,true]   },
-        { name: 'Damián Suárez',      appearances: 32, yellowCards: 7,  redCards: 0, cardsPerGame: 0.22, last5Cards: [false,false,true,false,false]  },
-        { name: 'Johan Alderete',     appearances: 30, yellowCards: 6,  redCards: 0, cardsPerGame: 0.20, last5Cards: [false,true,false,false,false]  },
-        { name: 'Gastón Álvarez',     appearances: 30, yellowCards: 4,  redCards: 1, cardsPerGame: 0.13, last5Cards: [false,false,false,true,false]  },
-        { name: 'Diego Rico',         appearances: 31, yellowCards: 4,  redCards: 0, cardsPerGame: 0.13, last5Cards: [false,false,true,false,false]  },
-        { name: 'Mason Greenwood',    appearances: 30, yellowCards: 3,  redCards: 0, cardsPerGame: 0.10, last5Cards: [false,false,false,false,true]  },
-        { name: 'Óscar Rodríguez',    appearances: 29, yellowCards: 3,  redCards: 0, cardsPerGame: 0.10, last5Cards: [false,true,false,false,false]  },
-        { name: 'Carles Aleñá',       appearances: 30, yellowCards: 2,  redCards: 0, cardsPerGame: 0.07, last5Cards: [false,false,false,false,false]  },
-        { name: 'Borja Mayoral',      appearances: 29, yellowCards: 2,  redCards: 0, cardsPerGame: 0.07, last5Cards: [false,false,false,false,false]  },
+        { name: 'Mauro Arambarri',    appearances: 29, yellowCards: 11, redCards: 1, cardsPerGame: 0.38, last5Cards: [false,'yellow',false,'red','yellow']  },
+        { name: 'Nemanja Maksimović', appearances: 31, yellowCards: 8,  redCards: 0, cardsPerGame: 0.26, last5Cards: ['yellow',false,false,false,'yellow']    },
+        { name: 'Damián Suárez',      appearances: 32, yellowCards: 7,  redCards: 0, cardsPerGame: 0.22, last5Cards: [false,false,'yellow',false,false]       },
+        { name: 'Johan Alderete',     appearances: 30, yellowCards: 6,  redCards: 0, cardsPerGame: 0.20, last5Cards: [false,'yellow',false,false,false]       },
+        { name: 'Gastón Álvarez',     appearances: 30, yellowCards: 4,  redCards: 1, cardsPerGame: 0.13, last5Cards: [false,false,false,'yellow',false]       },
+        { name: 'Diego Rico',         appearances: 31, yellowCards: 4,  redCards: 0, cardsPerGame: 0.13, last5Cards: [false,false,'yellow',false,false]       },
+        { name: 'Mason Greenwood',    appearances: 30, yellowCards: 3,  redCards: 0, cardsPerGame: 0.10, last5Cards: [false,false,false,false,'yellow']       },
+        { name: 'Óscar Rodríguez',    appearances: 29, yellowCards: 3,  redCards: 0, cardsPerGame: 0.10, last5Cards: [false,'yellow',false,false,false]       },
+        { name: 'Carles Aleñá',       appearances: 30, yellowCards: 2,  redCards: 0, cardsPerGame: 0.07, last5Cards: [false,false,false,false,false]          },
+        { name: 'Borja Mayoral',      appearances: 29, yellowCards: 2,  redCards: 0, cardsPerGame: 0.07, last5Cards: [false,false,false,false,false]          },
       ],
       gk: [
         { name: 'David Soria', savesPerGame: 4.22, last5Saves: [true,true,false,true,true] },

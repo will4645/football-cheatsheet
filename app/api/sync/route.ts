@@ -762,7 +762,7 @@ async function buildPlayers(
             yellowCards: p.yellowCards,
             redCards: p.redCards ?? 0,
             cardsPerGame: cpg,
-            last5Cards: bestLast5(p.name, p.espnId, 'yellowCards', 1),
+            last5Cards: bestLast5(p.name, p.espnId, 'yellowCards', 1)?.map(b => b ? 'yellow' as const : false as const) ?? null,
           };
         }),
       gk: (() => {
