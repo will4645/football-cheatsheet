@@ -251,12 +251,13 @@ function buildTeamStats(
     count++;
   }
   // Priority: fd.org results → API-Football fixture scores → ESPN season stats → league avg defaults
+  // Use || (not ??) for ESPN goals because the field initialises to 0 when no score data is available
   const avgFor     = count > 0 ? goalsFor / count
                    : ((afStats?.goalsFor ?? 0)     > 0 ? afStats!.goalsFor
-                   : (espnStats?.goalsFor     ?? 1.5));
+                   : (espnStats?.goalsFor     || 1.5));
   const avgAgainst = count > 0 ? goalsAgainst / count
                    : ((afStats?.goalsAgainst ?? 0) > 0 ? afStats!.goalsAgainst
-                   : (espnStats?.goalsAgainst ?? 1.2));
+                   : (espnStats?.goalsAgainst || 1.2));
 
   const e = espnStats;
   const o = oppEspnStats;

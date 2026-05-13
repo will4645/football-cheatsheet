@@ -194,8 +194,9 @@ async function fetchTeamRecentEventIds(teamId: string, leagues: string[], n = 12
           const competitors: any[] = e.competitions?.[0]?.competitors ?? [];
           const mine = competitors.find((c: any) => String(c.team?.id) === String(teamId));
           const opp  = competitors.find((c: any) => String(c.team?.id) !== String(teamId) && c.team?.id);
-          const gf = mine ? (parseInt(mine.score ?? '') || 0) : -1;
-          const ga = opp  ? (parseInt(opp.score  ?? '') || 0) : -1;
+          // Only treat score as 0 when the field is explicitly set; missing/empty → -1 (excluded from avg)
+          const gf = (mine && mine.score != null && mine.score !== '') ? (parseInt(mine.score) || 0) : -1;
+          const ga = (opp  && opp.score  != null && opp.score  !== '') ? (parseInt(opp.score)  || 0) : -1;
           allEvents.push({ id: e.id, date: e.date ?? '', league: lg, gf, ga });
         });
       }
@@ -641,9 +642,9 @@ export async function fetchApiFootballTeamHistory(
       teams.push(...(td2?.response ?? []));
     }
     if (!teams.length) {
-      // Last resort: search by first keyword only
+      // Last resort: search by first keyword only, no league filter
       const firstWord = searchName.split(' ').find(w => w.length >= 5) ?? searchName.split(' ')[0];
-      const td3 = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}${leagueParam}`, apiKey);
+      const td3 = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}`, apiKey);
       teams.push(...(td3?.response ?? []));
     }
     if (!teams.length) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: `no team: ${searchName}` };
@@ -896,7 +897,7 @@ export async function fetchApiFootballSquadStats(
     }
     if (!teams.length) {
       const firstWord = searchName.split(' ').find(w => w.length >= 5) ?? searchName.split(' ')[0];
-      td = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}${leagueParam}`, apiKey);
+      td = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}`, apiKey);
       teams = td?.response ?? [];
     }
     if (!teams.length) return { stats: new Map(), debug: `no team: ${searchName}` };
@@ -1019,7 +1020,7 @@ export async function fetchApiFootballReferee(teamName: string, apiKey: string, 
     if (!teams.length) {
       const firstWord = searchName.split(' ')[0];
       if (firstWord !== searchName) {
-        td = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}${leagueParam}`, apiKey);
+        td = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}`, apiKey);
         teams = td?.response ?? [];
       }
     }
