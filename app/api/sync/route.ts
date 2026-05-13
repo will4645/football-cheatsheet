@@ -393,6 +393,9 @@ async function buildPlayers(
     const espnId = (p.espnId ?? '') as string;
     // ESPN roster by ESPN ID is the most reliable source (no name matching required)
     const roster = lookupRoster(name, espnId);
+    // If the lineup came from API-Football (espnId is empty), resolve it via roster name match.
+    // This lets espnHistory per-game lookups work for players from non-ESPN lineup sources.
+    const effectiveEspnId = espnId || roster?.id || '';
     // API-Sports global index as supplementary source for per-game rates
     const as = lookupApiSports(apiSportsIdx, name);
 
@@ -411,10 +414,11 @@ async function buildPlayers(
 
       // Roster (ESPN current-club season stats) takes priority over API-Sports global index.
       // API-Sports accumulates across ALL competitions and clubs for the season, so a player
-      // who transferred mid-season (e.g. Atalanta → Atletico) gets blended cross-club averages.
+      // who transferred mid-season gets blended cross-club averages.
       // ESPN roster is specific to the current squad and gives accurate current-club stats.
       return {
         ...defaults,
+        espnId: effectiveEspnId,
         mins:            as?.minsPerGame     || defaults.mins,
         goals, assists, gaPerGame,
         shotsPerGame:    rosterShotsPg    || as?.shotsPerGame    || defaults.shotsPerGame,
@@ -428,7 +432,7 @@ async function buildPlayers(
     }
 
     // No data found from any source — use position defaults but flag clearly
-    return { ...defaults, hasRealData: false };
+    return { ...defaults, espnId: effectiveEspnId, hasRealData: false };
   }
 
   const homeStarters = homeLineup.lineup || homeLineup.startingEleven || [];
@@ -669,11 +673,15 @@ async function buildPlayers(
       return result;
     }
 
-    // Season average for the displayed number — ESPN history (min 3g) or API-Sports default.
-    // AF last-5 is intentionally excluded here: it covers only 5 games across ALL competitions,
-    // so one intense CL game can double a defender's fouls average. Use AF only for dots.
-    function bestRate(_name: string, espnId: string, _afField: keyof PlayerGameStat, fallback: number): number {
-      return espnOrSafe(espnId, _afField, fallback);
+    // Season average for the displayed number.
+    // Priority: ESPN per-match history (min 3g) → AF per-match avg (min 2g) → fallback (squad/default).
+    // AF history covers only ~8 domestic games so is reasonable for season-rate estimates.
+    function bestRate(name: string, espnId: string, afField: keyof PlayerGameStat, fallback: number): number {
+      const espn = espnOrSafe(espnId, afField, 0);
+      if (espn > 0) return espn;
+      const af = afAvg(name, afField);
+      if (af !== null && af > 0) return af;
+      return fallback;
     }
 
     // Log coverage per player: af=X/esp=Y (nz=Z) — total games and non-zero fouls count
