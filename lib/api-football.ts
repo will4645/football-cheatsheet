@@ -353,15 +353,19 @@ export async function fetchTeamPlayerHistory(
   let seasonStats: TeamSeasonStats | null = null;
   const n = teamStatSamples.length;
 
-  // Pick best value: ESPN season endpoint first, then boxscore per-game average
+  // Pick best value: ESPN season endpoint first (own stats only), then boxscore per-game average.
+  // The endpoint gives this team's OWN season totals, so it is only valid for the 'mine' side.
+  // For 'opp' (defensive/against stats), skip the endpoint and use boxscore opponent-side data.
   function getBestStat(side: 'mine' | 'opp', ...aliases: string[]): number {
     const normAliases = aliases.map(normKey);
-    // 1. Try endpoint stats (season averages)
-    for (const k of normAliases) {
-      const v = endpointStats[k];
-      if (v != null && v > 0) return +v.toFixed(2);
+    // 1. Endpoint stats — valid for 'mine' only (endpoint doesn't expose opponent stats)
+    if (side === 'mine') {
+      for (const k of normAliases) {
+        const v = endpointStats[k];
+        if (v != null && v > 0) return +v.toFixed(2);
+      }
     }
-    // 2. Try per-game average from boxscore samples
+    // 2. Per-game average from boxscore samples (both teams present in each event summary)
     if (n > 0) {
       for (const k of normAliases) {
         const sum = teamStatSamples.reduce((s, g) => s + (g[side][k] ?? 0), 0);

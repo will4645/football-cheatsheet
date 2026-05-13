@@ -234,30 +234,29 @@ function buildTeamStats(
   const af = afStats;
   const oaf = oppAfStats;
 
-  // Priority: AF fixture stats → ESPN season stats → opponent's mirrored stat → default
-  // AF fixture stats are most reliable as they come from the same source as player stats
+  // For "for" stats: own AF data is most accurate (from fixture stats endpoint, filtered to this team).
+  // For "against" stats: use this team's own ESPN season boxscore averages first (opp-side data
+  // from completed events gives genuine defensive averages), then fall back to opponent AF/ESPN.
+  // Previously opponent AF data came first for "against" which caused perfect mirroring.
   const cornersFor      = af?.cornersFor     || e?.cornersFor      || o?.cornersAgainst   || oaf?.cornersFor     || 5.0;
-  const cornersAgainst  = oaf?.cornersFor    || e?.cornersAgainst  || o?.cornersFor       || af?.cornersFor      || 5.0;
+  const cornersAgainst  = e?.cornersAgainst  || oaf?.cornersFor    || o?.cornersFor       || af?.cornersFor      || 5.0;
   const shotsFor        = af?.shotsFor       || e?.shotsFor        || o?.shotsAgainst     || oaf?.shotsFor       || 13.0;
-  const shotsAgainst    = oaf?.shotsFor      || e?.shotsAgainst    || o?.shotsFor         || af?.shotsFor        || 11.0;
+  const shotsAgainst    = e?.shotsAgainst    || oaf?.shotsFor      || o?.shotsFor         || af?.shotsFor        || 11.0;
   const sotFor          = af?.sotFor         || e?.sotFor          || o?.sotAgainst       || oaf?.sotFor         || 4.5;
-  const sotAgainst      = oaf?.sotFor        || e?.sotAgainst      || o?.sotFor           || af?.sotFor          || 3.8;
-  // AF foulsFor = fouls committed by this team (= free kicks awarded to opponent)
-  // freeKicksFor = fouls drawn (won) = opponent's foulsFor
+  const sotAgainst      = e?.sotAgainst      || oaf?.sotFor        || o?.sotFor           || af?.sotFor          || 3.8;
   const foulsCommitted  = af?.foulsFor       || e?.foulsCommitted  || o?.foulsWon         || 11.0;
-  const foulsWon        = oaf?.foulsFor      || e?.foulsWon        || o?.foulsCommitted   || 11.0;
+  const foulsWon        = e?.foulsWon        || oaf?.foulsFor      || o?.foulsCommitted   || 11.0;
   const cardsFor        = af?.yellowCardsFor || e?.cardsFor        || o?.cardsAgainst     || 1.8;
-  const cardsAgainst    = oaf?.yellowCardsFor|| e?.cardsAgainst    || o?.cardsFor         || 1.8;
+  const cardsAgainst    = e?.cardsAgainst    || oaf?.yellowCardsFor|| o?.cardsFor         || 1.8;
   const tacklesFor      = af?.tacklesFor     || e?.tacklesFor      || o?.tacklesAgainst   || oaf?.tacklesFor     || 18.0;
-  const tacklesAgainst  = oaf?.tacklesFor    || e?.tacklesAgainst  || o?.tacklesFor       || af?.tacklesFor      || 18.0;
+  const tacklesAgainst  = e?.tacklesAgainst  || oaf?.tacklesFor    || o?.tacklesFor       || af?.tacklesFor      || 18.0;
   const offsidesFor     = af?.offsidesFor    || e?.offsidesFor     || o?.offsidesAgainst  || oaf?.offsidesFor    || 2.0;
-  const offsidesAgainst = oaf?.offsidesFor   || e?.offsidesAgainst || o?.offsidesFor      || af?.offsidesFor     || 2.0;
-  // Free kicks: use AF foulsFor (committed fouls = free kicks conceded/given away)
-  // freeKicksFor = free kicks this team was awarded = opponent committed fouls
-  const freeKicksFor    = oaf?.foulsFor      || e?.freeKicksFor    || o?.freeKicksAgainst || foulsWon    || 10.0;
-  const freeKicksAgainst= af?.foulsFor       || e?.freeKicksAgainst|| o?.freeKicksFor     || foulsCommitted || 10.0;
-  const goalKicksFor    = af?.goalKicksFor    || oaf?.goalKicksFor   || e?.goalKicksFor    || o?.goalKicksAgainst || 5.5;
-  const goalKicksAgainst= oaf?.goalKicksFor  || af?.goalKicksFor    || e?.goalKicksAgainst|| o?.goalKicksFor     || 5.5;
+  const offsidesAgainst = e?.offsidesAgainst || oaf?.offsidesFor   || o?.offsidesFor      || af?.offsidesFor     || 2.0;
+  // Free kicks for = fouls this team WON = opponent's committed fouls
+  const freeKicksFor    = e?.freeKicksFor    || oaf?.foulsFor      || o?.freeKicksAgainst || foulsWon    || 10.0;
+  const freeKicksAgainst= e?.freeKicksAgainst|| af?.foulsFor       || o?.freeKicksFor     || foulsCommitted || 10.0;
+  const goalKicksFor    = af?.goalKicksFor   || e?.goalKicksFor    || oaf?.goalKicksFor   || o?.goalKicksAgainst || 5.5;
+  const goalKicksAgainst= e?.goalKicksAgainst|| oaf?.goalKicksFor  || af?.goalKicksFor    || o?.goalKicksFor     || 5.5;
   return {
     goalsFor: +avgFor.toFixed(2), goalsAgainst: +avgAgainst.toFixed(2),
     over25Goals:    overProb(avgFor + avgAgainst, 2.5),
@@ -1233,14 +1232,16 @@ async function runSync() {
         },
       },
       probabilities: (() => {
-        // Use real bookmaker odds when available (homeWin=0 means referee-only result with no odds)
-        if (afOdds && afOdds.homeWin > 0) return afOdds;
-        // Fall back to home-advantage-adjusted Poisson model
         const HOME_ADV = 1.25;
         const lH = Math.max(0.3, (homeStats.goalsFor + awayStats.goalsAgainst) / 2 * HOME_ADV);
         const lA = Math.max(0.3, (awayStats.goalsFor + homeStats.goalsAgainst) / 2);
-        const btts = Math.round((1 - Math.exp(-lH)) * (1 - Math.exp(-lA)) * 100);
-        return { btts, ...matchOutcomes(lH, lA) };
+        const poissonBtts = Math.round((1 - Math.exp(-lH)) * (1 - Math.exp(-lA)) * 100);
+        // Use bookmaker odds when available; for BTTS, use Poisson if no BTTS market found
+        // (the default of exactly 50 signals no market was found, not a real bookmaker value)
+        if (afOdds && afOdds.homeWin > 0) {
+          return { ...afOdds, btts: afOdds.btts !== 50 ? afOdds.btts : poissonBtts };
+        }
+        return { btts: poissonBtts, ...matchOutcomes(lH, lA) };
       })(),
       fixtureId: match.id, status,
       aggregate: await (async () => {
