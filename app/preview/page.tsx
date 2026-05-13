@@ -1,5 +1,6 @@
 import MatchSheet from '@/components/MatchSheet';
+import { atleticoMatchData } from '@/data/match-atletico';
 
 export default function PreviewPage() {
-  return <MatchSheet />;
+  return <MatchSheet data={atleticoMatchData} />;
 }
