@@ -10,6 +10,13 @@ export async function POST(req: NextRequest) {
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const body = await req.json().catch(() => ({}));
+    const billing: 'monthly' | 'annual' = body.billing === 'annual' ? 'annual' : 'monthly';
+
+    const priceId = billing === 'annual'
+      ? (process.env.STRIPE_ANNUAL_PRICE_ID ?? process.env.STRIPE_PRICE_ID!)
+      : process.env.STRIPE_PRICE_ID!;
+
     const origin = req.headers.get('origin') ?? 'https://football-cheatsheet.vercel.app';
 
     const existing = await getSubscription(userId);
@@ -20,8 +27,11 @@ export async function POST(req: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       ...customerParams,
-      line_items: [{ price: process.env.STRIPE_PRICE_ID!, quantity: 1 }],
-      subscription_data: { metadata: { clerkUserId: userId } },
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: {
+        metadata: { clerkUserId: userId },
+        trial_period_days: 7,
+      },
       metadata: { clerkUserId: userId },
       success_url: `${origin}/dashboard?subscribed=1`,
       cancel_url: `${origin}/pricing`,

@@ -70,7 +70,7 @@ export default async function LandingPage() {
             },
             {
               title: '15+ Stat Markets',
-              desc: 'Corners, shots, tackles, offsides, throw-ins, goal kicks. All with Poisson probabilities.',
+              desc: 'Corners, shots, tackles, offsides, goal kicks, free kicks. All with Poisson probabilities.',
               icon: '%',
             },
           ].map(f => (
@@ -129,12 +129,6 @@ export default async function LandingPage() {
           </Link>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="text-center pb-8 text-[11px] text-gray-700 space-x-4">
-        <span>© 2025 Cheat Sheets</span>
-        <Link href="/sign-in" className="hover:text-gray-500">Sign in</Link>
-      </footer>
 
     </div>
   );

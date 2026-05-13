@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { UserButton } from '@clerk/nextjs';
 import { COMPETITION_CONFIG, nameToSlug } from '@/lib/competitions';
+import OnboardingModal from '@/components/OnboardingModal';
 
 interface MatchSummary {
   id: string;
@@ -46,6 +47,8 @@ export default function Dashboard() {
     <div className="min-h-screen p-4 sm:p-6 lg:p-10" style={{ background: '#080c14' }}>
       <div className="max-w-4xl mx-auto">
 
+        <OnboardingModal />
+
         {/* Header */}
         <div className="flex items-center justify-between mb-8 sm:mb-10">
           <div className="text-center flex-1">
@@ -53,7 +56,11 @@ export default function Dashboard() {
             <p className="text-[11px] uppercase tracking-widest text-gray-600">Select a competition</p>
           </div>
           <div className="flex items-center gap-2 absolute right-4 sm:right-6 lg:right-10 top-4 sm:top-6 lg:top-10">
-            <ManageBillingButton />
+            <Link href="/account"
+              className="text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              Account
+            </Link>
             <UserButton afterSignOutUrl="/" />
           </div>
         </div>
@@ -66,6 +73,17 @@ export default function Dashboard() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {!loaded && Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-xl p-4 sm:p-5 flex items-center gap-3 animate-pulse"
+                 style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex-1 space-y-2">
+                <div className="h-2 w-16 rounded" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                <div className="h-4 w-28 rounded" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                <div className="h-2 w-10 rounded" style={{ background: 'rgba(255,255,255,0.04)' }} />
+              </div>
+              <div className="w-12 h-12 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }} />
+            </div>
+          ))}
           {COMPETITION_CONFIG.map(comp => {
             const count = counts[comp.slug] ?? 0;
             const hasFixtures = count > 0;

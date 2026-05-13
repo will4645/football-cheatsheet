@@ -169,9 +169,11 @@ export default function SignUpPage() {
             </>
           )}
 
-          <p className="mt-8 text-xs text-gray-700 text-center">
+          <p className="mt-8 text-xs text-gray-700 text-center leading-relaxed">
             By creating an account you agree to our{' '}
-            <Link href="/pricing" className="text-gray-500 hover:text-gray-400">terms</Link>.
+            <Link href="/terms" className="text-gray-500 hover:text-gray-400">Terms of Service</Link>
+            {' '}and{' '}
+            <Link href="/privacy" className="text-gray-500 hover:text-gray-400">Privacy Policy</Link>.
           </p>
         </div>
       </div>

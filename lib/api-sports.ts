@@ -135,17 +135,25 @@ export async function fetchApiSportsIndex(apiKey: string): Promise<Map<string, A
           const key = norm(playerName);
           const existing = raw.get(key);
           if (existing) {
-            existing.games       += games;
-            existing.minsTotal   += mins;
-            existing.goals       += goals;
-            existing.assists     += assists;
-            existing.shots       += shots;
-            existing.shotsOn     += shotsOn;
-            existing.fouls       += fouls;
-            existing.fouled      += fouled;
-            existing.yellowCards += yellowCards;
-            existing.redCards    += redCards;
-            existing.pkGoals     += pkGoals;
+            // Only accumulate if this is a European competition on top of a domestic entry.
+            // Domestic-league entries must not be blended — a player in both La Liga and Serie A
+            // transferred clubs mid-season and blending gives wrong per-game rates.
+            const isEuropean = comp.id === 2 || comp.id === 3 || comp.id === 848;
+            if (isEuropean) {
+              existing.games       += games;
+              existing.minsTotal   += mins;
+              existing.goals       += goals;
+              existing.assists     += assists;
+              existing.shots       += shots;
+              existing.shotsOn     += shotsOn;
+              existing.fouls       += fouls;
+              existing.fouled      += fouled;
+              existing.yellowCards += yellowCards;
+              existing.redCards    += redCards;
+              existing.pkGoals     += pkGoals;
+            }
+            // For domestic leagues: skip — keep the first (Big 5 processed in order: PL, La Liga,
+            // Bundesliga, Serie A, Ligue 1), so the player's primary/current Big 5 club wins.
           } else {
             raw.set(key, {
               name: playerName,

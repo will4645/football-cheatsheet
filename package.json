@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.6",
+    "@sentry/nextjs": "^10.53.1",
     "@supabase/supabase-js": "^2.103.3",
     "next": "14.2.0",
     "node-cron": "^3.0.3",
     "node-html-parser": "^7.1.0",
+    "posthog-js": "^1.373.4",
     "react": "^18",
     "react-dom": "^18",
     "stripe": "^22.1.1"

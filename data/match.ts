@@ -40,7 +40,6 @@ export interface TeamData {
     offsidesFor: number; offsidesAgainst: number; over35Offsides: number;
     freeKicksFor: number; freeKicksAgainst: number; over195FreeKicks: number;
     goalKicksFor: number; goalKicksAgainst: number; over115GoalKicks: number;
-    throwInsFor: number; throwInsAgainst: number; over295ThrowIns: number;
   };
   players: {
     defensive: DefensivePlayer[];
@@ -79,7 +78,6 @@ export const matchData: {
       offsidesFor: 2.41, offsidesAgainst: 1.88, over35Offsides: 55,
       freeKicksFor: 9.18, freeKicksAgainst: 11.16, over195FreeKicks: 80,
       goalKicksFor: 6.27, goalKicksAgainst: 5.33, over115GoalKicks: 55,
-      throwInsFor: 17.45, throwInsAgainst: 14.82, over295ThrowIns: 70,
     },
     players: {
       defensive: [
@@ -163,7 +161,6 @@ export const matchData: {
       offsidesFor: 3.12, offsidesAgainst: 1.54, over35Offsides: 55,
       freeKicksFor: 11.76, freeKicksAgainst: 9.38, over195FreeKicks: 80,
       goalKicksFor: 4.88, goalKicksAgainst: 6.71, over115GoalKicks: 55,
-      throwInsFor: 13.24, throwInsAgainst: 18.56, over295ThrowIns: 70,
     },
     players: {
       defensive: [

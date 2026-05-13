@@ -45,11 +45,16 @@ export default function CompetitionPage() {
       fetch('/api/matches', { cache: 'no-store' })
         .then(r => r.json())
         .then(({ live, upcoming }) => {
+          const now = Date.now();
           const liveIds = new Set((live ?? []).map((m: AnyMatch) => m.id));
           const pending = (upcoming ?? [])
             .filter((m: AnyMatch) => !liveIds.has(m.id))
+            .filter((m: AnyMatch) => !m.utcDate || new Date(m.utcDate).getTime() > now - 5 * 60_000)
             .map((m: AnyMatch) => ({ ...m, pending: true }));
-          const all: AnyMatch[] = [...(live ?? []), ...pending];
+          const activeLive = (live ?? []).filter((m: AnyMatch) =>
+            !m.utcDate || new Date(m.utcDate).getTime() > now - 2.5 * 3_600_000
+          );
+          const all: AnyMatch[] = [...activeLive, ...pending];
           const filtered = all.filter(m => matchesComp(m.competition, comp!.apiNames));
           filtered.sort((a, b) => {
             const ta = a.utcDate ? new Date(a.utcDate).getTime() : 0;

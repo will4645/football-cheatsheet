@@ -89,7 +89,6 @@ const DEFAULTS = {
   offsidesFor:    2.0,  offsidesAgainst:    2.0,  over35Offsides:    50,
   freeKicksFor:   10.0, freeKicksAgainst:   10.0, over195FreeKicks:  60,
   goalKicksFor:   5.5,  goalKicksAgainst:   5.5,  over115GoalKicks:  55,
-  throwInsFor:    15.0, throwInsAgainst:    15.0, over295ThrowIns:   55,
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -158,7 +157,6 @@ export function buildTeamStats(apiStats: any): TeamData['stats'] {
     offsidesFor:    DEFAULTS.offsidesFor,    offsidesAgainst:    DEFAULTS.offsidesAgainst,    over35Offsides:    DEFAULTS.over35Offsides,
     freeKicksFor:   DEFAULTS.freeKicksFor,   freeKicksAgainst:   DEFAULTS.freeKicksAgainst,   over195FreeKicks:  DEFAULTS.over195FreeKicks,
     goalKicksFor:   DEFAULTS.goalKicksFor,   goalKicksAgainst:   DEFAULTS.goalKicksAgainst,   over115GoalKicks:  DEFAULTS.over115GoalKicks,
-    throwInsFor:    DEFAULTS.throwInsFor,    throwInsAgainst:    DEFAULTS.throwInsAgainst,    over295ThrowIns:   DEFAULTS.over295ThrowIns,
   };
 }
 

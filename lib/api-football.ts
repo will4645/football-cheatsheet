@@ -168,9 +168,14 @@ function extractEventStats(summary: any): { stats: Map<string, PlayerGameStat>; 
 }
 
 // ── Fetch last N completed event IDs for a team across multiple leagues ───
-async function fetchTeamRecentEventIds(teamId: string, leagues: string[], n = 12): Promise<{ ids: string[]; leagueForId: Map<string, string>; debug: string }> {
-  if (!teamId) return { ids: [], leagueForId: new Map(), debug: 'no teamId' };
-  const allEvents: Array<{ id: string; date: string; league: string }> = [];
+async function fetchTeamRecentEventIds(teamId: string, leagues: string[], n = 12): Promise<{
+  ids: string[];
+  leagueForId: Map<string, string>;
+  espnGoals: { goalsFor: number; goalsAgainst: number; count: number } | null;
+  debug: string;
+}> {
+  if (!teamId) return { ids: [], leagueForId: new Map(), espnGoals: null, debug: 'no teamId' };
+  const allEvents: Array<{ id: string; date: string; league: string; gf: number; ga: number }> = [];
   const foundLeagues: string[] = [];
 
   for (const lg of leagues) {
@@ -185,7 +190,14 @@ async function fetchTeamRecentEventIds(teamId: string, leagues: string[], n = 12
       });
       if (completed.length > 0) {
         foundLeagues.push(lg);
-        completed.forEach(e => allEvents.push({ id: e.id, date: e.date ?? '', league: lg }));
+        completed.forEach(e => {
+          const competitors: any[] = e.competitions?.[0]?.competitors ?? [];
+          const mine = competitors.find((c: any) => String(c.team?.id) === String(teamId));
+          const opp  = competitors.find((c: any) => String(c.team?.id) !== String(teamId) && c.team?.id);
+          const gf = mine ? (parseInt(mine.score ?? '') || 0) : -1;
+          const ga = opp  ? (parseInt(opp.score  ?? '') || 0) : -1;
+          allEvents.push({ id: e.id, date: e.date ?? '', league: lg, gf, ga });
+        });
       }
     } catch {}
   }
@@ -198,7 +210,16 @@ async function fetchTeamRecentEventIds(teamId: string, leagues: string[], n = 12
   const ids = sorted.map(e => e.id);
   const leagueForId = new Map(sorted.map(e => [e.id, e.league]));
 
-  return { ids, leagueForId, debug: `${ids.length} events from [${foundLeagues.join(',')}]` };
+  const scored = sorted.filter(e => e.gf >= 0 && e.ga >= 0);
+  const espnGoals = scored.length >= 3
+    ? {
+        goalsFor:     +(scored.reduce((s, e) => s + e.gf, 0) / scored.length).toFixed(2),
+        goalsAgainst: +(scored.reduce((s, e) => s + e.ga, 0) / scored.length).toFixed(2),
+        count: scored.length,
+      }
+    : null;
+
+  return { ids, leagueForId, espnGoals, debug: `${ids.length} events from [${foundLeagues.join(',')}]${espnGoals ? ` goals:${espnGoals.count}g(${espnGoals.goalsFor}F/${espnGoals.goalsAgainst}A)` : ''}` };
 }
 
 export interface TeamSeasonStats {
@@ -222,8 +243,6 @@ export interface TeamSeasonStats {
   freeKicksAgainst: number;
   goalKicksFor: number;
   goalKicksAgainst: number;
-  throwInsFor: number;
-  throwInsAgainst: number;
   gamesCount: number;
 }
 
@@ -297,7 +316,7 @@ export async function fetchTeamPlayerHistory(
   const domestic = guessDomesticLeague(teamName);
   if (domestic && domestic !== primaryLeague) leaguesToFetch.push(domestic);
 
-  const { ids: eventIds, leagueForId, debug: scheduleDebug } = await fetchTeamRecentEventIds(teamId, leaguesToFetch);
+  const { ids: eventIds, leagueForId, espnGoals, debug: scheduleDebug } = await fetchTeamRecentEventIds(teamId, leaguesToFetch);
   const eventDebugs: string[] = [];
 
   const teamStatSamples: Array<{ mine: Record<string, number>; opp: Record<string, number> }> = [];
@@ -379,24 +398,14 @@ export async function fetchTeamPlayerHistory(
       freeKicksAgainst:getBestStat('opp', 'freekicks', 'Free Kicks', 'freekick', 'freekickswon') || getBestStat('mine', 'fouls', 'Fouls', 'foulscommitted'),
       goalKicksFor:   getBestStat('mine', 'goalkicks', 'Goal Kicks', 'goalkick', 'avggoalkicks'),
       goalKicksAgainst:getBestStat('opp', 'goalkicks', 'Goal Kicks', 'goalkick', 'avggoalkicks'),
-      throwInsFor:    getBestStat('mine', 'throwins', 'Throw Ins', 'throwin', 'throwinkicks', 'throwinkick'),
-      throwInsAgainst:getBestStat('opp',  'throwins', 'Throw Ins', 'throwin', 'throwinkicks', 'throwinkick'),
       gamesCount:     n,
     };
 
-    // Goals from player stats summed per game
-    const myGoalsPerGame = result.size > 0
-      ? Array.from(result.values()).reduce((sum, games) => {
-          games.forEach((g, i) => { if (!sum[i]) sum[i] = 0; sum[i] += g.goals; });
-          return sum;
-        }, [] as number[])
-      : [];
-    seasonStats.goalsFor = myGoalsPerGame.length
-      ? +(myGoalsPerGame.reduce((a, b) => a + b, 0) / myGoalsPerGame.length).toFixed(2)
-      : 0;
-
-    // goalsAgainst approximated from opponent shots
-    seasonStats.goalsAgainst = +(getBestStat('opp', 'shots', 'Shots', 'totalshots') * 0.12).toFixed(2);
+    // Goals from actual match scores in the schedule (most accurate source)
+    if (espnGoals) {
+      seasonStats.goalsFor     = espnGoals.goalsFor;
+      seasonStats.goalsAgainst = espnGoals.goalsAgainst;
+    }
   }
 
   return {
@@ -486,6 +495,35 @@ export async function getApiFootballLineups(
   }
 }
 
+// ── ESPN team ID lookup (scoreboard only — no rosters needed) ─────────────
+// Used when fd.org already has lineups but we still need ESPN team IDs for player history.
+export async function getEspnTeamIds(
+  homeTeamName: string,
+  awayTeamName: string,
+  utcDate: string,
+): Promise<{ league: string; homeTeamId: string; awayTeamId: string } | null> {
+  const date = utcDate.slice(0, 10).replace(/-/g, '');
+  const leagueHint = guessDomesticLeague(homeTeamName) || guessDomesticLeague(awayTeamName);
+  const leagues = leagueHint ? [leagueHint, ...ESPN_LEAGUES.filter(l => l !== leagueHint)] : ESPN_LEAGUES;
+  for (const league of leagues) {
+    let scoreboard: any;
+    try { scoreboard = await espnFetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${date}`); }
+    catch { continue; }
+    const event = (scoreboard?.events ?? []).find((e: any) => {
+      const comp = e.competitions?.[0];
+      const home = comp?.competitors?.find((t: any) => t.homeAway === 'home')?.team?.displayName ?? '';
+      const away = comp?.competitors?.find((t: any) => t.homeAway === 'away')?.team?.displayName ?? '';
+      return teamMatch(home, homeTeamName) && teamMatch(away, awayTeamName);
+    });
+    if (!event) continue;
+    const comp = event.competitions?.[0];
+    const homeTeamId = String(comp?.competitors?.find((t: any) => t.homeAway === 'home')?.team?.id ?? '');
+    const awayTeamId = String(comp?.competitors?.find((t: any) => t.homeAway === 'away')?.team?.id ?? '');
+    if (homeTeamId && awayTeamId) return { league, homeTeamId, awayTeamId };
+  }
+  return null;
+}
+
 // ── First-leg aggregate finder (ESPN scoreboard scan) ─────────────────────
 // Scans ESPN scoreboard for the days before a second leg to find the first leg score.
 // Returns from the second-leg's perspective: home/away = current match's home/away.
@@ -562,6 +600,8 @@ function guessDomesticLeagueId(teamName: string): number {
 }
 
 export interface AfTeamFixtureStats {
+  goalsFor: number;
+  goalsAgainst: number;
   cornersFor: number;
   shotsFor: number;
   sotFor: number;
@@ -571,16 +611,16 @@ export interface AfTeamFixtureStats {
   yellowCardsFor: number;
   savesFor: number;
   goalKicksFor: number;
-  throwInsFor: number;
   fixtureCount: number;
 }
 
 export async function fetchApiFootballTeamHistory(
   teamName: string,
   apiKey: string,
-): Promise<{ history: Map<string, PlayerGameStat[]>; afTeamStats: AfTeamFixtureStats | null; debug: string }> {
-  if (!apiKey) return { history: new Map(), afTeamStats: null, debug: 'no key' };
+): Promise<{ history: Map<string, PlayerGameStat[]>; playerIds: Map<string, number>; afTeamId: number; afTeamStats: AfTeamFixtureStats | null; debug: string }> {
+  if (!apiKey) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: 'no key' };
   const result = new Map<string, PlayerGameStat[]>();
+  const playerIds = new Map<string, number>();
   try {
     const searchName = cleanForSearch(teamName);
     const leagueId = guessDomesticLeagueId(teamName);
@@ -602,7 +642,7 @@ export async function fetchApiFootballTeamHistory(
       const td3 = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}${leagueParam}`, apiKey);
       teams.push(...(td3?.response ?? []));
     }
-    if (!teams.length) return { history: new Map(), afTeamStats: null, debug: `no team: ${searchName}` };
+    if (!teams.length) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: `no team: ${searchName}` };
 
     const tNorm = norm(teamName);
     const best = teams.find(t => {
@@ -610,7 +650,7 @@ export async function fetchApiFootballTeamHistory(
       return n === tNorm || tNorm.split(' ').filter(w => w.length > 3).some(w => n.includes(w));
     }) ?? teams[0];
     const teamId: number = best?.team?.id;
-    if (!teamId) return { history: new Map(), afTeamStats: null, debug: `no id: ${searchName}` };
+    if (!teamId) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: `no id: ${searchName}` };
 
     // Fetch 8 domestic fixtures so players who missed one game still have 5 real data points
     const fixtureLeagueFilter = leagueId ? `&league=${leagueId}` : '';
@@ -628,7 +668,7 @@ export async function fetchApiFootballTeamHistory(
         fixtures = fd24?.response ?? [];
       }
     }
-    if (!fixtures.length) return { history: new Map(), afTeamStats: null, debug: `no fixtures: ${teamId}` };
+    if (!fixtures.length) return { history: new Map(), playerIds: new Map(), afTeamId: teamId, afTeamStats: null, debug: `no fixtures: ${teamId}` };
 
     const sorted = [...fixtures].sort((a: any, b: any) =>
       new Date(b.fixture?.date ?? '').getTime() - new Date(a.fixture?.date ?? '').getTime()
@@ -637,12 +677,19 @@ export async function fetchApiFootballTeamHistory(
     const fixtureTeamStatsList: Array<{
       corners: number; shots: number; sot: number; fouls: number;
       offsides: number; tackles: number; yellowCards: number; saves: number;
-      goalKicks: number; throwIns: number;
+      goalKicks: number;
     }> = [];
+    const goalsArr: { gf: number; ga: number }[] = [];
 
     for (const fix of sorted) {
       const fid: number = fix.fixture?.id;
       if (!fid) continue;
+
+      // Extract goals from the fixture score directly
+      const isHome = fix.teams?.home?.id === teamId || String(fix.teams?.home?.id) === String(teamId);
+      const gf = isHome ? (fix.goals?.home ?? -1) : (fix.goals?.away ?? -1);
+      const ga = isHome ? (fix.goals?.away ?? -1) : (fix.goals?.home ?? -1);
+      if (gf >= 0 && ga >= 0) goalsArr.push({ gf, ga });
 
       // Fetch player stats and team fixture stats in parallel for the same fixture
       const [pd, sd] = await Promise.all([
@@ -668,13 +715,16 @@ export async function fetchApiFootballTeamHistory(
             yellowCards: s.cards?.yellow    ?? 0,
             saves:       s.goals?.saves     ?? s.goalkeeper?.saves ?? 0,
           };
+          const pId: number = p.player?.id;
           const key = norm(pName);
           if (!result.has(key)) result.set(key, []);
           result.get(key)!.push(stat);
+          if (pId && !playerIds.has(key)) playerIds.set(key, pId);
           const kParts = key.split(' ');
           const kLast = kParts[kParts.length - 1];
-          if (kParts.length >= 2 && kLast.length >= 3 && !result.has(kLast)) {
-            result.set(kLast, result.get(key)!);
+          if (kParts.length >= 2 && kLast.length >= 3) {
+            if (!result.has(kLast)) result.set(kLast, result.get(key)!);
+            if (pId && !playerIds.has(kLast)) playerIds.set(kLast, pId);
           }
         }
       }
@@ -703,7 +753,6 @@ export async function fetchApiFootballTeamHistory(
           saves:       getFixStat('Goalkeeper Saves'),
           // These may not be present for all leagues — will be 0 if missing
           goalKicks:   getFixStat('Goal Kicks'),
-          throwIns:    getFixStat('Throw Ins'),
         });
       }
     }
@@ -723,6 +772,8 @@ export async function fetchApiFootballTeamHistory(
         return +(present.reduce((acc, x) => acc + x[key], 0) / present.length).toFixed(2);
       };
       afTeamStats = {
+        goalsFor:       goalsArr.length > 0 ? +(goalsArr.reduce((s, x) => s + x.gf, 0) / goalsArr.length).toFixed(2) : 0,
+        goalsAgainst:   goalsArr.length > 0 ? +(goalsArr.reduce((s, x) => s + x.ga, 0) / goalsArr.length).toFixed(2) : 0,
         cornersFor:     +(sum('corners')     / n).toFixed(2),
         shotsFor:       +(sum('shots')       / n).toFixed(2),
         sotFor:         +(sum('sot')         / n).toFixed(2),
@@ -732,18 +783,19 @@ export async function fetchApiFootballTeamHistory(
         yellowCardsFor: +(sum('yellowCards') / n).toFixed(2),
         savesFor:       +(sum('saves')       / n).toFixed(2),
         goalKicksFor:   avgOrNull('goalKicks'),
-        throwInsFor:    avgOrNull('throwIns'),
         fixtureCount:   n,
       };
     }
 
     return {
       history: result,
+      playerIds,
+      afTeamId: teamId,
       afTeamStats,
-      debug: `team ${teamId}(${best?.team?.name}): ${sorted.length} fixtures, ${result.size} players, afStats=${afTeamStats ? `${afTeamStats.fixtureCount}g` : 'none'}`,
+      debug: `team ${teamId}(${best?.team?.name}): ${sorted.length} fixtures, ${result.size} players, ${playerIds.size} ids, afStats=${afTeamStats ? `${afTeamStats.fixtureCount}g` : 'none'}`,
     };
   } catch (e: any) {
-    return { history: new Map(), afTeamStats: null, debug: `err: ${e.message}` };
+    return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: `err: ${e.message}` };
   }
 }
 
@@ -797,6 +849,7 @@ export async function fetchEspnRosterStats(
         totalShots:     getStat(off, 'totalShots'),
       };
       result.set(norm(player.name), player);
+      if (player.id) result.set(`id:${player.id}`, player);
     }
   } catch (err: any) {
     console.warn(`[roster] ESPN ${leagueSlug} team ${teamId}: ${err.message}`);
@@ -985,5 +1038,204 @@ export async function fetchApiFootballReferee(teamName: string, apiKey: string, 
     return raw.split(',')[0].trim();
   } catch {
     return '';
+  }
+}
+
+// ── Per-player personal fixture history (true last N across all competitions) ─
+// For each player AF ID, fetches their own last N fixtures and returns per-game stats.
+// Deduplicates fixture API calls: teammates share fixture stat requests.
+export async function fetchPlayerPersonalHistoryBatch(
+  playerAfIds: number[],
+  apiKey: string,
+  last = 5,
+): Promise<Map<number, PlayerGameStat[]>> {
+  const result = new Map<number, PlayerGameStat[]>();
+  if (!apiKey || !playerAfIds.length) return result;
+
+  // Step 1: get each player's recent fixture IDs
+  const playerFixtureMap = new Map<number, Array<{ id: number; date: string }>>();
+  const allFixtureIds = new Set<number>();
+
+  for (const playerId of playerAfIds) {
+    try {
+      const fd = await afFetch(`/fixtures?player=${playerId}&last=${last}`, apiKey);
+      const fixtures: any[] = fd?.response ?? [];
+      if (fixtures.length > 0) {
+        const entries = fixtures
+          .map((f: any) => ({ id: f.fixture?.id as number, date: f.fixture?.date ?? '' }))
+          .filter(e => e.id);
+        playerFixtureMap.set(playerId, entries);
+        entries.forEach(e => allFixtureIds.add(e.id));
+      }
+    } catch {}
+  }
+
+  // Step 2: fetch all player stats for each unique fixture (no team filter = both teams in one call)
+  const fixturePlayerStats = new Map<number, Map<number, PlayerGameStat>>();
+  for (const fixtureId of Array.from(allFixtureIds)) {
+    try {
+      const pd = await afFetch(`/fixtures/players?fixture=${fixtureId}`, apiKey);
+      const teams: any[] = pd?.response ?? [];
+      const playerMap = new Map<number, PlayerGameStat>();
+      for (const team of teams) {
+        for (const p of (team.players ?? [])) {
+          const pid: number = p.player?.id;
+          if (!pid) continue;
+          const s = p.statistics?.[0];
+          if (!s) continue;
+          playerMap.set(pid, {
+            goals:       s.goals?.total     ?? 0,
+            assists:     s.goals?.assists   ?? 0,
+            shots:       s.shots?.total     ?? 0,
+            sot:         s.shots?.on        ?? 0,
+            fc:          s.fouls?.committed ?? 0,
+            fd:          s.fouls?.drawn     ?? 0,
+            yellowCards: s.cards?.yellow    ?? 0,
+            saves:       s.goals?.saves     ?? s.goalkeeper?.saves ?? 0,
+          });
+        }
+      }
+      fixturePlayerStats.set(fixtureId, playerMap);
+    } catch {}
+  }
+
+  // Step 3: build per-player history (newest first)
+  for (const [playerId, fixtures] of Array.from(playerFixtureMap)) {
+    const sorted = [...fixtures].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const games: PlayerGameStat[] = [];
+    for (const { id: fixtureId } of sorted) {
+      const stat = fixturePlayerStats.get(fixtureId)?.get(playerId);
+      if (stat) games.push(stat);
+    }
+    if (games.length > 0) result.set(playerId, games);
+  }
+
+  return result;
+}
+
+// Fallback: look up an AF player ID by name search when the player didn't appear in
+// the team's recent domestic fixtures (e.g. long-term injury, just transferred).
+export async function lookupAfPlayerId(
+  playerName: string,
+  afTeamId: number,
+  apiKey: string,
+): Promise<number | null> {
+  if (!apiKey || !afTeamId) return null;
+  try {
+    const parts = norm(playerName).split(' ').filter(w => w.length >= 3).slice(0, 2);
+    const searchName = parts.join(' ');
+    if (!searchName) return null;
+    for (const season of [2025, 2024]) {
+      const pd = await afFetch(`/players?search=${encodeURIComponent(searchName)}&team=${afTeamId}&season=${season}`, apiKey);
+      const players: any[] = pd?.response ?? [];
+      if (!players.length) continue;
+      const pNorm = norm(playerName);
+      const match = players.find((p: any) => {
+        const n = norm(p.player?.name ?? '');
+        return n === pNorm || pNorm.split(' ').filter(w => w.length > 3).some((w: string) => n.includes(w));
+      }) ?? players[0];
+      const id = match?.player?.id;
+      if (id) return id;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ── API-Football bookmaker odds → implied probabilities ────────────────────
+export interface MatchOdds {
+  homeWin: number;
+  draw: number;
+  awayWin: number;
+  btts: number;
+  referee?: string;
+}
+
+export async function fetchApiFootballOdds(
+  homeName: string,
+  awayName: string,
+  matchDate: string,
+  apiKey: string,
+  leagueId?: number,
+): Promise<MatchOdds | null> {
+  if (!apiKey) return null;
+  try {
+    const dateStr = matchDate.slice(0, 10);
+    const guessedLeague = leagueId ?? guessDomesticLeagueId(homeName) ?? guessDomesticLeagueId(awayName);
+    const leagueParam = guessedLeague ? `&league=${guessedLeague}` : '';
+
+    const fd = await afFetch(`/fixtures?date=${dateStr}&season=2025${leagueParam}`, apiKey);
+    const fixtures: any[] = fd?.response ?? [];
+
+    const hNorm = norm(homeName);
+    const aNorm = norm(awayName);
+    const fixture = fixtures.find(f => {
+      const fh = norm(f.teams?.home?.name ?? '');
+      const fa = norm(f.teams?.away?.name ?? '');
+      const homeMatch = fh === hNorm || hNorm.split(' ').filter(w => w.length > 3).some(w => fh.includes(w));
+      const awayMatch = fa === aNorm || aNorm.split(' ').filter(w => w.length > 3).some(w => fa.includes(w));
+      return homeMatch && awayMatch;
+    });
+    if (!fixture) return null;
+
+    const fixtureId: number = fixture.fixture?.id;
+    if (!fixtureId) return null;
+
+    const refRaw: string = fixture.fixture?.referee ?? '';
+    const referee = refRaw ? refRaw.split(',')[0].trim() : undefined;
+
+    const od = await afFetch(`/odds?fixture=${fixtureId}`, apiKey);
+    const bookmakers: any[] = od?.response?.[0]?.bookmakers ?? [];
+    if (!bookmakers.length) {
+      // No odds available but we found the fixture — return referee only if present
+      return referee ? { homeWin: 0, draw: 0, awayWin: 0, btts: 50, referee } : null;
+    }
+
+    const h2hSamples: { home: number; draw: number; away: number }[] = [];
+    const bttsSamples: { yes: number; no: number }[] = [];
+
+    for (const bm of bookmakers) {
+      for (const bet of (bm.bets ?? [])) {
+        if (bet.id === 1 || bet.name === 'Match Winner') {
+          const home = parseFloat(bet.values?.find((v: any) => v.value === 'Home')?.odd ?? '0');
+          const draw = parseFloat(bet.values?.find((v: any) => v.value === 'Draw')?.odd ?? '0');
+          const away = parseFloat(bet.values?.find((v: any) => v.value === 'Away')?.odd ?? '0');
+          if (home > 1 && draw > 1 && away > 1) h2hSamples.push({ home, draw, away });
+        }
+        if (bet.id === 5 || bet.name === 'Both Teams To Score') {
+          const yes = parseFloat(bet.values?.find((v: any) => v.value === 'Yes')?.odd ?? '0');
+          const no  = parseFloat(bet.values?.find((v: any) => v.value === 'No')?.odd  ?? '0');
+          if (yes > 1 && no > 1) bttsSamples.push({ yes, no });
+        }
+      }
+    }
+
+    if (!h2hSamples.length) return null;
+
+    // Average implied probabilities across bookmakers then normalise to remove overround
+    const avg = {
+      home: h2hSamples.reduce((s, o) => s + 1 / o.home, 0) / h2hSamples.length,
+      draw: h2hSamples.reduce((s, o) => s + 1 / o.draw, 0) / h2hSamples.length,
+      away: h2hSamples.reduce((s, o) => s + 1 / o.away, 0) / h2hSamples.length,
+    };
+    const total = avg.home + avg.draw + avg.away;
+
+    let btts = 50;
+    if (bttsSamples.length > 0) {
+      const yesP = bttsSamples.reduce((s, o) => s + 1 / o.yes, 0) / bttsSamples.length;
+      const noP  = bttsSamples.reduce((s, o) => s + 1 / o.no,  0) / bttsSamples.length;
+      btts = Math.round((yesP / (yesP + noP)) * 100);
+    }
+
+    return {
+      homeWin: Math.round((avg.home / total) * 100),
+      draw:    Math.round((avg.draw / total) * 100),
+      awayWin: Math.round((avg.away / total) * 100),
+      btts,
+      ...(referee ? { referee } : {}),
+    };
+  } catch {
+    return null;
   }
 }

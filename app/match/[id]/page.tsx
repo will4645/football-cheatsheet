@@ -35,8 +35,14 @@ export default function MatchPage() {
   }, [id]);
 
   if (status === 'loading') return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#080c14' }}>
-      <p className="text-gray-500 text-sm">Loading...</p>
+    <div className="min-h-screen p-6 lg:p-10" style={{ background: '#080c14' }}>
+      <div className="max-w-4xl mx-auto space-y-4 animate-pulse">
+        <div className="h-4 w-24 rounded" style={{ background: 'rgba(255,255,255,0.06)' }} />
+        <div className="h-24 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }} />
+        <div className="h-64 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }} />
+        <div className="h-64 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }} />
+        <div className="h-48 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }} />
+      </div>
     </div>
   );
 
