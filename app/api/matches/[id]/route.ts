@@ -21,10 +21,14 @@ export async function GET(
     });
   }
 
-  // Fallback: serve the hardcoded demo data
-  if (id === 'fulham-vs-getafe-cf' || id === 'atletico-vs-barcelona' || id === 'atletico-de-madrid-vs-barcelona') {
+  // Fallback: serve hardcoded demo data
+  if (id === 'fulham-vs-getafe-cf') {
     const { matchData } = await import('@/data/match');
     return NextResponse.json(matchData);
+  }
+  if (id === 'atletico-vs-barcelona' || id === 'atletico-de-madrid-vs-barcelona') {
+    const { atleticoMatchData } = await import('@/data/match-atletico');
+    return NextResponse.json(atleticoMatchData);
   }
 
   return NextResponse.json({ error: 'Match not found' }, { status: 404 });
