@@ -154,6 +154,35 @@ function normName(raw: string) {
     .toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+// Fuzzy name-based map lookup \u2014 last resort when exact/surname matches fail.
+// Finds the closest full-name key by surname match, long-word containment, or word overlap.
+// Safe within a single TEAM's player pool (teammates almost never share a distinctive surname).
+// Pass skipSingleWord=true to ignore single-word alias entries (e.g. surname shortcuts).
+function fuzzyPlayerLookup<T>(query: string, map: Map<string, T>, skipSingleWord = true): T | null {
+  const parts = query.split(' ').filter(w => w.length >= 3);
+  if (!parts.length) return null;
+  const qLast = parts[parts.length - 1];
+  const qLong = parts.reduce((a, b) => a.length >= b.length ? a : b, '');
+  let best: T | null = null;
+  let bestScore = 0;
+  for (const [k, v] of Array.from(map)) {
+    if (skipSingleWord && !k.includes(' ')) continue;
+    const kParts = k.split(' ').filter(w => w.length >= 3);
+    const kLast = kParts[kParts.length - 1];
+    const kLong = kParts.reduce((a: string, b: string) => a.length >= b.length ? a : b, '');
+    let score = 0;
+    if (kLast === qLast && qLast.length >= 3) score = 0.9;
+    else if (qLast.length >= 4 && (kLast.startsWith(qLast) || qLast.startsWith(kLast))) score = 0.75;
+    else if (qLong.length >= 5 && (k.includes(qLong) || kLong.includes(qLong))) score = 0.6;
+    else {
+      const overlap = parts.filter(w => w.length >= 4 && kParts.some(kw => kw.includes(w) || w.includes(kw)));
+      if (overlap.length > 0) score = 0.4 * (overlap.length / Math.max(parts.length, kParts.length));
+    }
+    if (score > bestScore) { bestScore = score; best = v; }
+  }
+  return bestScore >= 0.4 ? best : null;
+}
+
 function buildNameIndex(players: any[]) {
   const idx = new Map<string, any>();
   const set = (key: string, p: any) => { if (key && !idx.has(key)) idx.set(key, p); };
@@ -481,6 +510,7 @@ async function buildPlayers(
     function normN(n: string) {
       return (n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
     }
+
     function lookupSquad(name: string): AfSquadPlayer | null {
       const key = normN(name);
       if (afSquad.has(key)) return afSquad.get(key)!;
@@ -491,7 +521,7 @@ async function buildPlayers(
           if (k === last || k.endsWith(' ' + last)) return v;
         }
       }
-      return null;
+      return fuzzyPlayerLookup(key, afSquad);
     }
 
     // Apply squad stats (paid API, team-specific) as primary source, overriding global index
@@ -525,7 +555,8 @@ async function buildPlayers(
     function perPlayerLast5(name: string, field: keyof PlayerGameStat, threshold = 1): boolean[] | null {
       const key = normN(name);
       const games = perPlayerHistory.get(key)
-        ?? perPlayerHistory.get(key.split(' ').pop() ?? '');
+        ?? perPlayerHistory.get(key.split(' ').pop() ?? '')
+        ?? fuzzyPlayerLookup(key, perPlayerHistory);
       if (!games?.length) return null;
       const slice = games.slice(0, 5);
       const result: boolean[] = [];
@@ -553,7 +584,8 @@ async function buildPlayers(
       const last = parts[parts.length - 1];
       if (last.length >= 5 && afHistory.has(last)) return afHistory.get(last)!;
 
-      return null;
+      // Fuzzy last resort: closest name within the team's player pool
+      return fuzzyPlayerLookup(key, afHistory);
     }
     // Require ≥2 games before using as per-game average (avoids 1-game extremes)
     function afAvg(name: string, field: keyof PlayerGameStat): number | null {
@@ -1177,7 +1209,8 @@ async function runSync() {
           if (!name) continue;
           const key = normName(name);
           const afId = afResult.playerIds.get(key)
-            ?? afResult.playerIds.get(key.split(' ').pop() ?? '');
+            ?? afResult.playerIds.get(key.split(' ').pop() ?? '')
+            ?? fuzzyPlayerLookup(key, afResult.playerIds);
           if (afId) {
             idToName.set(afId, name);
           } else {
