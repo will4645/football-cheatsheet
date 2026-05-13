@@ -855,6 +855,27 @@ function normMatchId(home: string, away: string) {
   return `${norm(home)}-vs-${norm(away)}`;
 }
 
+// ── ESPN team ID lookup (for demo sync) ───────────────────────────────────
+async function findEspnTeamId(league: string, teamName: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/teams`,
+      { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const teams: any[] = data.sports?.[0]?.leagues?.[0]?.teams ?? [];
+    const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const q = norm(teamName);
+    for (const { team } of teams) {
+      const dn = norm(team.displayName ?? '');
+      const sn = norm(team.shortDisplayName ?? '');
+      if (dn === q || sn === q || dn.includes(q) || q.includes(dn)) return String(team.id);
+    }
+  } catch {}
+  return null;
+}
+
 // ── Football-data.org fetch ────────────────────────────────────────────────
 const BASE_URL = 'https://api.football-data.org/v4';
 const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1'];
@@ -1318,10 +1339,202 @@ async function runSync() {
   return logs;
 }
 
+// ── Demo sync: generates real stats for Fulham vs Getafe CF ───────────────
+async function runDemoSync() {
+  const logs: string[] = [];
+  const log = (msg: string) => { console.log(msg); logs.push(msg); };
+
+  const MATCH_ID  = 'fulham-vs-getafe-cf';
+  const HOME_NAME = 'Fulham';
+  const AWAY_NAME = 'Getafe CF';
+  const afApiKey  = (process.env.API_SPORTS_KEY ?? '').trim();
+
+  const HOME_LINEUP = {
+    lineup: [
+      { name: 'Bernd Leno',        position: 'Goalkeeper', posAbbr: 'G',    formationPlace: 1,  espnId: '' },
+      { name: 'Kenny Tete',        position: 'Defender',   posAbbr: 'RB',   formationPlace: 2,  espnId: '' },
+      { name: 'Joachim Andersen',  position: 'Defender',   posAbbr: 'CD-R', formationPlace: 3,  espnId: '' },
+      { name: 'Calvin Bassey',     position: 'Defender',   posAbbr: 'CD-L', formationPlace: 4,  espnId: '' },
+      { name: 'Antonee Robinson',  position: 'Defender',   posAbbr: 'LB',   formationPlace: 5,  espnId: '' },
+      { name: 'Sander Berge',      position: 'Midfielder', posAbbr: 'DM',   formationPlace: 6,  espnId: '' },
+      { name: 'Andreas Pereira',   position: 'Midfielder', posAbbr: 'CM',   formationPlace: 8,  espnId: '' },
+      { name: 'Harry Wilson',      position: 'Midfielder', posAbbr: 'RW',   formationPlace: 7,  espnId: '' },
+      { name: 'Alex Iwobi',        position: 'Midfielder', posAbbr: 'AM',   formationPlace: 10, espnId: '' },
+      { name: 'Emile Smith Rowe',  position: 'Midfielder', posAbbr: 'LW',   formationPlace: 11, espnId: '' },
+      { name: 'Raúl Jiménez',      position: 'Forward',    posAbbr: 'ST',   formationPlace: 9,  espnId: '' },
+    ],
+  };
+
+  const AWAY_LINEUP = {
+    lineup: [
+      { name: 'David Soria',         position: 'Goalkeeper', posAbbr: 'G',    formationPlace: 1,  espnId: '' },
+      { name: 'Damián Suárez',       position: 'Defender',   posAbbr: 'RB',   formationPlace: 2,  espnId: '' },
+      { name: 'Johan Alderete',      position: 'Defender',   posAbbr: 'CD-R', formationPlace: 3,  espnId: '' },
+      { name: 'Gastón Álvarez',      position: 'Defender',   posAbbr: 'CD-L', formationPlace: 4,  espnId: '' },
+      { name: 'Diego Rico',          position: 'Defender',   posAbbr: 'LB',   formationPlace: 5,  espnId: '' },
+      { name: 'Carles Aleñá',        position: 'Midfielder', posAbbr: 'RM',   formationPlace: 7,  espnId: '' },
+      { name: 'Mauro Arambarri',     position: 'Midfielder', posAbbr: 'DM',   formationPlace: 6,  espnId: '' },
+      { name: 'Nemanja Maksimović',  position: 'Midfielder', posAbbr: 'CM',   formationPlace: 8,  espnId: '' },
+      { name: 'Mason Greenwood',     position: 'Midfielder', posAbbr: 'LW',   formationPlace: 11, espnId: '' },
+      { name: 'Óscar Rodríguez',     position: 'Forward',    posAbbr: 'SS',   formationPlace: 10, espnId: '' },
+      { name: 'Borja Mayoral',       position: 'Forward',    posAbbr: 'ST',   formationPlace: 9,  espnId: '' },
+    ],
+  };
+
+  log(`[demo-sync] Starting ${HOME_NAME} vs ${AWAY_NAME}`);
+
+  // Look up ESPN team IDs in their respective domestic leagues
+  const [homeEspnId, awayEspnId] = await Promise.all([
+    findEspnTeamId('eng.1', HOME_NAME),
+    findEspnTeamId('esp.1', AWAY_NAME),
+  ]);
+  log(`[demo-sync] ESPN IDs: home=${homeEspnId ?? 'not found'} away=${awayEspnId ?? 'not found'}`);
+
+  // ESPN season stats (corners, shots, etc.) and per-player game history
+  let espnHistory = new Map<string, PlayerGameStat[]>();
+  let homeSeasonStats: any = null;
+  let awaySeasonStats: any = null;
+  if (homeEspnId || awayEspnId) {
+    const [homeResult, awayResult] = await Promise.all([
+      homeEspnId ? fetchTeamPlayerHistory(homeEspnId, 'eng.1', HOME_NAME) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), seasonStats: null, debug: 'no id' }),
+      awayEspnId ? fetchTeamPlayerHistory(awayEspnId, 'esp.1', AWAY_NAME) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), seasonStats: null, debug: 'no id' }),
+    ]);
+    homeResult.history.forEach((v, k) => espnHistory.set(k, v));
+    awayResult.history.forEach((v, k) => espnHistory.set(k, v));
+    homeSeasonStats = homeResult.seasonStats;
+    awaySeasonStats = awayResult.seasonStats;
+    log(`[demo-sync] ESPN: ${espnHistory.size} player records | home corners=${homeResult.seasonStats?.cornersFor ?? 'n/a'} | away corners=${awayResult.seasonStats?.cornersFor ?? 'n/a'}`);
+  }
+
+  // ESPN roster stats (total goals, assists, cards per player)
+  const [homeRosterMap, awayRosterMap] = await Promise.all([
+    homeEspnId ? fetchEspnRosterStats(homeEspnId, 'eng.1') : Promise.resolve(new Map<string, EspnRosterPlayer>()),
+    awayEspnId ? fetchEspnRosterStats(awayEspnId, 'esp.1') : Promise.resolve(new Map<string, EspnRosterPlayer>()),
+  ]);
+  const combinedRosterMap = new Map<string, EspnRosterPlayer>();
+  homeRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
+  awayRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
+  log(`[demo-sync] ESPN roster: ${combinedRosterMap.size} players`);
+
+  // API-Football team history + squad stats
+  const [homeAfResult, awayAfResult, homeSquadResult, awaySquadResult] = await Promise.all([
+    afApiKey ? fetchApiFootballTeamHistory(HOME_NAME, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
+    afApiKey ? fetchApiFootballTeamHistory(AWAY_NAME, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
+    afApiKey ? fetchApiFootballSquadStats(HOME_NAME, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
+    afApiKey ? fetchApiFootballSquadStats(AWAY_NAME, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
+  ]);
+  log(`[demo-sync] AF home: ${homeAfResult.debug} | away: ${awayAfResult.debug}`);
+  log(`[demo-sync] AF squad home: ${homeSquadResult.debug} | away: ${awaySquadResult.debug}`);
+
+  // Per-player personal history (true last 5 across all competitions)
+  let perPlayerHistoryHome = new Map<string, PlayerGameStat[]>();
+  let perPlayerHistoryAway = new Map<string, PlayerGameStat[]>();
+  if (afApiKey) {
+    const resolveIds = async (starters: any[], afResult: typeof homeAfResult): Promise<Map<number, string>> => {
+      const idToName = new Map<number, string>();
+      const missing: string[] = [];
+      for (const p of starters) {
+        const key = normName(p.name);
+        const afId = afResult.playerIds.get(key)
+          ?? afResult.playerIds.get(key.split(' ').pop() ?? '')
+          ?? fuzzyPlayerLookup(key, afResult.playerIds);
+        if (afId) { idToName.set(afId, p.name); } else { missing.push(p.name); }
+      }
+      if (missing.length && afResult.afTeamId) {
+        for (const name of missing) {
+          const found = await lookupAfPlayerId(name, afResult.afTeamId, afApiKey);
+          if (found) idToName.set(found, name);
+        }
+      }
+      return idToName;
+    };
+
+    const [homeIdMap, awayIdMap] = await Promise.all([
+      resolveIds(HOME_LINEUP.lineup, homeAfResult),
+      resolveIds(AWAY_LINEUP.lineup, awayAfResult),
+    ]);
+    log(`[demo-sync] Player IDs: home ${homeIdMap.size}/${HOME_LINEUP.lineup.length}, away ${awayIdMap.size}/${AWAY_LINEUP.lineup.length}`);
+
+    const homePersonal = await fetchPlayerPersonalHistoryBatch(Array.from(homeIdMap.keys()), afApiKey);
+    const awayPersonal = await fetchPlayerPersonalHistoryBatch(Array.from(awayIdMap.keys()), afApiKey);
+
+    for (const [id, games] of Array.from(homePersonal)) {
+      const name = homeIdMap.get(id);
+      if (name) perPlayerHistoryHome.set(normName(name), games);
+    }
+    for (const [id, games] of Array.from(awayPersonal)) {
+      const name = awayIdMap.get(id);
+      if (name) perPlayerHistoryAway.set(normName(name), games);
+    }
+    log(`[demo-sync] Per-player history: home ${perPlayerHistoryHome.size}, away ${perPlayerHistoryAway.size}`);
+  }
+
+  const apiSportsIdx = await getApiSportsIndex();
+
+  // Build team-level stats (no fd.org match history since this is a fake fixture)
+  const homeStats = buildTeamStats([], 0, homeSeasonStats ?? null, awaySeasonStats ?? null, homeAfResult.afTeamStats ?? null, awayAfResult.afTeamStats ?? null);
+  const awayStats = buildTeamStats([], 0, awaySeasonStats ?? null, homeSeasonStats ?? null, awayAfResult.afTeamStats ?? null, homeAfResult.afTeamStats ?? null);
+  log(`[demo-sync] Home stats: goals=${homeStats.goalsFor}/${homeStats.goalsAgainst} corners=${homeStats.cornersFor} shots=${homeStats.shotsFor}`);
+  log(`[demo-sync] Away stats: goals=${awayStats.goalsFor}/${awayStats.goalsAgainst} corners=${awayStats.cornersFor} shots=${awayStats.shotsFor}`);
+
+  const players = await buildPlayers(
+    HOME_LINEUP, AWAY_LINEUP,
+    espnHistory, apiSportsIdx, combinedRosterMap,
+    homeAfResult.history, awayAfResult.history,
+    homeSquadResult.stats, awaySquadResult.stats,
+    perPlayerHistoryHome, perPlayerHistoryAway,
+  );
+
+  const HOME_ADV = 1.25;
+  const lH = Math.max(0.3, (homeStats.goalsFor + awayStats.goalsAgainst) / 2 * HOME_ADV);
+  const lA = Math.max(0.3, (awayStats.goalsFor + homeStats.goalsAgainst) / 2);
+  const poissonBtts = Math.round((1 - Math.exp(-lH)) * (1 - Math.exp(-lA)) * 100);
+
+  const result = {
+    competition: 'UEFA Conference League',
+    stage: 'Round of 16',
+    date: '12 March 2026',
+    kickoff: '18:45 GMT',
+    homeTeam: {
+      name: HOME_NAME, primaryColor: '#CC0000',
+      badge: homeEspnId ? `https://a.espncdn.com/i/teamlogos/soccer/500/${homeEspnId}.png` : 'https://crests.football-data.org/63.svg',
+      stats: homeStats, players: players.home,
+    },
+    awayTeam: {
+      name: AWAY_NAME, primaryColor: '#003DA5',
+      badge: awayEspnId ? `https://a.espncdn.com/i/teamlogos/soccer/500/${awayEspnId}.png` : 'https://crests.football-data.org/95.svg',
+      stats: awayStats, players: players.away,
+    },
+    referee: {
+      name: 'Glenn Nyberg',
+      matchAvg: {
+        fouls: +(homeStats.foulsCommitted + awayStats.foulsCommitted).toFixed(1),
+        cards:  +(homeStats.cardsFor + awayStats.cardsFor).toFixed(1),
+      },
+    },
+    probabilities: { btts: poissonBtts, ...matchOutcomes(lH, lA) },
+    aggregate: null,
+  };
+
+  await sbSet(`match:${MATCH_ID}`, result, log);
+  log(`[demo-sync] Done — saved match:${MATCH_ID}`);
+  return logs;
+}
+
 // ── Route handler ──────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const demo = req.nextUrl.searchParams.get('demo');
+  if (demo === 'fulham-vs-getafe') {
+    try {
+      const logs = await runDemoSync();
+      return NextResponse.json({ ok: true, logs });
+    } catch (e: any) {
+      console.error('[demo-sync] Error:', e);
+      return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+    }
   }
   try {
     const logs = await runSync();
