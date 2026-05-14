@@ -677,9 +677,11 @@ export async function fetchApiFootballTeamHistory(
     }> = [];
     const goalsArr: { gf: number; ga: number }[] = [];
 
+    const FINISHED = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO']);
     for (const fix of sorted) {
       const fid: number = fix.fixture?.id;
       if (!fid) continue;
+      if (!FINISHED.has(fix.fixture?.status?.short ?? '')) continue;
 
       // Extract goals from the fixture score directly
       const isHome = fix.teams?.home?.id === teamId || String(fix.teams?.home?.id) === String(teamId);
@@ -1057,7 +1059,9 @@ export async function fetchPlayerPersonalHistoryBatch(
       const fd = await afFetch(`/fixtures?player=${playerId}&last=${last}`, apiKey);
       const fixtures: any[] = fd?.response ?? [];
       if (fixtures.length > 0) {
+        const FINISHED = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO']);
         const entries = fixtures
+          .filter((f: any) => FINISHED.has(f.fixture?.status?.short ?? ''))
           .map((f: any) => ({ id: f.fixture?.id as number, date: f.fixture?.date ?? '' }))
           .filter(e => e.id);
         playerFixtureMap.set(playerId, entries);
