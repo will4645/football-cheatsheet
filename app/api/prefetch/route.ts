@@ -6,7 +6,28 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const BASE_URL = 'https://api.football-data.org/v4';
-const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1'];
+const COMPETITIONS = [
+  'PL',  // Premier League
+  'CL',  // Champions League
+  'EL',  // Europa League
+  'ECL', // Conference League
+  'PD',  // La Liga
+  'BL1', // Bundesliga
+  'SA',  // Serie A
+  'FL1', // Ligue 1
+  'PPL', // Primeira Liga (Portugal)
+  'DED', // Eredivisie (Netherlands)
+  'BSA', // Brazilian Série A
+  'CLI', // Copa Libertadores
+  'MLS', // MLS
+  'FAC', // FA Cup
+  'CPC', // Copa del Rey
+  'DFB', // DFB Pokal (Germany)
+  'CDR', // Coupe de France
+  'CI',  // Coppa Italia
+  'ECC', // EFL Cup (Carabao Cup)
+  'SC',  // Scottish Premiership
+];
 
 function isAuthorized(req: NextRequest): boolean {
   const syncSecret = (process.env.SYNC_SECRET ?? '').trim();
