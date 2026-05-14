@@ -1099,6 +1099,7 @@ async function runSync() {
   // Phase 2: slow pass — lineup checks for near-term matches
   for (const match of nearTermMatches) {
     const id     = matchId(match.homeTeam?.name, match.awayTeam?.name);
+    try {
     const status = match.status;
     const kickoff   = new Date(match.utcDate);
     const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
@@ -1403,6 +1404,9 @@ async function runSync() {
         awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
       });
       log(`[sync] Added: ${id}`);
+    }
+    } catch (matchErr: any) {
+      log(`[sync] ERROR processing ${id}: ${matchErr.message} — skipping match`);
     }
   }
 
