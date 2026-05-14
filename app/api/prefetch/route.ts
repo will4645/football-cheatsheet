@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const BASE_URL = 'https://api.football-data.org/v4';
-const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1'];
+const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1', 'DED', 'PPL'];
 
 function isAuthorized(req: NextRequest): boolean {
   const syncSecret = (process.env.SYNC_SECRET ?? '').trim();

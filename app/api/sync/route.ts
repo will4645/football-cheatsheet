@@ -889,7 +889,7 @@ async function findEspnTeamId(league: string, teamName: string): Promise<string 
 
 // ── Football-data.org fetch ────────────────────────────────────────────────
 const BASE_URL = 'https://api.football-data.org/v4';
-const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1'];
+const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1', 'DED', 'PPL'];
 const FINISHED_STATUSES = new Set(['FINISHED', 'AWARDED', 'CANCELLED']);
 
 const _apiCache = new Map<string, { data: any; exp: number }>();
