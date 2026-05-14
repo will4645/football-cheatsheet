@@ -3,6 +3,8 @@ import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspn
 import type { TeamSeasonStats, EspnRosterPlayer, AfSquadPlayer, AfTeamFixtureStats, MatchOdds } from '@/lib/api-football';
 import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
 import type { ApiSportsPlayer } from '@/lib/api-sports';
+import { prefetchMatch, resolveAfId, normPrefetch, prefetchToAfResult, prefetchToSquadResult } from '@/lib/prefetch';
+import type { PrefetchData } from '@/lib/prefetch';
 
 // Direct Supabase client for writes (bypasses store.ts to avoid fs-module caching issues)
 function getSb() {
@@ -995,6 +997,24 @@ async function runSync() {
 
   log(`[sync] Phase 1 done — ${pendingList.length} far-pending, ${nearTermMatches.length} near-term to process`);
 
+  // ── Auto-prefetch: ensure every near-term match has AF data in Supabase ───
+  // Runs once on the first sync after a match enters the near-term window.
+  // Subsequent syncs find the prefetch data and make zero AF calls.
+  {
+    const afKeyForPrefetch = (process.env.API_SPORTS_KEY ?? '').trim();
+    if (afKeyForPrefetch) {
+      for (const m of nearTermMatches) {
+        if (!m.homeTeam?.name || !m.awayTeam?.name) continue;
+        const mId = matchId(m.homeTeam.name, m.awayTeam.name);
+        const existing = await sbGet(`prefetch:${mId}`) as { fetchedAt?: number } | null;
+        // Skip if prefetched within the last 6 hours
+        if (existing?.fetchedAt && Date.now() - existing.fetchedAt < 6 * 60 * 60 * 1000) continue;
+        log(`[sync] Auto-prefetch: ${mId}`);
+        await prefetchMatch(mId, m.homeTeam.name, m.awayTeam.name, m.utcDate ?? '', afKeyForPrefetch, log);
+      }
+    }
+  }
+
   // ── ESPN supplement for CL / EL / ECL (fd.org free tier omits these) ──────
   const ESPN_COMP_LEAGUES = [
     { league: 'uefa.champions',   compName: 'UEFA Champions League' },
@@ -1144,8 +1164,12 @@ async function runSync() {
       }
     }
 
-    // Step 3: Fetch per-player ESPN history (fouls/shots/goals per game) using team IDs
-    if (confirmedEspnMeta) {
+    // Load prefetch data (zero AF calls if present)
+    const prefetched = isLive ? null : await sbGet(`prefetch:${id}`) as PrefetchData | null;
+    if (prefetched) log(`[sync] Prefetch found for ${id} (fetched ${Math.round((Date.now() - prefetched.fetchedAt) / 60000)}m ago)`);
+
+    // Step 3: Fetch per-player ESPN history — skip when prefetch covers it
+    if (!prefetched && confirmedEspnMeta) {
       log(`[sync] Fetching ESPN history — league:${confirmedEspnMeta.league} home:${confirmedEspnMeta.homeTeamId} away:${confirmedEspnMeta.awayTeamId}`);
       const [homeResult, awayResult] = await Promise.all([
         fetchTeamPlayerHistory(confirmedEspnMeta.homeTeamId, confirmedEspnMeta.league, homeName),
@@ -1182,39 +1206,58 @@ async function runSync() {
           apiFetch(`/teams/${match.awayTeam.id}/matches?status=FINISHED&limit=10`, 60 * 60 * 1000),
         ]);
 
-    // Fetch ESPN domestic roster stats for accurate season counting stats
-    const [homeRosterMap, awayRosterMap] = await Promise.all([
-      confirmedEspnMeta ? fetchEspnRosterStats(confirmedEspnMeta.homeTeamId, guessDomesticLeague(homeName) || confirmedEspnMeta.league) : Promise.resolve(new Map<string, EspnRosterPlayer>()),
-      confirmedEspnMeta ? fetchEspnRosterStats(confirmedEspnMeta.awayTeamId, guessDomesticLeague(awayName) || confirmedEspnMeta.league) : Promise.resolve(new Map<string, EspnRosterPlayer>()),
-    ]);
+    // Fetch ESPN domestic roster stats — skip when prefetch covers it
     const combinedRosterMap = new Map<string, EspnRosterPlayer>();
-    homeRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
-    awayRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
-    log(`[roster] ESPN domestic stats: ${combinedRosterMap.size} players`);
+    if (!prefetched && confirmedEspnMeta) {
+      const [homeRosterMap, awayRosterMap] = await Promise.all([
+        fetchEspnRosterStats(confirmedEspnMeta.homeTeamId, guessDomesticLeague(homeName) || confirmedEspnMeta.league),
+        fetchEspnRosterStats(confirmedEspnMeta.awayTeamId, guessDomesticLeague(awayName) || confirmedEspnMeta.league),
+      ]);
+      homeRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
+      awayRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
+      log(`[roster] ESPN domestic stats: ${combinedRosterMap.size} players`);
+    }
 
-    // Fetch real last-8-game dots + season squad stats from paid API-Football
+    // Load AF data from prefetch (zero quota) or fetch live as fallback
     const afApiKey = (process.env.API_SPORTS_KEY ?? '').trim();
     const espnLeagueToAfId: Record<string, number> = {
       'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
     };
     const afLeagueId = fromEspn ? (espnLeagueToAfId[(match as any)._espnLeague ?? ''] ?? 0) : 0;
 
-    const [homeAfResult, awayAfResult, homeSquadResult, awaySquadResult, afReferee, afOdds] = await Promise.all([
-      afApiKey ? fetchApiFootballTeamHistory(homeName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
-      afApiKey ? fetchApiFootballTeamHistory(awayName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
-      afApiKey ? fetchApiFootballSquadStats(homeName, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
-      afApiKey ? fetchApiFootballSquadStats(awayName, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
-      (() => {
-        if (!afApiKey) return Promise.resolve('');
-        if (afLeagueId) return fetchApiFootballRefereeByLeague(afLeagueId, match.utcDate ?? '', homeName, awayName, afApiKey);
-        return fetchApiFootballReferee(homeName, afApiKey, match.utcDate);
-      })(),
-      afApiKey ? fetchApiFootballOdds(homeName, awayName, match.utcDate ?? '', afApiKey, afLeagueId || undefined) : Promise.resolve(null as MatchOdds | null),
-    ]);
-    log(`[af-history] home: ${homeAfResult.debug}`);
-    log(`[af-history] away: ${awayAfResult.debug}`);
-    log(`[af-squad] home: ${homeSquadResult.debug}`);
-    log(`[af-squad] away: ${awaySquadResult.debug}`);
+    let homeAfResult: { history: Map<string, PlayerGameStat[]>; playerIds: Map<string, number>; afTeamId: number; afTeamStats: AfTeamFixtureStats | null; debug: string };
+    let awayAfResult: typeof homeAfResult;
+    let homeSquadResult: { stats: Map<string, AfSquadPlayer>; debug: string };
+    let awaySquadResult: typeof homeSquadResult;
+    let afReferee: string;
+    let afOdds: MatchOdds | null;
+
+    if (prefetched) {
+      homeAfResult   = prefetchToAfResult(prefetched.home);
+      awayAfResult   = prefetchToAfResult(prefetched.away);
+      homeSquadResult = prefetchToSquadResult(prefetched.home);
+      awaySquadResult = prefetchToSquadResult(prefetched.away);
+      afReferee      = prefetched.referee;
+      afOdds         = prefetched.odds;
+      log(`[sync] AF data from prefetch — home ${homeAfResult.playerIds.size} ids, away ${awayAfResult.playerIds.size} ids`);
+    } else {
+      [homeAfResult, awayAfResult, homeSquadResult, awaySquadResult, afReferee, afOdds] = await Promise.all([
+        afApiKey ? fetchApiFootballTeamHistory(homeName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
+        afApiKey ? fetchApiFootballTeamHistory(awayName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
+        afApiKey ? fetchApiFootballSquadStats(homeName, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
+        afApiKey ? fetchApiFootballSquadStats(awayName, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
+        (() => {
+          if (!afApiKey) return Promise.resolve('');
+          if (afLeagueId) return fetchApiFootballRefereeByLeague(afLeagueId, match.utcDate ?? '', homeName, awayName, afApiKey);
+          return fetchApiFootballReferee(homeName, afApiKey, match.utcDate);
+        })(),
+        afApiKey ? fetchApiFootballOdds(homeName, awayName, match.utcDate ?? '', afApiKey, afLeagueId || undefined) : Promise.resolve(null as MatchOdds | null),
+      ]);
+      log(`[af-history] home: ${homeAfResult.debug}`);
+      log(`[af-history] away: ${awayAfResult.debug}`);
+      log(`[af-squad] home: ${homeSquadResult.debug}`);
+      log(`[af-squad] away: ${awaySquadResult.debug}`);
+    }
 
     const homeStats = buildTeamStats(homeResults?.matches, match.homeTeam.id, (espnHistory as any).__homeStats ?? null, (espnHistory as any).__awayStats ?? null, homeAfResult.afTeamStats ?? null, awayAfResult.afTeamStats ?? null);
     const awayStats = buildTeamStats(awayResults?.matches, match.awayTeam.id, (espnHistory as any).__awayStats ?? null, (espnHistory as any).__homeStats ?? null, awayAfResult.afTeamStats ?? null, homeAfResult.afTeamStats ?? null);
@@ -1222,60 +1265,82 @@ async function runSync() {
     log(`[stats] ${awayName}: goals=${awayStats.goalsFor}F/${awayStats.goalsAgainst}A corners=${awayStats.cornersFor} shots=${awayStats.shotsFor}`);
     log(`[odds] ${afOdds ? `market: ${afOdds.homeWin}%/${afOdds.draw}%/${afOdds.awayWin}% btts=${afOdds.btts}%` : 'no market odds — using Poisson'}`);
 
-    // ── Per-player personal history: true last 5 across all competitions ────
-    // Resolve AF player IDs for each lineup starter. Use team history playerIds map first;
-    // fall back to a search call for players absent from recent domestic fixtures (e.g. injured).
+    // ── Per-player personal history ───────────────────────────────────────────
     let perPlayerHistoryHome = new Map<string, PlayerGameStat[]>();
     let perPlayerHistoryAway = new Map<string, PlayerGameStat[]>();
     if (afApiKey) {
       const homeStarters: any[] = lineupData.homeTeam?.lineup || lineupData.homeTeam?.startingEleven || [];
       const awayStarters: any[] = lineupData.awayTeam?.lineup || lineupData.awayTeam?.startingEleven || [];
 
-      const resolvePlayerIds = async (starters: any[], afResult: typeof homeAfResult): Promise<Map<number, string>> => {
-        const idToName = new Map<number, string>();
-        const missing: Array<{ name: string }> = [];
-        for (const p of starters) {
-          const name: string = p.name || '';
-          if (!name) continue;
-          const key = normName(name);
-          const afId = afResult.playerIds.get(key)
-            ?? afResult.playerIds.get(key.split(' ').pop() ?? '')
-            ?? fuzzyPlayerLookup(key, afResult.playerIds);
-          if (afId) {
-            idToName.set(afId, name);
-          } else {
-            missing.push({ name });
+      if (prefetched) {
+        // ── Prefetch path: name matching with 4-step auto-repair, zero extra AF calls for matched players ──
+        const resolveFromPrefetch = async (
+          starters: any[],
+          team: PrefetchData['home'],
+        ): Promise<Map<string, PlayerGameStat[]>> => {
+          const result = new Map<string, PlayerGameStat[]>();
+          for (const p of starters) {
+            const name: string = p.name || '';
+            if (!name) continue;
+            const afId = await resolveAfId(name, team, afApiKey, log);
+            if (afId != null) {
+              const history = team.personalHistories[String(afId)] ?? [];
+              result.set(normPrefetch(name), history);
+            }
           }
-        }
-        // Fallback: search for players not found via team history (e.g. recently injured)
-        if (missing.length > 0 && afResult.afTeamId) {
-          for (const { name } of missing) {
-            const found = await lookupAfPlayerId(name, afResult.afTeamId, afApiKey);
-            if (found) idToName.set(found, name);
+          return result;
+        };
+
+        [perPlayerHistoryHome, perPlayerHistoryAway] = await Promise.all([
+          resolveFromPrefetch(homeStarters, prefetched.home),
+          resolveFromPrefetch(awayStarters, prefetched.away),
+        ]);
+        log(`[per-player] prefetch path — home ${perPlayerHistoryHome.size}/${homeStarters.length}, away ${perPlayerHistoryAway.size}/${awayStarters.length}`);
+      } else {
+        // ── Live path: resolve IDs then fetch personal histories from AF ──────
+        const resolvePlayerIds = async (starters: any[], afResult: typeof homeAfResult): Promise<Map<number, string>> => {
+          const idToName = new Map<number, string>();
+          const missing: Array<{ name: string }> = [];
+          for (const p of starters) {
+            const name: string = p.name || '';
+            if (!name) continue;
+            const key = normName(name);
+            const afId = afResult.playerIds.get(key)
+              ?? afResult.playerIds.get(key.split(' ').pop() ?? '')
+              ?? fuzzyPlayerLookup(key, afResult.playerIds);
+            if (afId) {
+              idToName.set(afId, name);
+            } else {
+              missing.push({ name });
+            }
           }
+          if (missing.length > 0 && afResult.afTeamId) {
+            for (const { name } of missing) {
+              const found = await lookupAfPlayerId(name, afResult.afTeamId, afApiKey);
+              if (found) idToName.set(found, name);
+            }
+          }
+          return idToName;
+        };
+
+        const [homeIdMap, awayIdMap] = await Promise.all([
+          resolvePlayerIds(homeStarters, homeAfResult),
+          resolvePlayerIds(awayStarters, awayAfResult),
+        ]);
+        log(`[per-player] live: home ${homeIdMap.size}/${homeStarters.length} IDs, away ${awayIdMap.size}/${awayStarters.length} IDs`);
+
+        const homePersonal = await fetchPlayerPersonalHistoryBatch(Array.from(homeIdMap.keys()), afApiKey);
+        const awayPersonal = await fetchPlayerPersonalHistoryBatch(Array.from(awayIdMap.keys()), afApiKey);
+        log(`[per-player] live: home ${homePersonal.size} histories, away ${awayPersonal.size} histories`);
+
+        for (const [id, games] of Array.from(homePersonal)) {
+          const name = homeIdMap.get(id);
+          if (name) perPlayerHistoryHome.set(normName(name), games);
         }
-        return idToName;
-      };
-
-      const [homeIdMap, awayIdMap] = await Promise.all([
-        resolvePlayerIds(homeStarters, homeAfResult),
-        resolvePlayerIds(awayStarters, awayAfResult),
-      ]);
-      log(`[per-player] home: ${homeIdMap.size}/${homeStarters.length} IDs resolved, away: ${awayIdMap.size}/${awayStarters.length} IDs resolved`);
-
-      // Fetch personal fixture histories sequentially to avoid rate limit issues
-      const homePersonal = await fetchPlayerPersonalHistoryBatch(Array.from(homeIdMap.keys()), afApiKey);
-      const awayPersonal = await fetchPlayerPersonalHistoryBatch(Array.from(awayIdMap.keys()), afApiKey);
-      log(`[per-player] home: ${homePersonal.size} players with history, away: ${awayPersonal.size} players with history`);
-
-      // Convert from playerId → stats to normalizedName → stats
-      for (const [id, games] of Array.from(homePersonal)) {
-        const name = homeIdMap.get(id);
-        if (name) perPlayerHistoryHome.set(normName(name), games);
-      }
-      for (const [id, games] of Array.from(awayPersonal)) {
-        const name = awayIdMap.get(id);
-        if (name) perPlayerHistoryAway.set(normName(name), games);
+        for (const [id, games] of Array.from(awayPersonal)) {
+          const name = awayIdMap.get(id);
+          if (name) perPlayerHistoryAway.set(normName(name), games);
+        }
       }
     }
 

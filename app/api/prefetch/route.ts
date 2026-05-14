@@ -1,0 +1,88 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prefetchMatch } from '@/lib/prefetch';
+import { kvGet } from '@/lib/store';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
+
+const BASE_URL = 'https://api.football-data.org/v4';
+const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1'];
+
+function isAuthorized(req: NextRequest): boolean {
+  const syncSecret = (process.env.SYNC_SECRET ?? '').trim();
+  const cronSecret = (process.env.CRON_SECRET ?? '').trim();
+  const q = req.nextUrl.searchParams.get('secret') ?? req.nextUrl.searchParams.get('token');
+  if (syncSecret && q === syncSecret) return true;
+  const auth = req.headers.get('authorization');
+  if (cronSecret && auth === `Bearer ${cronSecret}`) return true;
+  return false;
+}
+
+function matchSlug(home: string, away: string): string {
+  const s = (v: string) => (v || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  return `${s(home)}-vs-${s(away)}`;
+}
+
+export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  const logs: string[] = [];
+  const log = (msg: string) => { console.log(msg); logs.push(msg); };
+
+  const afApiKey = (process.env.API_SPORTS_KEY ?? '').trim();
+  if (!afApiKey) return NextResponse.json({ error: 'no API_SPORTS_KEY' }, { status: 500 });
+
+  const force = req.nextUrl.searchParams.get('force') === '1';
+
+  try {
+    // Get upcoming matches from football-data.org
+    const today = new Date();
+    const from = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000);
+    const to   = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
+    const fmt  = (d: Date) => d.toISOString().slice(0, 10);
+
+    const res = await fetch(
+      `${BASE_URL}/matches?competitions=${COMPETITIONS.join(',')}&dateFrom=${fmt(from)}&dateTo=${fmt(to)}`,
+      { headers: { 'X-Auth-Token': process.env.FOOTBALL_DATA_KEY! }, cache: 'no-store' },
+    );
+    if (!res.ok) return NextResponse.json({ error: `fd.org ${res.status}` }, { status: 500 });
+
+    const data = await res.json();
+    const matches: any[] = data?.matches ?? [];
+    log(`[prefetch] ${matches.length} matches from fd.org`);
+
+    // Only pre-fetch matches within 24h of kickoff that have known team names
+    const nearTerm = matches.filter((m: any) => {
+      if (!m.homeTeam?.name || !m.awayTeam?.name) return false;
+      const hoursAway = (new Date(m.utcDate).getTime() - Date.now()) / 3_600_000;
+      return hoursAway > -2 && hoursAway < 24;
+    });
+    log(`[prefetch] ${nearTerm.length} near-term matches`);
+
+    let done = 0, skipped = 0;
+    for (const m of nearTerm) {
+      const id = matchSlug(m.homeTeam.name, m.awayTeam.name);
+
+      if (!force) {
+        const existing = await kvGet<any>(`prefetch:${id}`);
+        // Skip if prefetched within the last 6 hours
+        if (existing?.fetchedAt && Date.now() - existing.fetchedAt < 6 * 60 * 60 * 1000) {
+          log(`[prefetch] skip (fresh): ${id}`);
+          skipped++;
+          continue;
+        }
+      }
+
+      const ok = await prefetchMatch(id, m.homeTeam.name, m.awayTeam.name, m.utcDate, afApiKey, log);
+      if (ok) done++;
+    }
+
+    log(`[prefetch] Done — ${done} fetched, ${skipped} skipped (fresh)`);
+    return NextResponse.json({ ok: true, done, skipped, total: nearTerm.length, logs });
+  } catch (err: any) {
+    log(`[prefetch] Fatal: ${err.message}`);
+    return NextResponse.json({ ok: false, error: err.message, logs }, { status: 500 });
+  }
+}

@@ -592,7 +592,7 @@ function cleanForSearch(name: string): string {
     .split(' ').filter(w => w.length >= 2).slice(0, 3).join(' ');
 }
 
-function guessDomesticLeagueId(teamName: string): number {
+export function guessDomesticLeagueId(teamName: string): number {
   const league = guessDomesticLeague(teamName);
   const map: Record<string, number> = {
     'eng.1': 39,  'esp.1': 140, 'ger.1': 78,  'ita.1': 135, 'fra.1': 61,
