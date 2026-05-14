@@ -657,21 +657,12 @@ export async function fetchApiFootballTeamHistory(
     const teamId: number = best?.team?.id;
     if (!teamId) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: `no id: ${searchName}` };
 
-    // Fetch 8 domestic fixtures so players who missed one game still have 5 real data points
-    const fixtureLeagueFilter = leagueId ? `&league=${leagueId}` : '';
-    let fd = await afFetch(`/fixtures?team=${teamId}&last=8&season=2025${fixtureLeagueFilter}`, apiKey);
+    // Fetch 8 recent fixtures across all competitions so player history includes cup/European games
+    let fd = await afFetch(`/fixtures?team=${teamId}&last=8&season=2025`, apiKey);
     let fixtures: any[] = fd?.response ?? [];
-    if (!fixtures.length && fixtureLeagueFilter) {
-      fd = await afFetch(`/fixtures?team=${teamId}&last=8&season=2025`, apiKey);
-      fixtures = fd?.response ?? [];
-    }
     if (!fixtures.length) {
-      const fd24League = await afFetch(`/fixtures?team=${teamId}&last=8&season=2024${fixtureLeagueFilter}`, apiKey);
-      fixtures = fd24League?.response ?? [];
-      if (!fixtures.length) {
-        const fd24 = await afFetch(`/fixtures?team=${teamId}&last=8&season=2024`, apiKey);
-        fixtures = fd24?.response ?? [];
-      }
+      fd = await afFetch(`/fixtures?team=${teamId}&last=8&season=2024`, apiKey);
+      fixtures = fd?.response ?? [];
     }
     if (!fixtures.length) return { history: new Map(), playerIds: new Map(), afTeamId: teamId, afTeamStats: null, debug: `no fixtures: ${teamId}` };
 
@@ -1110,7 +1101,8 @@ export async function fetchPlayerPersonalHistoryBatch(
     const games: PlayerGameStat[] = [];
     for (const { id: fixtureId } of sorted) {
       const stat = fixturePlayerStats.get(fixtureId)?.get(playerId);
-      if (stat) games.push(stat);
+      // Always push — missing stats become zeros so game position stays correct in the timeline
+      games.push(stat ?? { goals: 0, assists: 0, shots: 0, sot: 0, fc: 0, fd: 0, yellowCards: 0, saves: 0 });
     }
     if (games.length > 0) result.set(playerId, games);
   }
