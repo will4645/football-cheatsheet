@@ -1077,14 +1077,15 @@ async function runSync() {
         const homeBadge = `https://a.espncdn.com/i/teamlogos/soccer/500/${homeEspnId}.png`;
         const awayBadge = `https://a.espncdn.com/i/teamlogos/soccer/500/${awayEspnId}.png`;
         espnAdded++;
-        if (hoursAway > 24) {
-          pendingList.push({
-            id, competition: compName, stage, utcDate: ev.date,
-            date: formatDate(ev.date), kickoff: formatKickoff(ev.date),
-            homeTeam: { name: homeName, badge: homeBadge, primaryColor: getTeamColor(homeName) },
-            awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
-          });
-        } else {
+        // Always add to pendingList so the match card appears immediately (even within 24h).
+        // Near-term matches are also added to nearTermMatches for full sheet processing.
+        pendingList.push({
+          id, competition: compName, stage, utcDate: ev.date,
+          date: formatDate(ev.date), kickoff: formatKickoff(ev.date),
+          homeTeam: { name: homeName, badge: homeBadge, primaryColor: getTeamColor(homeName) },
+          awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
+        });
+        if (hoursAway <= 24) {
           nearTermMatches.push({
             _fromEspn: true, _espnLeague: league,
             id: ev.id, status: comp?.status?.type?.name ?? 'SCHEDULED', utcDate: ev.date,
@@ -1151,14 +1152,13 @@ async function runSync() {
         const stageText = fix.leagueRound
           .replace(/Regular Season - (\d+)/i, 'Matchday $1')
           .replace(/^(\d+)$/, 'Matchday $1');
-        if (hoursAway > 24) {
-          pendingList.push({
-            id, competition: lg.compName, stage: stageText, utcDate: fix.utcDate,
-            date: formatDate(fix.utcDate), kickoff: formatKickoff(fix.utcDate),
-            homeTeam: { name: fix.home.name, badge: fix.home.logo || '', primaryColor: getTeamColor(fix.home.name) },
-            awayTeam: { name: fix.away.name, badge: fix.away.logo || '', primaryColor: getTeamColor(fix.away.name) },
-          });
-        } else {
+        pendingList.push({
+          id, competition: lg.compName, stage: stageText, utcDate: fix.utcDate,
+          date: formatDate(fix.utcDate), kickoff: formatKickoff(fix.utcDate),
+          homeTeam: { name: fix.home.name, badge: fix.home.logo || '', primaryColor: getTeamColor(fix.home.name) },
+          awayTeam: { name: fix.away.name, badge: fix.away.logo || '', primaryColor: getTeamColor(fix.away.name) },
+        });
+        if (hoursAway <= 24) {
           nearTermMatches.push({
             _fromAf: true, _afFixtureId: fix.id, _afLeagueId: lg.leagueId, _afEspnSlug: lg.espnSlug,
             id, status, utcDate: fix.utcDate,
