@@ -1264,8 +1264,9 @@ async function runSync() {
       }
     }
 
-    // Load prefetch data (zero AF calls if present)
-    const prefetched = isLive ? null : await sbGet(`prefetch:${id}`) as PrefetchData | null;
+    // Load prefetch data (zero AF calls if present).
+    // Use prefetch even for live matches — player history and team stats don't change mid-game.
+    const prefetched = await sbGet(`prefetch:${id}`) as PrefetchData | null;
     if (prefetched) log(`[sync] Prefetch found for ${id} (fetched ${Math.round((Date.now() - prefetched.fetchedAt) / 60000)}m ago)`);
 
     // Step 3: Fetch per-player ESPN history — skip when prefetch covers it
