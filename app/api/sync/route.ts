@@ -1003,17 +1003,18 @@ async function runSync() {
   log(`[sync] Phase 1 done — ${pendingList.length} far-pending, ${nearTermMatches.length} near-term to process`);
 
   // ── Auto-prefetch: ensure every near-term match has AF data in Supabase ───
-  // Runs once on the first sync after a match enters the near-term window.
-  // Subsequent syncs find the prefetch data and make zero AF calls.
+  // Only runs for matches within 4h of kickoff that have NO existing prefetch at all.
+  // The dedicated 7am cron owns refreshes; this is just a safety net for late discoveries.
   {
     const afKeyForPrefetch = (process.env.API_SPORTS_KEY ?? '').trim();
     if (afKeyForPrefetch) {
       for (const m of nearTermMatches) {
         if (!m.homeTeam?.name || !m.awayTeam?.name) continue;
+        const koHours = (new Date(m.utcDate ?? 0).getTime() - Date.now()) / 3_600_000;
+        if (koHours > 4) continue; // only prefetch within 4h of kickoff
         const mId = matchId(m.homeTeam.name, m.awayTeam.name);
         const existing = await sbGet(`prefetch:${mId}`) as { fetchedAt?: number } | null;
-        // Skip if prefetched within the last 6 hours
-        if (existing?.fetchedAt && Date.now() - existing.fetchedAt < 6 * 60 * 60 * 1000) continue;
+        if (existing?.fetchedAt) continue; // any existing prefetch is good enough
         log(`[sync] Auto-prefetch: ${mId}`);
         await prefetchMatch(mId, m.homeTeam.name, m.awayTeam.name, m.utcDate ?? '', afKeyForPrefetch, log);
       }
@@ -1194,8 +1195,9 @@ async function runSync() {
   // Write upcoming now — far-future matches are ready; near-term will be added below
   await sbSet('upcoming', pendingList, log);
 
-  // Phase 2: slow pass — lineup checks for near-term matches
-  // Prioritise ESPN/AF supplement matches (FA Cup, CL, etc.) so they aren't starved by fd.org matches
+  // Phase 2: slow pass — build/refresh sheets for matches within 4h of kickoff or live.
+  // Matches >4h away stay as pending cards; no sheet processing needed until they're close.
+  const alreadyBuiltIds = new Set(liveMatches.map((m: any) => m.id));
   nearTermMatches.sort((a, b) => {
     const aSupp = (a._fromEspn || a._fromAf) ? 0 : 1;
     const bSupp = (b._fromEspn || b._fromAf) ? 0 : 1;
@@ -1208,6 +1210,9 @@ async function runSync() {
     const kickoff   = new Date(match.utcDate);
     const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
     const isLive = LIVE_STATUSES.has(status);
+
+    // Skip sheet processing for matches that are far off and not yet built
+    if (!isLive && !alreadyBuiltIds.has(id) && hoursAway > 4) continue;
 
     const fromEspn = !!(match as any)._fromEspn;
     const fromAf   = !!(match as any)._fromAf;
