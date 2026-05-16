@@ -1179,6 +1179,12 @@ async function runSync() {
   await sbSet('upcoming', pendingList, log);
 
   // Phase 2: slow pass — lineup checks for near-term matches
+  // Prioritise ESPN/AF supplement matches (FA Cup, CL, etc.) so they aren't starved by fd.org matches
+  nearTermMatches.sort((a, b) => {
+    const aSupp = (a._fromEspn || a._fromAf) ? 0 : 1;
+    const bSupp = (b._fromEspn || b._fromAf) ? 0 : 1;
+    return aSupp - bSupp;
+  });
   for (const match of nearTermMatches) {
     const id     = matchId(match.homeTeam?.name, match.awayTeam?.name);
     try {
