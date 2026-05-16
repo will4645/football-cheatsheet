@@ -1020,12 +1020,21 @@ async function runSync() {
     }
   }
 
-  // ── ESPN supplement for CL / EL / ECL (fd.org free tier omits these) ──────
-  const ESPN_COMP_LEAGUES = [
+  // ── ESPN supplement — primary source for CL/EL/ECL/FA Cup, fallback for fd.org leagues ──
+  // Major domestic leagues (eng.1 etc.) use a 14-day window; cups/European use 30 days.
+  const ESPN_COMP_LEAGUES: Array<{ league: string; compName: string; days?: number }> = [
     { league: 'uefa.champions',   compName: 'UEFA Champions League' },
     { league: 'uefa.europa',      compName: 'UEFA Europa League' },
     { league: 'uefa.europa.conf', compName: 'UEFA Europa Conference League' },
     { league: 'eng.fa',           compName: 'FA Cup' },
+    // fd.org fallback — these are skipped when fd.org already supplied the same matches
+    { league: 'eng.1', compName: 'Premier League',  days: 14 },
+    { league: 'ger.1', compName: 'Bundesliga',       days: 14 },
+    { league: 'ita.1', compName: 'Serie A',           days: 14 },
+    { league: 'esp.1', compName: 'La Liga',           days: 14 },
+    { league: 'fra.1', compName: 'Ligue 1',           days: 14 },
+    { league: 'ned.1', compName: 'Eredivisie',        days: 14 },
+    { league: 'por.1', compName: 'Primeira Liga',     days: 14 },
   ];
   // Exclude liveMatches from seenIds so ESPN-sourced EL/ECL/CL matches get re-processed
   // every sync cycle (keeps referee, stats, etc. fresh throughout matchday)
@@ -1038,14 +1047,15 @@ async function runSync() {
     ...pendingList.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
     ...nearTermMatches.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
   ]);
-  for (const { league, compName } of ESPN_COMP_LEAGUES) {
-    for (let d = 0; d < 30; d++) {
+  for (const { league, compName, days: scanDays } of ESPN_COMP_LEAGUES) {
+    const window = scanDays ?? 30;
+    for (let d = 0; d < window; d++) {
       const dt = new Date(Date.now() + d * 86_400_000);
       const ds = `${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}`;
       let board: any;
       try {
         // Only throttle near-term days; far-future fixture discovery doesn't need the delay
-        if (d < 8) await new Promise(r => setTimeout(r, 300));
+        if (d < 8) await new Promise(r => setTimeout(r, scanDays ? 150 : 300));
         const res = await fetch(
           `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${ds}&_cb=${Date.now()}`,
           { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36', 'Accept': 'application/json' }, cache: 'no-store' }
@@ -1098,7 +1108,7 @@ async function runSync() {
       }
     }
   }
-  log(`[sync] ESPN supplement: +${espnAdded} CL/EL/ECL matches`);
+  log(`[sync] ESPN supplement: +${espnAdded} matches added`);
 
   // ── AF supplement for extra leagues (Championship, Scottish Prem, etc.) ─────
   // Uses API-Football as the match source for leagues outside fd.org's free tier.
