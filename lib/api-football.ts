@@ -239,14 +239,12 @@ export interface TeamSeasonStats {
   foulsWon: number;
   cardsFor: number;
   cardsAgainst: number;
-  tacklesFor: number;
-  tacklesAgainst: number;
   offsidesFor: number;
   offsidesAgainst: number;
   freeKicksFor: number;
   freeKicksAgainst: number;
-  goalKicksFor: number;
-  goalKicksAgainst: number;
+  savesFor: number;
+  savesAgainst: number;
   gamesCount: number;
 }
 
@@ -398,14 +396,12 @@ export async function fetchTeamPlayerHistory(
       // ESPN boxscore: "Yellow Cards" → yellowcards
       cardsFor:       getBestStat('mine', 'yellowcards', 'Yellow Cards', 'avgyellowcards', 'bookings', 'cards'),
       cardsAgainst:   getBestStat('opp',  'yellowcards', 'Yellow Cards', 'avgyellowcards', 'bookings', 'cards'),
-      tacklesFor:     getBestStat('mine', 'tackles', 'Tackles', 'totaltackles', 'tacklesmade', 'avgtackles'),
-      tacklesAgainst: getBestStat('opp',  'tackles', 'Tackles', 'totaltackles', 'tacklesmade', 'avgtackles'),
       offsidesFor:    getBestStat('mine', 'offsides', 'Offsides', 'offside', 'offsidescommitted', 'avgoffsides'),
       offsidesAgainst:getBestStat('opp',  'offsides', 'Offsides', 'offside', 'offsidescommitted', 'avgoffsides'),
       freeKicksFor:   getBestStat('mine', 'freekicks', 'Free Kicks', 'freekick', 'freekickswon') || getBestStat('opp', 'fouls', 'Fouls', 'foulscommitted'),
       freeKicksAgainst:getBestStat('opp', 'freekicks', 'Free Kicks', 'freekick', 'freekickswon') || getBestStat('mine', 'fouls', 'Fouls', 'foulscommitted'),
-      goalKicksFor:   getBestStat('mine', 'goalkicks', 'Goal Kicks', 'goalkick', 'avggoalkicks'),
-      goalKicksAgainst:getBestStat('opp', 'goalkicks', 'Goal Kicks', 'goalkick', 'avggoalkicks'),
+      savesFor:       getBestStat('mine', 'saves', 'Saves', 'goalkeepertotalsaves', 'avgsaves'),
+      savesAgainst:   getBestStat('opp',  'saves', 'Saves', 'goalkeepertotalsaves', 'avgsaves'),
       gamesCount:     n,
     };
 
