@@ -282,6 +282,9 @@ function buildTeamStats(
   const foulsWon        = e?.foulsWon        || oaf?.foulsFor      || o?.foulsCommitted   || 11.0;
   const cardsFor        = af?.yellowCardsFor || e?.cardsFor        || o?.cardsAgainst     || 1.8;
   const cardsAgainst    = e?.cardsAgainst    || oaf?.yellowCardsFor|| o?.cardsFor         || 1.8;
+  // Tackles: aggregated from per-player AF stats (s.tackles.total) — real data, not a fixture-level stat
+  const tacklesFor      = af?.tacklesFor     || e?.tacklesFor      || o?.tacklesAgainst   || 18.0;
+  const tacklesAgainst  = oaf?.tacklesFor    || e?.tacklesAgainst  || o?.tacklesFor       || 18.0;
   const offsidesFor     = af?.offsidesFor    || e?.offsidesFor     || o?.offsidesAgainst  || 2.0;
   const offsidesAgainst = e?.offsidesAgainst || oaf?.offsidesFor   || o?.offsidesFor      || 2.0;
   // Free kicks for = fouls this team WON = opponent's committed fouls (oaf.foulsFor is a good proxy)
@@ -304,6 +307,8 @@ function buildTeamStats(
     over155Fouls:   overProb(foulsCommitted + foulsWon, 15.5),
     cardsFor:       +cardsFor.toFixed(2),        cardsAgainst:      +cardsAgainst.toFixed(2),
     over45Cards:    overProb(cardsFor + cardsAgainst, 4.5),
+    tacklesFor:     +tacklesFor.toFixed(2),      tacklesAgainst:    +tacklesAgainst.toFixed(2),
+    over345Tackles: overProb(tacklesFor + tacklesAgainst, 34.5),
     offsidesFor:    +offsidesFor.toFixed(2),     offsidesAgainst:   +offsidesAgainst.toFixed(2),
     over35Offsides: overProb(offsidesFor + offsidesAgainst, 3.5),
     freeKicksFor:   +freeKicksFor.toFixed(2),    freeKicksAgainst:  +freeKicksAgainst.toFixed(2),
@@ -321,6 +326,7 @@ function defaultStats() {
     sotFor: 4.5, sotAgainst: 3.8, over95SoT: 60,
     foulsCommitted: 11.0, foulsWon: 11.0, over155Fouls: 60,
     cardsFor: 1.8, cardsAgainst: 1.8, over45Cards: 40,
+    tacklesFor: 18.0, tacklesAgainst: 18.0, over345Tackles: 60,
     offsidesFor: 2.0, offsidesAgainst: 2.0, over35Offsides: 50,
     freeKicksFor: 10.0, freeKicksAgainst: 10.0, over195FreeKicks: 60,
     savesFor: 3.8, savesAgainst: 3.5, over75Saves: 55,

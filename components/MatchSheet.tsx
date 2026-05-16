@@ -79,6 +79,7 @@ function TeamStatsPanel({ team, compColor }: { team: TeamData; compColor: string
         <StatGroup l1="Shots on Target For" v1={stats.sotFor} l2="Shots on Target Against" v2={stats.sotAgainst} overLabel="Over 6.5 Shots on Target" prob={stats.over95SoT} />
         <StatGroup l1="Fouls Committed" v1={stats.foulsCommitted} l2="Fouls Won" v2={stats.foulsWon} overLabel="Over 15.5 Fouls" prob={stats.over155Fouls} />
         <StatGroup l1="Cards For" v1={stats.cardsFor} l2="Cards Against" v2={stats.cardsAgainst} overLabel="Over 4.5 Cards" prob={stats.over45Cards} />
+        <StatGroup l1="Tackles For" v1={stats.tacklesFor} l2="Tackles Against" v2={stats.tacklesAgainst} overLabel="Over 34.5 Tackles" prob={stats.over345Tackles} />
         <StatGroup l1="Offsides For" v1={stats.offsidesFor} l2="Offsides Against" v2={stats.offsidesAgainst} overLabel="Over 3.5 Offsides" prob={stats.over35Offsides} />
         <StatGroup l1="Free Kicks For" v1={stats.freeKicksFor} l2="Free Kicks Against" v2={stats.freeKicksAgainst} overLabel="Over 19.5 Free Kicks" prob={stats.over195FreeKicks} />
         <StatGroup l1="Saves For" v1={stats.savesFor} l2="Saves Against" v2={stats.savesAgainst} overLabel="Over 7.5 Saves" prob={stats.over75Saves} />

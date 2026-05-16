@@ -36,6 +36,7 @@ export interface TeamData {
     sotFor: number; sotAgainst: number; over95SoT: number;
     foulsCommitted: number; foulsWon: number; over155Fouls: number;
     cardsFor: number; cardsAgainst: number; over45Cards: number;
+    tacklesFor: number; tacklesAgainst: number; over345Tackles: number;
     offsidesFor: number; offsidesAgainst: number; over35Offsides: number;
     freeKicksFor: number; freeKicksAgainst: number; over195FreeKicks: number;
     savesFor: number; savesAgainst: number; over75Saves: number;
@@ -73,6 +74,7 @@ export const matchData: {
       sotFor: 4.35, sotAgainst: 3.88, over95SoT: 72,
       foulsCommitted: 10.65, foulsWon: 10.22, over155Fouls: 78,
       cardsFor: 1.62, cardsAgainst: 1.55, over45Cards: 22,
+      tacklesFor: 22.14, tacklesAgainst: 19.88, over345Tackles: 72,
       offsidesFor: 1.82, offsidesAgainst: 2.05, over35Offsides: 45,
       freeKicksFor: 10.22, freeKicksAgainst: 10.65, over195FreeKicks: 72,
       savesFor: 3.85, savesAgainst: 4.12, over75Saves: 62,
@@ -155,6 +157,7 @@ export const matchData: {
       sotFor: 3.05, sotAgainst: 3.95, over95SoT: 58,
       foulsCommitted: 13.82, foulsWon: 9.95, over155Fouls: 85,
       cardsFor: 2.28, cardsAgainst: 1.55, over45Cards: 32,
+      tacklesFor: 17.55, tacklesAgainst: 21.32, over345Tackles: 68,
       offsidesFor: 1.48, offsidesAgainst: 2.38, over35Offsides: 42,
       freeKicksFor: 9.95, freeKicksAgainst: 13.82, over195FreeKicks: 88,
       savesFor: 4.22, savesAgainst: 3.65, over75Saves: 58,

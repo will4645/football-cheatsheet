@@ -239,6 +239,8 @@ export interface TeamSeasonStats {
   foulsWon: number;
   cardsFor: number;
   cardsAgainst: number;
+  tacklesFor: number;
+  tacklesAgainst: number;
   offsidesFor: number;
   offsidesAgainst: number;
   freeKicksFor: number;
@@ -396,6 +398,8 @@ export async function fetchTeamPlayerHistory(
       // ESPN boxscore: "Yellow Cards" → yellowcards
       cardsFor:       getBestStat('mine', 'yellowcards', 'Yellow Cards', 'avgyellowcards', 'bookings', 'cards'),
       cardsAgainst:   getBestStat('opp',  'yellowcards', 'Yellow Cards', 'avgyellowcards', 'bookings', 'cards'),
+      tacklesFor:     getBestStat('mine', 'tackles', 'Tackles', 'totaltackles', 'tacklesmade', 'avgtackles'),
+      tacklesAgainst: getBestStat('opp',  'tackles', 'Tackles', 'totaltackles', 'tacklesmade', 'avgtackles'),
       offsidesFor:    getBestStat('mine', 'offsides', 'Offsides', 'offside', 'offsidescommitted', 'avgoffsides'),
       offsidesAgainst:getBestStat('opp',  'offsides', 'Offsides', 'offside', 'offsidescommitted', 'avgoffsides'),
       freeKicksFor:   getBestStat('mine', 'freekicks', 'Free Kicks', 'freekick', 'freekickswon') || getBestStat('opp', 'fouls', 'Fouls', 'foulscommitted'),
@@ -708,12 +712,14 @@ export async function fetchApiFootballTeamHistory(
 
       // ── Player stats ──
       const teamPlayers = pd?.response?.[0];
+      let fixtureTackles = 0;
       if (teamPlayers?.players) {
         for (const p of (teamPlayers.players as any[])) {
           const pName: string = p.player?.name ?? '';
           if (!pName) continue;
           const s = p.statistics?.[0];
           if (!s) continue;
+          fixtureTackles += s.tackles?.total ?? 0;
           const stat: PlayerGameStat = {
             goals:       s.goals?.total     ?? 0,
             assists:     s.goals?.assists   ?? 0,
@@ -757,10 +763,9 @@ export async function fetchApiFootballTeamHistory(
           sot:         getFixStat('Shots on Goal'),
           fouls:       getFixStat('Fouls'),
           offsides:    getFixStat('Offsides'),
-          tackles:     getFixStat('Tackles'),
+          tackles:     fixtureTackles || getFixStat('Tackles'),
           yellowCards: getFixStat('Yellow Cards'),
           saves:       getFixStat('Goalkeeper Saves'),
-          // These may not be present for all leagues — will be 0 if missing
           goalKicks:   getFixStat('Goal Kicks'),
         });
       }
