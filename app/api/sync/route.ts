@@ -865,7 +865,7 @@ function normMatchId(home: string, away: string) {
   const norm = (s: string) => (s || '')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase()
-    .replace(/\b(fc|cf|sc|afc|bfc|ssc|ac|as|rb|vfb|club|de|van|united|city)\b/g, ' ')
+    .replace(/\b(fc|cf|sc|cd|ud|gd|afc|bfc|ssc|ac|as|rb|vfb|club|de|van|united|city)\b/g, ' ')
     .replace(/munchen/g, 'munich')     // FC Bayern München → Bayern Munich
     .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, '-').replace(/^-|-$/g, '');
   return `${norm(home)}-vs-${norm(away)}`;
@@ -1047,6 +1047,9 @@ async function runSync() {
     ...pendingList.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
     ...nearTermMatches.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)),
   ]);
+  // Prevent adding a pending card for matches already processed into a live sheet.
+  // normMatchId strips prefixes (FC, CD, etc.) so "Moreirense FC" and "Moreirense" match.
+  const liveNormIds = new Set(liveMatches.map((m: any) => normMatchId(m.homeTeam?.name, m.awayTeam?.name)));
   for (const { league, compName, days: scanDays } of ESPN_COMP_LEAGUES) {
     const window = scanDays ?? 30;
     for (let d = 0; d < window; d++) {
@@ -1088,14 +1091,16 @@ async function runSync() {
         const homeBadge = `https://a.espncdn.com/i/teamlogos/soccer/500/${homeEspnId}.png`;
         const awayBadge = `https://a.espncdn.com/i/teamlogos/soccer/500/${awayEspnId}.png`;
         espnAdded++;
-        // Always add to pendingList so the match card appears immediately (even within 24h).
-        // Near-term matches are also added to nearTermMatches for full sheet processing.
-        pendingList.push({
-          id, competition: compName, stage, utcDate: ev.date,
-          date: formatDate(ev.date), kickoff: formatKickoff(ev.date),
-          homeTeam: { name: homeName, badge: homeBadge, primaryColor: getTeamColor(homeName) },
-          awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
-        });
+        // Add to pendingList (upcoming card) only if no live sheet already exists for this match.
+        // nearTermMatches still gets it unconditionally so Phase 2 can refresh live data.
+        if (!liveNormIds.has(nid)) {
+          pendingList.push({
+            id, competition: compName, stage, utcDate: ev.date,
+            date: formatDate(ev.date), kickoff: formatKickoff(ev.date),
+            homeTeam: { name: homeName, badge: homeBadge, primaryColor: getTeamColor(homeName) },
+            awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
+          });
+        }
         if (hoursAway <= 24) {
           nearTermMatches.push({
             _fromEspn: true, _espnLeague: league,
