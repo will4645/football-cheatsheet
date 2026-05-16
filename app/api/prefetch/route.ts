@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prefetchMatch } from '@/lib/prefetch';
+import { fetchAfFixturesByDateRange } from '@/lib/api-football';
 import { kvGet } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
@@ -54,12 +55,30 @@ export async function GET(req: NextRequest) {
     log(`[prefetch] ${matches.length} matches from fd.org`);
 
     // Only pre-fetch matches within 24h of kickoff that have known team names
-    const nearTerm = matches.filter((m: any) => {
-      if (!m.homeTeam?.name || !m.awayTeam?.name) return false;
-      const hoursAway = (new Date(m.utcDate).getTime() - Date.now()) / 3_600_000;
-      return hoursAway > -2 && hoursAway < 24;
-    });
-    log(`[prefetch] ${nearTerm.length} near-term matches`);
+    let nearTerm: Array<{ homeTeam: { name: string }; awayTeam: { name: string }; utcDate: string }> =
+      matches.filter((m: any) => {
+        if (!m.homeTeam?.name || !m.awayTeam?.name) return false;
+        const hoursAway = (new Date(m.utcDate).getTime() - Date.now()) / 3_600_000;
+        return hoursAway > -2 && hoursAway < 24;
+      });
+
+    // Also prefetch AF-supplement leagues (Championship, Scottish Prem, etc.)
+    const AF_PREFETCH_LEAGUES = [40, 179, 144, 203];
+    const afFixtureBatches = await Promise.all(
+      AF_PREFETCH_LEAGUES.map(id =>
+        fetchAfFixturesByDateRange(id, fmt(from), fmt(to), 2025, afApiKey).catch(() => [])
+      )
+    );
+    for (const batch of afFixtureBatches) {
+      for (const fix of batch) {
+        if (!fix.home.name || !fix.away.name) continue;
+        const hoursAway = (new Date(fix.utcDate).getTime() - Date.now()) / 3_600_000;
+        if (hoursAway > -2 && hoursAway < 24) {
+          nearTerm.push({ homeTeam: { name: fix.home.name }, awayTeam: { name: fix.away.name }, utcDate: fix.utcDate });
+        }
+      }
+    }
+    log(`[prefetch] ${nearTerm.length} near-term matches (fd.org + AF leagues)`);
 
     let done = 0, skipped = 0;
     for (const m of nearTerm) {

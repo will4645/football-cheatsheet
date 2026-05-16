@@ -26,7 +26,7 @@ export const atleticoMatchData: {
       tacklesFor: 19.82, tacklesAgainst: 16.44, over345Tackles: 75,
       offsidesFor: 2.41, offsidesAgainst: 1.88, over35Offsides: 55,
       freeKicksFor: 9.18, freeKicksAgainst: 11.16, over195FreeKicks: 80,
-      goalKicksFor: 6.27, goalKicksAgainst: 5.33, over115GoalKicks: 55,
+      savesFor: 3.62, savesAgainst: 4.18, over75Saves: 58,
     },
     players: {
       defensive: [
@@ -109,7 +109,7 @@ export const atleticoMatchData: {
       tacklesFor: 15.62, tacklesAgainst: 20.14, over345Tackles: 75,
       offsidesFor: 3.12, offsidesAgainst: 1.54, over35Offsides: 55,
       freeKicksFor: 11.76, freeKicksAgainst: 9.38, over195FreeKicks: 80,
-      goalKicksFor: 4.88, goalKicksAgainst: 6.71, over115GoalKicks: 55,
+      savesFor: 4.05, savesAgainst: 3.48, over75Saves: 56,
     },
     players: {
       defensive: [

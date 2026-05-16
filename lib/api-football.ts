@@ -24,7 +24,9 @@ const ESPN_LEAGUES = [
 
 // Maps team name patterns to their domestic ESPN league slug
 const DOMESTIC_LEAGUE_HINTS: [RegExp, string][] = [
-  [/arsenal|chelsea|liverpool|manchester|tottenham|brighton|aston villa|west ham|newcastle|brentford|fulham|everton|wolves|wolverhampton|crystal palace|bournemouth|nottingham|ipswich|leicester|southampton|sunderland|burnley|leeds|luton|sheffield|coventry|middlesbrough|norwich|swansea|cardiff|millwall|hull|derby/i, 'eng.1'],
+  // Championship teams first — prevents them matching the eng.1 pattern below
+  [/sunderland|burnley|leeds|luton|sheffield united|coventry|middlesbrough|norwich|swansea|cardiff|millwall|hull|derby|watford|stoke|qpr|queens park|preston|blackburn|bristol city|plymouth|oxford|portsmouth|sheff wed|sheffield wednesday|wba|west brom|barnsley|birmingham|rotherham|peterborough|reading|wigan|ipswich town/i, 'eng.2'],
+  [/arsenal|chelsea|liverpool|manchester|tottenham|brighton|aston villa|west ham|newcastle|brentford|fulham|everton|wolves|wolverhampton|crystal palace|bournemouth|nottingham|ipswich|leicester|southampton/i, 'eng.1'],
   [/atlético|atletico|real madrid|barcelona|sevilla|villarreal|betis|osasuna|girona|athletic bilbao|athletic club|valencia|celta|getafe|mallorca|levante|espanol|espanyol|oviedo|alaves|álaves|rayo vallecano|rayo|leganes|leganés|valladolid|granada|almeria|almería/i, 'esp.1'],
   [/psg|paris saint|paris fc|lyon|marseille|monaco|lille|nice|lens|rennes|nantes|strasbourg|toulouse|auxerre|brest|metz|lorient|angers|havre|le havre|reims|montpellier|troyes|clermont|ajaccio|guingamp/i, 'fra.1'],
   [/bayern|dortmund|leverkusen|leipzig|frankfurt|freiburg|union berlin|wolfsburg|stuttgart|gladbach|monchengladbach|hoffenheim|augsburg|hamburger|hamburgsv|hamburg sv|köln|koln|st pauli|pauli|heidenheim|mainz|werder|bremen|bochum|schalke|paderborn|sandhausen|dusseldorf|düsseldorf/i, 'ger.1'],
@@ -33,6 +35,7 @@ const DOMESTIC_LEAGUE_HINTS: [RegExp, string][] = [
   [/ajax|psv|feyenoord|az alkmaar|alkmaar|fc utrecht|twente|enschede|groningen|heerenveen|sparta rotterdam|heracles|almelo|nec nijmegen|excelsior|go ahead eagles|deventer|rkc waalwijk|cambuur|fortuna sittard|volendam/i, 'ned.1'],
   [/club brugge|anderlecht|gent|standard liege|royal antwerp|sint truiden|mechelen|kortrijk|westerlo|oud heverlee leuven|cercle brugge|charleroi|eupen|genk|union sg|union saint gilloise|mouscron|beerschot/i, 'bel.1'],
   [/celtic|rangers|hearts|hibernian|aberdeen|motherwell|livingston|st mirren|st johnstone|dundee|ross county|kilmarnock|inverness|hamilton/i, 'sco.1'],
+  [/falkirk|dunfermline|partick thistle|partick|airdrie|cove rangers|raith rovers|inverness ct|queen of the south|arbroath|ayr united|greenock morton|morton|dumbarton|alloa/i, 'sco.2'],
   [/galatasaray|fenerbahce|fenerbahçe|besiktas|beşiktaş|trabzonspor|alanyaspor|sivasspor|kasimpasa|kasımpaşa|adana demirspor|ankaragucu|ankaragücü|konyaspor|kayserispor|gaziantep|istanbulspor|hatayspor/i, 'tur.1'],
   [/malmo|malmö|djurgarden|djurgården|hammarby|ifk göteborg|ifk goteborg|aik|kalmar|elfsborg|hacken|häcken|halmstad|mjallby|varberg|degerfors|sirius|osters|brage|brommapojkarna|helsingborg|norrkoping|norrköping|gif sundsvall|ostersund|östers/i, 'swe.1'],
   [/fc copenhagen|kobenhavn|københavn|midtjylland|brondby|brøndby|aab aalborg|randers|agf aarhus|silkeborg|odense|sonderjyske|sønderjyske|vejle|hvidovre|lyngby|nordsjælland|nordsjaelland/i, 'den.1'],
@@ -433,7 +436,11 @@ export async function getApiFootballLineups(
   try {
     const date = utcDate.slice(0, 10).replace(/-/g, '');
 
-    for (const league of ESPN_LEAGUES) {
+    // Prioritise the likely league so we find the event on the first try
+    const leagueHint = guessDomesticLeague(homeTeamName) || guessDomesticLeague(awayTeamName);
+    const leagues = leagueHint ? [leagueHint, ...ESPN_LEAGUES.filter(l => l !== leagueHint)] : ESPN_LEAGUES;
+
+    for (const league of leagues) {
       let scoreboard: any;
       try {
         scoreboard = await espnFetch(
@@ -451,6 +458,13 @@ export async function getApiFootballLineups(
 
       if (!event) continue;
 
+      // Extract team IDs from the event now — return them even if rosters aren't ready yet
+      // so the caller can skip the redundant getEspnTeamIds step.
+      const evComp = event.competitions?.[0];
+      const homeTeamId = String(evComp?.competitors?.find((t: any) => t.homeAway === 'home')?.team?.id ?? '');
+      const awayTeamId = String(evComp?.competitors?.find((t: any) => t.homeAway === 'away')?.team?.id ?? '');
+      const foundMeta = homeTeamId && awayTeamId ? { league, homeTeamId, awayTeamId } : null;
+
       let summary: any;
       try {
         summary = await espnFetch(
@@ -460,13 +474,13 @@ export async function getApiFootballLineups(
 
       const rosters: any[] = summary?.rosters ?? [];
       if (!rosters.length) {
-        return { lineups: null, debug: `ESPN found event ${event.id} but no rosters yet`, espnMeta: null };
+        return { lineups: null, debug: `ESPN found event ${event.id} but no rosters yet`, espnMeta: foundMeta };
       }
 
       const homeRoster = rosters.find(r => r.homeAway === 'home');
       const awayRoster = rosters.find(r => r.homeAway === 'away');
       if (!homeRoster || !awayRoster) {
-        return { lineups: null, debug: `ESPN rosters incomplete for event ${event.id}`, espnMeta: null };
+        return { lineups: null, debug: `ESPN rosters incomplete for event ${event.id}`, espnMeta: foundMeta };
       }
 
       const homeStarters = (homeRoster.roster ?? []).filter((p: any) => p.starter);
@@ -477,20 +491,19 @@ export async function getApiFootballLineups(
         const rosterLen = (sampleRoster?.roster ?? []).length;
         const samplePlayer = sampleRoster?.roster?.[0];
         const starterVal = samplePlayer ? String(samplePlayer.starter) : 'n/a';
-        return { lineups: null, debug: `ESPN event ${event.id}: ${rosters.length} teams, rosterLen=${rosterLen}, starterVal=${starterVal}, homeStarters=${homeStarters.length}, awayStarters=${awayStarters.length}`, espnMeta: null };
+        return { lineups: null, debug: `ESPN event ${event.id}: ${rosters.length} teams, rosterLen=${rosterLen}, starterVal=${starterVal}, homeStarters=${homeStarters.length}, awayStarters=${awayStarters.length}`, espnMeta: foundMeta };
       }
 
-      const comp = event.competitions?.[0];
-      const homeTeamId = comp?.competitors?.find((t: any) => t.homeAway === 'home')?.team?.id ?? homeRoster.team?.id ?? '';
-      const awayTeamId = comp?.competitors?.find((t: any) => t.homeAway === 'away')?.team?.id ?? awayRoster.team?.id ?? '';
+      const rHomeId = homeRoster.team?.id ? String(homeRoster.team.id) : homeTeamId;
+      const rAwayId = awayRoster.team?.id ? String(awayRoster.team.id) : awayTeamId;
 
       return {
         lineups: {
           homeTeam: transformRoster(homeRoster.roster ?? []),
           awayTeam: transformRoster(awayRoster.roster ?? []),
         },
-        debug: `ESPN confirmed lineups: ${homeStarters.length} home / ${awayStarters.length} away starters (teamIds: ${homeTeamId}/${awayTeamId})`,
-        espnMeta: { league, homeTeamId, awayTeamId },
+        debug: `ESPN confirmed lineups: ${homeStarters.length} home / ${awayStarters.length} away starters (teamIds: ${rHomeId}/${rAwayId})`,
+        espnMeta: { league, homeTeamId: rHomeId, awayTeamId: rAwayId },
       };
     }
 
@@ -595,8 +608,8 @@ function cleanForSearch(name: string): string {
 export function guessDomesticLeagueId(teamName: string): number {
   const league = guessDomesticLeague(teamName);
   const map: Record<string, number> = {
-    'eng.1': 39,  'esp.1': 140, 'ger.1': 78,  'ita.1': 135, 'fra.1': 61,
-    'por.1': 94,  'ned.1': 88,  'bel.1': 144, 'sco.1': 271, 'tur.1': 203,
+    'eng.1': 39,  'eng.2': 40,  'esp.1': 140, 'ger.1': 78,  'ita.1': 135, 'fra.1': 61,
+    'por.1': 94,  'ned.1': 88,  'bel.1': 144, 'sco.1': 179, 'sco.2': 182, 'tur.1': 203,
     'swe.1': 113, 'den.1': 119, 'nor.1': 103, 'aut.1': 218, 'sui.1': 169,
     'gre.1': 197, 'pol.1': 106, 'cro.1': 210, 'srb.1': 286, 'ukr.1': 333,
     'rou.1': 283, 'cze.1': 244,
@@ -683,10 +696,12 @@ export async function fetchApiFootballTeamHistory(
       if (!fid) continue;
       if (!FINISHED.has(fix.fixture?.status?.short ?? '')) continue;
 
-      // Extract goals from the fixture score directly
+      // Extract goals — try top-level goals field first, fall back to score.fulltime
       const isHome = fix.teams?.home?.id === teamId || String(fix.teams?.home?.id) === String(teamId);
-      const gf = isHome ? (fix.goals?.home ?? -1) : (fix.goals?.away ?? -1);
-      const ga = isHome ? (fix.goals?.away ?? -1) : (fix.goals?.home ?? -1);
+      const rawHome = fix.goals?.home ?? fix.score?.fulltime?.home;
+      const rawAway = fix.goals?.away ?? fix.score?.fulltime?.away;
+      const gf = isHome ? (rawHome ?? -1) : (rawAway ?? -1);
+      const ga = isHome ? (rawAway ?? -1) : (rawHome ?? -1);
       if (gf >= 0 && ga >= 0) goalsArr.push({ gf, ga });
 
       // Fetch player stats and team fixture stats in parallel for the same fixture
@@ -1239,4 +1254,75 @@ export async function fetchApiFootballOdds(
   } catch {
     return null;
   }
+}
+
+// ── AF fixture listing (match source for leagues not on fd.org free tier) ───
+export interface AfFixtureSummary {
+  id: number;
+  utcDate: string;
+  status: string;
+  referee: string;
+  leagueName: string;
+  leagueRound: string;
+  home: { id: number; name: string; logo: string };
+  away: { id: number; name: string; logo: string };
+}
+
+export async function fetchAfFixturesByDateRange(
+  leagueId: number,
+  fromDate: string,
+  toDate: string,
+  season: number,
+  apiKey: string,
+): Promise<AfFixtureSummary[]> {
+  if (!apiKey || !leagueId) return [];
+  try {
+    const data = await afFetch(
+      `/fixtures?league=${leagueId}&season=${season}&from=${fromDate}&to=${toDate}`,
+      apiKey,
+    );
+    return (data?.response ?? [])
+      .map((f: any) => ({
+        id:          f.fixture?.id as number,
+        utcDate:     f.fixture?.date ?? '',
+        status:      f.fixture?.status?.short ?? 'NS',
+        referee:     (f.fixture?.referee ?? '').split(',')[0].trim(),
+        leagueName:  f.league?.name ?? '',
+        leagueRound: f.league?.round ?? '',
+        home: { id: f.teams?.home?.id as number, name: f.teams?.home?.name ?? '', logo: f.teams?.home?.logo ?? '' },
+        away: { id: f.teams?.away?.id as number, name: f.teams?.away?.name ?? '', logo: f.teams?.away?.logo ?? '' },
+      }))
+      .filter((f: AfFixtureSummary) => f.id && f.home.name && f.away.name);
+  } catch { return []; }
+}
+
+// Returns ESPN-compatible lineup shape so Phase 2 consumes it unchanged.
+// { homeTeam: { lineup, startingEleven }, awayTeam: { ... } }
+export async function fetchAfConfirmedLineups(
+  fixtureId: number,
+  apiKey: string,
+): Promise<{ homeTeam: any; awayTeam: any } | null> {
+  if (!apiKey || !fixtureId) return null;
+  try {
+    const data = await afFetch(`/fixtures/lineups?fixture=${fixtureId}`, apiKey);
+    const teams: any[] = data?.response ?? [];
+    if (teams.length < 2) return null;
+    const posMap: Record<string, string> = {
+      G: 'Goalkeeper', D: 'Defender', M: 'Midfielder', F: 'Forward', A: 'Forward',
+    };
+    const transform = (t: any) => {
+      const starters = (t.startXI ?? [])
+        .map((p: any, i: number) => ({
+          name:           p.player?.name ?? '',
+          espnId:         String(p.player?.id ?? ''),
+          position:       posMap[p.player?.pos ?? ''] ?? 'Midfielder',
+          posAbbr:        p.player?.pos ?? 'M',
+          formationPlace: i + 1,
+        }))
+        .filter((p: any) => p.name);
+      return { lineup: starters, startingEleven: starters };
+    };
+    if ((teams[0].startXI?.length ?? 0) < 11 || (teams[1].startXI?.length ?? 0) < 11) return null;
+    return { homeTeam: transform(teams[0]), awayTeam: transform(teams[1]) };
+  } catch { return null; }
 }

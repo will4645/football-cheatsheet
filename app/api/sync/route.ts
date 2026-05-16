@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, guessDomesticLeague, PlayerGameStat } from '@/lib/api-football';
+import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, guessDomesticLeague, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, PlayerGameStat } from '@/lib/api-football';
 import type { TeamSeasonStats, EspnRosterPlayer, AfSquadPlayer, AfTeamFixtureStats, MatchOdds } from '@/lib/api-football';
 import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
 import type { ApiSportsPlayer } from '@/lib/api-sports';
@@ -269,26 +269,30 @@ function buildTeamStats(
   // For "for" stats: own AF data is most accurate (from fixture stats endpoint, filtered to this team).
   // For "against" stats: use this team's own ESPN season boxscore averages first (opp-side data
   // from completed events gives genuine defensive averages), then fall back to opponent AF/ESPN.
-  // Previously opponent AF data came first for "against" which caused perfect mirroring.
-  const cornersFor      = af?.cornersFor     || e?.cornersFor      || o?.cornersAgainst   || oaf?.cornersFor     || 5.0;
-  const cornersAgainst  = e?.cornersAgainst  || oaf?.cornersFor    || o?.cornersFor       || af?.cornersFor      || 5.0;
-  const shotsFor        = af?.shotsFor       || e?.shotsFor        || o?.shotsAgainst     || oaf?.shotsFor       || 13.0;
-  const shotsAgainst    = e?.shotsAgainst    || oaf?.shotsFor      || o?.shotsFor         || af?.shotsFor        || 11.0;
-  const sotFor          = af?.sotFor         || e?.sotFor          || o?.sotAgainst       || oaf?.sotFor         || 4.5;
-  const sotAgainst      = e?.sotAgainst      || oaf?.sotFor        || o?.sotFor           || af?.sotFor          || 3.8;
+  // Do NOT use own AF "for" as a proxy for "against" — that causes for==against mirroring when
+  // opponent data is unavailable. Similarly do NOT use oaf "for" as a proxy for own "for" —
+  // opponent's corners/shots are not a proxy for your own corners/shots.
+  const cornersFor      = af?.cornersFor     || e?.cornersFor      || o?.cornersAgainst   || 5.0;
+  const cornersAgainst  = e?.cornersAgainst  || oaf?.cornersFor    || o?.cornersFor       || 5.0;
+  const shotsFor        = af?.shotsFor       || e?.shotsFor        || o?.shotsAgainst     || 13.0;
+  const shotsAgainst    = e?.shotsAgainst    || oaf?.shotsFor      || o?.shotsFor         || 11.0;
+  const sotFor          = af?.sotFor         || e?.sotFor          || o?.sotAgainst       || 4.5;
+  const sotAgainst      = e?.sotAgainst      || oaf?.sotFor        || o?.sotFor           || 3.8;
   const foulsCommitted  = af?.foulsFor       || e?.foulsCommitted  || o?.foulsWon         || 11.0;
   const foulsWon        = e?.foulsWon        || oaf?.foulsFor      || o?.foulsCommitted   || 11.0;
   const cardsFor        = af?.yellowCardsFor || e?.cardsFor        || o?.cardsAgainst     || 1.8;
   const cardsAgainst    = e?.cardsAgainst    || oaf?.yellowCardsFor|| o?.cardsFor         || 1.8;
-  const tacklesFor      = af?.tacklesFor     || e?.tacklesFor      || o?.tacklesAgainst   || oaf?.tacklesFor     || 18.0;
-  const tacklesAgainst  = e?.tacklesAgainst  || oaf?.tacklesFor    || o?.tacklesFor       || af?.tacklesFor      || 18.0;
-  const offsidesFor     = af?.offsidesFor    || e?.offsidesFor     || o?.offsidesAgainst  || oaf?.offsidesFor    || 2.0;
-  const offsidesAgainst = e?.offsidesAgainst || oaf?.offsidesFor   || o?.offsidesFor      || af?.offsidesFor     || 2.0;
-  // Free kicks for = fouls this team WON = opponent's committed fouls
+  const tacklesFor      = af?.tacklesFor     || e?.tacklesFor      || o?.tacklesAgainst   || 18.0;
+  const tacklesAgainst  = e?.tacklesAgainst  || oaf?.tacklesFor    || o?.tacklesFor       || 18.0;
+  const offsidesFor     = af?.offsidesFor    || e?.offsidesFor     || o?.offsidesAgainst  || 2.0;
+  const offsidesAgainst = e?.offsidesAgainst || oaf?.offsidesFor   || o?.offsidesFor      || 2.0;
+  // Free kicks for = fouls this team WON = opponent's committed fouls (oaf.foulsFor is a good proxy)
   const freeKicksFor    = e?.freeKicksFor    || oaf?.foulsFor      || o?.freeKicksAgainst || foulsWon    || 10.0;
+  // Free kicks against = fouls this team committed = own fouls (af.foulsFor is a good proxy here)
   const freeKicksAgainst= e?.freeKicksAgainst|| af?.foulsFor       || o?.freeKicksFor     || foulsCommitted || 10.0;
-  const goalKicksFor    = af?.goalKicksFor   || e?.goalKicksFor    || oaf?.goalKicksFor   || o?.goalKicksAgainst || 5.5;
-  const goalKicksAgainst= e?.goalKicksAgainst|| oaf?.goalKicksFor  || af?.goalKicksFor    || o?.goalKicksFor     || 5.5;
+  // Saves: use AF savesFor (GK saves per game) directly; fall back to opponent's AF for the against side
+  const savesFor     = af?.savesFor  || oaf?.savesFor || 3.8;
+  const savesAgainst = oaf?.savesFor || af?.savesFor  || 3.5;
   return {
     goalsFor: +avgFor.toFixed(2), goalsAgainst: +avgAgainst.toFixed(2),
     over25Goals:    overProb(avgFor + avgAgainst, 2.5),
@@ -308,8 +312,8 @@ function buildTeamStats(
     over35Offsides: overProb(offsidesFor + offsidesAgainst, 3.5),
     freeKicksFor:   +freeKicksFor.toFixed(2),    freeKicksAgainst:  +freeKicksAgainst.toFixed(2),
     over195FreeKicks: overProb(freeKicksFor + freeKicksAgainst, 19.5),
-    goalKicksFor:   +goalKicksFor.toFixed(2),    goalKicksAgainst:  +goalKicksAgainst.toFixed(2),
-    over115GoalKicks: overProb(goalKicksFor + goalKicksAgainst, 11.5),
+    savesFor:       +savesFor.toFixed(2),        savesAgainst:      +savesAgainst.toFixed(2),
+    over75Saves:    overProb(savesFor + savesAgainst, 7.5),
   };
 }
 
@@ -324,7 +328,7 @@ function defaultStats() {
     tacklesFor: 18.0, tacklesAgainst: 18.0, over345Tackles: 60,
     offsidesFor: 2.0, offsidesAgainst: 2.0, over35Offsides: 50,
     freeKicksFor: 10.0, freeKicksAgainst: 10.0, over195FreeKicks: 60,
-    goalKicksFor: 5.5, goalKicksAgainst: 5.5, over115GoalKicks: 55,
+    savesFor: 3.8, savesAgainst: 3.5, over75Saves: 55,
   };
 }
 
@@ -1020,6 +1024,7 @@ async function runSync() {
     { league: 'uefa.champions',   compName: 'UEFA Champions League' },
     { league: 'uefa.europa',      compName: 'UEFA Europa League' },
     { league: 'uefa.europa.conf', compName: 'UEFA Europa Conference League' },
+    { league: 'eng.fa',           compName: 'FA Cup' },
   ];
   // Exclude liveMatches from seenIds so ESPN-sourced EL/ECL/CL matches get re-processed
   // every sync cycle (keeps referee, stats, etc. fresh throughout matchday)
@@ -1093,6 +1098,83 @@ async function runSync() {
   }
   log(`[sync] ESPN supplement: +${espnAdded} CL/EL/ECL matches`);
 
+  // ── AF supplement for extra leagues (Championship, Scottish Prem, etc.) ─────
+  // Uses API-Football as the match source for leagues outside fd.org's free tier.
+  const AF_SUPPLEMENT_LEAGUES = [
+    { leagueId: 40,  compName: 'EFL Championship',    espnSlug: 'eng.2' as string | null },
+    { leagueId: 179, compName: 'Scottish Premiership', espnSlug: 'sco.1' },
+    { leagueId: 144, compName: 'Belgian Pro League',   espnSlug: 'bel.1' },
+    { leagueId: 203, compName: 'Süper Lig',            espnSlug: 'tur.1' },
+  ];
+  const afSupKey = (process.env.API_SPORTS_KEY ?? '').trim();
+  let afAdded = 0;
+  if (afSupKey) {
+    const AF_LIVE_STATUS  = new Set(['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'HT', 'INT']);
+    const AF_FIN_STATUS   = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO']);
+    const AF_FIXTURE_CACHE_KEY = 'af_fixture_list_cache';
+    const AF_FIXTURE_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours — reduces 1,728 AF calls/day to ~72
+    type AfCacheEntry = { fetchedAt: number; fixtures: Array<{ fix: any; lgIdx: number }> };
+    const cached = await sbGet(AF_FIXTURE_CACHE_KEY) as AfCacheEntry | null;
+    let allAfFixtures: Array<Array<{ fix: any; lg: typeof AF_SUPPLEMENT_LEAGUES[0] }>>;
+    if (cached && Date.now() - cached.fetchedAt < AF_FIXTURE_CACHE_TTL) {
+      log(`[sync] AF fixture list from cache (${Math.round((Date.now() - cached.fetchedAt) / 60000)}m old)`);
+      // Reconstruct batches indexed by league position
+      allAfFixtures = AF_SUPPLEMENT_LEAGUES.map((lg, i) =>
+        cached.fixtures.filter(e => e.lgIdx === i).map(e => ({ fix: e.fix, lg }))
+      );
+    } else {
+      const batches = await Promise.all(
+        AF_SUPPLEMENT_LEAGUES.map((lg, i) =>
+          fetchAfFixturesByDateRange(lg.leagueId, fmt(twoDaysAgo), fmt(in7d), 2025, afSupKey)
+            .then(fixes => fixes.map(f => ({ fix: f, lg, lgIdx: i })))
+            .catch(() => [] as Array<{ fix: any; lg: typeof AF_SUPPLEMENT_LEAGUES[0]; lgIdx: number }>)
+        )
+      );
+      // Store flat list with league index so it's serialisable
+      const flat = batches.flat().map(({ fix, lgIdx }) => ({ fix, lgIdx }));
+      await sbSet(AF_FIXTURE_CACHE_KEY, { fetchedAt: Date.now(), fixtures: flat }, log);
+      allAfFixtures = batches.map(batch => batch.map(({ fix, lg }) => ({ fix, lg })));
+      log(`[sync] AF fixture list refreshed: ${flat.length} fixtures across ${AF_SUPPLEMENT_LEAGUES.length} leagues`);
+    }
+    for (const batch of allAfFixtures) {
+      for (const { fix, lg } of batch) {
+        const id  = matchId(fix.home.name, fix.away.name);
+        const nid = normMatchId(fix.home.name, fix.away.name);
+        if (seenIds.has(id) || seenNormIds.has(nid)) continue;
+        const koTime    = new Date(fix.utcDate).getTime();
+        const hoursAway = (koTime - Date.now()) / 3_600_000;
+        if (hoursAway < -4) continue;
+        const status = AF_LIVE_STATUS.has(fix.status) ? 'IN_PLAY'
+          : AF_FIN_STATUS.has(fix.status) ? 'FINISHED' : 'SCHEDULED';
+        seenIds.add(id);
+        seenNormIds.add(nid);
+        const stageText = fix.leagueRound
+          .replace(/Regular Season - (\d+)/i, 'Matchday $1')
+          .replace(/^(\d+)$/, 'Matchday $1');
+        if (hoursAway > 24) {
+          pendingList.push({
+            id, competition: lg.compName, stage: stageText, utcDate: fix.utcDate,
+            date: formatDate(fix.utcDate), kickoff: formatKickoff(fix.utcDate),
+            homeTeam: { name: fix.home.name, badge: fix.home.logo || '', primaryColor: getTeamColor(fix.home.name) },
+            awayTeam: { name: fix.away.name, badge: fix.away.logo || '', primaryColor: getTeamColor(fix.away.name) },
+          });
+        } else {
+          nearTermMatches.push({
+            _fromAf: true, _afFixtureId: fix.id, _afLeagueId: lg.leagueId, _afEspnSlug: lg.espnSlug,
+            id, status, utcDate: fix.utcDate,
+            homeTeam: { name: fix.home.name, id: String(fix.home.id) },
+            awayTeam: { name: fix.away.name, id: String(fix.away.id) },
+            competition: { name: lg.compName }, stage: stageText,
+            referees: fix.referee ? [{ name: fix.referee }] : [], matchday: null,
+            _homeBadge: fix.home.logo || '', _awayBadge: fix.away.logo || '',
+          });
+        }
+        afAdded++;
+      }
+    }
+  }
+  log(`[sync] AF supplement: +${afAdded} extra-league matches`);
+
   // Write upcoming now — far-future matches are ready; near-term will be added below
   await sbSet('upcoming', pendingList, log);
 
@@ -1106,7 +1188,8 @@ async function runSync() {
     const isLive = LIVE_STATUSES.has(status);
 
     const fromEspn = !!(match as any)._fromEspn;
-    let lineupData = fromEspn ? null : await apiFetch(`/matches/${match.id}/lineups`, 2 * 60 * 1000);
+    const fromAf   = !!(match as any)._fromAf;
+    let lineupData = (fromEspn || fromAf) ? null : await apiFetch(`/matches/${match.id}/lineups`, 2 * 60 * 1000);
     let hasLineups = lineupData?.homeTeam?.lineup?.length > 0 || lineupData?.homeTeam?.startingEleven?.length > 0;
 
     // For ESPN supplement matches, fetch referee from event summary
@@ -1133,22 +1216,32 @@ async function runSync() {
       ? match.stage.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
       : match.matchday ? `Matchday ${match.matchday}` : 'Match';
 
-    // Step 1: If fd.org has no lineups, try ESPN/API-Football for lineups + ESPN team IDs
+    // Step 1: Try ESPN for lineups + team IDs (0 AF calls). If that fails and match is
+    // from AF source within 3h of kickoff, fall back to AF confirmed lineups (1 AF call).
     let espnHistory: Map<string, PlayerGameStat[]> = new Map();
     let confirmedEspnMeta: { league: string; homeTeamId: string; awayTeamId: string } | null = null;
     if (!hasLineups) {
-      log(`[sync] Trying API-Football: ${homeName} vs ${awayName}`);
+      log(`[sync] Trying ESPN: ${homeName} vs ${awayName}`);
       const { lineups: afLineups, debug: afDebug, espnMeta } = await getApiFootballLineups(homeName, awayName, match.utcDate);
       if (afDebug) log(`[api-football] ${afDebug}`);
       if (afLineups) {
         lineupData = afLineups;
         hasLineups = true;
-        log(`[sync] API-Football lineups found for ${homeName} vs ${awayName}`);
+        log(`[sync] ESPN lineups found for ${homeName} vs ${awayName}`);
       }
       if (espnMeta?.league && espnMeta.homeTeamId && espnMeta.awayTeamId) {
         confirmedEspnMeta = espnMeta;
       } else {
         log(`[sync] No ESPN meta from lineup fetch — espnMeta=${JSON.stringify(espnMeta)}`);
+      }
+
+      // AF fallback: only for AF-sourced matches within 3h of kickoff
+      if (!hasLineups && fromAf && hoursAway < 3) {
+        const afFixId: number = (match as any)._afFixtureId;
+        if (afFixId && afSupKey) {
+          const afLU = await fetchAfConfirmedLineups(afFixId, afSupKey);
+          if (afLU) { lineupData = afLU; hasLineups = true; log(`[sync] AF lineups confirmed: ${homeName} vs ${awayName}`); }
+        }
       }
     }
 
@@ -1200,7 +1293,7 @@ async function runSync() {
 
     log(`[sync] Generating${isLive ? ' (live)' : ''}: ${homeName} vs ${awayName}`);
 
-    const [homeResults, awayResults] = fromEspn
+    const [homeResults, awayResults] = (fromEspn || fromAf)
       ? [null, null]
       : await Promise.all([
           apiFetch(`/teams/${match.homeTeam.id}/matches?status=FINISHED&limit=10`, 60 * 60 * 1000),
@@ -1211,8 +1304,8 @@ async function runSync() {
     const combinedRosterMap = new Map<string, EspnRosterPlayer>();
     if (!prefetched && confirmedEspnMeta) {
       const [homeRosterMap, awayRosterMap] = await Promise.all([
-        fetchEspnRosterStats(confirmedEspnMeta.homeTeamId, guessDomesticLeague(homeName) || confirmedEspnMeta.league),
-        fetchEspnRosterStats(confirmedEspnMeta.awayTeamId, guessDomesticLeague(awayName) || confirmedEspnMeta.league),
+        fetchEspnRosterStats(confirmedEspnMeta.homeTeamId, confirmedEspnMeta.league),
+        fetchEspnRosterStats(confirmedEspnMeta.awayTeamId, confirmedEspnMeta.league),
       ]);
       homeRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
       awayRosterMap.forEach((v, k) => combinedRosterMap.set(k, v));
@@ -1224,7 +1317,10 @@ async function runSync() {
     const espnLeagueToAfId: Record<string, number> = {
       'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
     };
-    const afLeagueId = fromEspn ? (espnLeagueToAfId[(match as any)._espnLeague ?? ''] ?? 0) : 0;
+    const afLeagueId = fromEspn
+      ? (espnLeagueToAfId[(match as any)._espnLeague ?? ''] ?? 0)
+      : fromAf ? ((match as any)._afLeagueId ?? 0)
+      : 0;
 
     let homeAfResult: { history: Map<string, PlayerGameStat[]>; playerIds: Map<string, number>; afTeamId: number; afTeamStats: AfTeamFixtureStats | null; debug: string };
     let awayAfResult: typeof homeAfResult;
