@@ -953,7 +953,7 @@ async function runSync() {
     if (apiMatchIds.has(m.id)) return false;
     const kickoff = new Date(m.utcDate ?? 0).getTime();
     const hoursFromKo = (Date.now() - kickoff) / 3_600_000;
-    return hoursFromKo > 4; // only remove if >4h since kickoff
+    return hoursFromKo > 2.5; // remove ESPN-only matches 2.5h after kickoff
   });
   for (const m of stale) {
     const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${m.id}`);
@@ -1069,10 +1069,9 @@ async function runSync() {
       } catch { continue; }
       for (const ev of board?.events ?? []) {
         const comp = ev.competitions?.[0];
-        // Allow recently-finished matches through (within 3h) so the cheat sheet stays visible post-match
         const koTime = new Date(ev.date).getTime();
         const hoursFromKo = (Date.now() - koTime) / 3_600_000;
-        if (comp?.status?.type?.completed && hoursFromKo > 4) continue;
+        if (hoursFromKo > 2.5) continue; // drop matches >2.5h past kickoff regardless of status
         const homeComp = comp?.competitors?.find((c: any) => c.homeAway === 'home');
         const awayComp = comp?.competitors?.find((c: any) => c.homeAway === 'away');
         const homeName = homeComp?.team?.displayName;
@@ -1211,8 +1210,10 @@ async function runSync() {
     const hoursAway = (kickoff.getTime() - Date.now()) / 3_600_000;
     const isLive = LIVE_STATUSES.has(status);
 
-    // Skip sheet processing for matches that are far off and not yet built
+    // Skip: too far away and no sheet yet
     if (!isLive && !alreadyBuiltIds.has(id) && hoursAway > 4) continue;
+    // Skip: match finished >2.5h ago — sheet is final, stop re-processing
+    if (!isLive && hoursAway < -2.5) continue;
 
     const fromEspn = !!(match as any)._fromEspn;
     const fromAf   = !!(match as any)._fromAf;
