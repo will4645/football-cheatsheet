@@ -480,6 +480,10 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
                   <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Both Teams to Score</p>
                   <ProbBar value={probabilities.btts} />
                 </div>
+                <div>
+                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Over 2.5 Goals</p>
+                  <ProbBar value={(probabilities as any).over25 ?? 50} />
+                </div>
                 <div className="h-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
                 <div>
                   <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Result</p>

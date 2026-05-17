@@ -1511,12 +1511,13 @@ async function runSync() {
         const lH = Math.max(0.3, (homeStats.goalsFor + awayStats.goalsAgainst) / 2 * HOME_ADV);
         const lA = Math.max(0.3, (awayStats.goalsFor + homeStats.goalsAgainst) / 2);
         const poissonBtts = Math.round((1 - Math.exp(-lH)) * (1 - Math.exp(-lA)) * 100);
+        const over25 = toScale(poissonAtLeast(lH + lA, 3));
         // Use bookmaker odds when available; for BTTS, use Poisson if no BTTS market found
         // (the default of exactly 50 signals no market was found, not a real bookmaker value)
         if (afOdds && afOdds.homeWin > 0) {
-          return { ...afOdds, btts: afOdds.btts !== 50 ? afOdds.btts : poissonBtts };
+          return { ...afOdds, btts: afOdds.btts !== 50 ? afOdds.btts : poissonBtts, over25 };
         }
-        return { btts: poissonBtts, ...matchOutcomes(lH, lA) };
+        return { btts: poissonBtts, over25, ...matchOutcomes(lH, lA) };
       })(),
       fixtureId: match.id, status,
       aggregate: await (async () => {

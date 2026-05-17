@@ -55,7 +55,7 @@ export const matchData: {
   competition: string; stage: string; date: string; kickoff: string;
   homeTeam: TeamData; awayTeam: TeamData;
   referee: { name: string; matchAvg: { fouls: number; cards: number } };
-  probabilities: { btts: number; homeWin: number; draw: number; awayWin: number };
+  probabilities: { btts: number; over25: number; homeWin: number; draw: number; awayWin: number };
   aggregate?: { home: number; away: number } | null;
 } = {
   competition: 'UEFA Conference League',
@@ -230,6 +230,6 @@ export const matchData: {
   },
 
   referee: { name: 'Glenn Nyberg', matchAvg: { fouls: 22.4, cards: 3.8 } },
-  probabilities: { btts: 40, homeWin: 42, draw: 26, awayWin: 32 },
+  probabilities: { btts: 40, over25: 48, homeWin: 42, draw: 26, awayWin: 32 },
   aggregate: null,
 };
