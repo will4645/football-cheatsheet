@@ -1216,12 +1216,47 @@ async function runSync() {
     // Skip: match finished >2.5h ago — sheet is final, stop re-processing
     if (!isLive && hoursAway < -2.5) continue;
 
+    const homeName = match.homeTeam?.name;
+    const awayName = match.awayTeam?.name;
+    const homeBadge = (match as any)._homeBadge ?? teamBadge(match.homeTeam.id);
+    const awayBadge = (match as any)._awayBadge ?? teamBadge(match.awayTeam.id);
+    const stage = match.stage
+      ? match.stage.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+      : match.matchday ? `Matchday ${match.matchday}` : 'Match';
+
+    // ── Early rebuild guard: skip ALL API calls if we have a good recent sheet ──
+    // Only bypassed for live matches. Sheets with missing ref or zero goals are NOT
+    // guarded so they get rebuilt when quota recovers.
+    if (!isLive) {
+      const existingSheet = await sbGet(`match:${id}`) as any;
+      const sheetAge = existingSheet?._builtAt ? Date.now() - existingSheet._builtAt : Infinity;
+      const guardTtl = hoursAway > 0 ? 6 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000;
+      const hasGoodRef   = existingSheet?.referee?.name && existingSheet.referee.name !== 'TBC';
+      const hasGoodGoals = (existingSheet?.homeTeam?.stats?.goalsFor ?? 0) > 0 &&
+                           (existingSheet?.awayTeam?.stats?.goalsFor ?? 0) > 0;
+      if (sheetAge < guardTtl && hasGoodRef && hasGoodGoals) {
+        log(`[sync] Skipping ${id} — sheet complete, built ${Math.round(sheetAge / 60000)}m ago`);
+        if (!liveMatches.find((m: any) => m.id === id)) {
+          liveMatches.push({
+            id, competition: existingSheet.competition ?? 'Football', stage,
+            date: existingSheet.date ?? formatDate(match.utcDate),
+            kickoff: existingSheet.kickoff ?? formatKickoff(match.utcDate),
+            utcDate: match.utcDate,
+            homeTeam: { name: homeName, badge: homeBadge, primaryColor: getTeamColor(homeName) },
+            awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
+          });
+        }
+        continue;
+      }
+    }
+
     const fromEspn = !!(match as any)._fromEspn;
     const fromAf   = !!(match as any)._fromAf;
     let lineupData = (fromEspn || fromAf) ? null : await apiFetch(`/matches/${match.id}/lineups`, 2 * 60 * 1000);
     let hasLineups = lineupData?.homeTeam?.lineup?.length > 0 || lineupData?.homeTeam?.startingEleven?.length > 0;
 
-    // For ESPN supplement matches, fetch referee from event summary
+    // espnRefName is populated from the ESPN summary fetched inside getApiFootballLineups
+    // (same request, no extra API call). Also covers the fromEspn direct-summary path below.
     let espnRefName = '';
     if (fromEspn && match.id) {
       try {
@@ -1237,27 +1272,20 @@ async function runSync() {
       } catch {}
     }
 
-    const homeName = match.homeTeam?.name;
-    const awayName = match.awayTeam?.name;
-    const homeBadge = (match as any)._homeBadge ?? teamBadge(match.homeTeam.id);
-    const awayBadge = (match as any)._awayBadge ?? teamBadge(match.awayTeam.id);
-    const stage = match.stage
-      ? match.stage.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
-      : match.matchday ? `Matchday ${match.matchday}` : 'Match';
-
     // Step 1: Try ESPN for lineups + team IDs (0 AF calls). If that fails and match is
     // from AF source within 3h of kickoff, fall back to AF confirmed lineups (1 AF call).
     let espnHistory: Map<string, PlayerGameStat[]> = new Map();
     let confirmedEspnMeta: { league: string; homeTeamId: string; awayTeamId: string } | null = null;
     if (!hasLineups) {
       log(`[sync] Trying ESPN: ${homeName} vs ${awayName}`);
-      const { lineups: afLineups, debug: afDebug, espnMeta } = await getApiFootballLineups(homeName, awayName, match.utcDate);
+      const { lineups: afLineups, debug: afDebug, espnMeta, espnRefName: lineupRef } = await getApiFootballLineups(homeName, awayName, match.utcDate);
       if (afDebug) log(`[api-football] ${afDebug}`);
       if (afLineups) {
         lineupData = afLineups;
         hasLineups = true;
         log(`[sync] ESPN lineups found for ${homeName} vs ${awayName}`);
       }
+      if (lineupRef) espnRefName = lineupRef;
       if (espnMeta?.league && espnMeta.homeTeamId && espnMeta.awayTeamId) {
         confirmedEspnMeta = espnMeta;
       } else {
@@ -1368,26 +1396,6 @@ async function runSync() {
       afOdds         = prefetched.odds;
       log(`[sync] AF data from prefetch — home ${homeAfResult.playerIds.size} ids, away ${awayAfResult.playerIds.size} ids`);
     } else {
-      if (!isLive) {
-        // Guard: skip if we have a recently-built sheet — 6h before kickoff, 2h after
-        const existingSheet = await sbGet(`match:${id}`) as any;
-        const sheetAge = existingSheet?._builtAt ? Date.now() - existingSheet._builtAt : Infinity;
-        const guardTtl = hoursAway > 0 ? 6 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000;
-        if (sheetAge < guardTtl) {
-          log(`[sync] Skipping AF fetch for ${id} — sheet built ${Math.round(sheetAge / 60000)}m ago`);
-          if (!liveMatches.find((m: any) => m.id === id)) {
-            liveMatches.push({
-              id, competition: existingSheet.competition ?? 'Football', stage,
-              date: existingSheet.date ?? formatDate(match.utcDate),
-              kickoff: existingSheet.kickoff ?? formatKickoff(match.utcDate),
-              utcDate: match.utcDate,
-              homeTeam: { name: homeName, badge: homeBadge, primaryColor: getTeamColor(homeName) },
-              awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
-            });
-          }
-          continue;
-        }
-      }
       [homeAfResult, awayAfResult, homeSquadResult, awaySquadResult, afReferee, afOdds] = await Promise.all([
         afApiKey ? fetchApiFootballTeamHistory(homeName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
         afApiKey ? fetchApiFootballTeamHistory(awayName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),

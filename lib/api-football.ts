@@ -432,6 +432,7 @@ export async function getApiFootballLineups(
   lineups: { homeTeam: any; awayTeam: any } | null;
   debug: string;
   espnMeta: { league: string; homeTeamId: string; awayTeamId: string } | null;
+  espnRefName: string;
 }> {
   try {
     const date = utcDate.slice(0, 10).replace(/-/g, '');
@@ -473,14 +474,16 @@ export async function getApiFootballLineups(
       } catch { continue; }
 
       const rosters: any[] = summary?.rosters ?? [];
+      const espnRefName = summary?.gameInfo?.officials?.[0]?.displayName ?? '';
+
       if (!rosters.length) {
-        return { lineups: null, debug: `ESPN found event ${event.id} but no rosters yet`, espnMeta: foundMeta };
+        return { lineups: null, debug: `ESPN found event ${event.id} but no rosters yet`, espnMeta: foundMeta, espnRefName };
       }
 
       const homeRoster = rosters.find(r => r.homeAway === 'home');
       const awayRoster = rosters.find(r => r.homeAway === 'away');
       if (!homeRoster || !awayRoster) {
-        return { lineups: null, debug: `ESPN rosters incomplete for event ${event.id}`, espnMeta: foundMeta };
+        return { lineups: null, debug: `ESPN rosters incomplete for event ${event.id}`, espnMeta: foundMeta, espnRefName };
       }
 
       const homeStarters = (homeRoster.roster ?? []).filter((p: any) => p.starter);
@@ -491,7 +494,7 @@ export async function getApiFootballLineups(
         const rosterLen = (sampleRoster?.roster ?? []).length;
         const samplePlayer = sampleRoster?.roster?.[0];
         const starterVal = samplePlayer ? String(samplePlayer.starter) : 'n/a';
-        return { lineups: null, debug: `ESPN event ${event.id}: ${rosters.length} teams, rosterLen=${rosterLen}, starterVal=${starterVal}, homeStarters=${homeStarters.length}, awayStarters=${awayStarters.length}`, espnMeta: foundMeta };
+        return { lineups: null, debug: `ESPN event ${event.id}: ${rosters.length} teams, rosterLen=${rosterLen}, starterVal=${starterVal}, homeStarters=${homeStarters.length}, awayStarters=${awayStarters.length}`, espnMeta: foundMeta, espnRefName };
       }
 
       const rHomeId = homeRoster.team?.id ? String(homeRoster.team.id) : homeTeamId;
@@ -504,12 +507,13 @@ export async function getApiFootballLineups(
         },
         debug: `ESPN confirmed lineups: ${homeStarters.length} home / ${awayStarters.length} away starters (teamIds: ${rHomeId}/${rAwayId})`,
         espnMeta: { league, homeTeamId: rHomeId, awayTeamId: rAwayId },
+        espnRefName,
       };
     }
 
-    return { lineups: null, debug: `No ESPN event found for "${homeTeamName}" vs "${awayTeamName}"`, espnMeta: null };
+    return { lineups: null, debug: `No ESPN event found for "${homeTeamName}" vs "${awayTeamName}"`, espnMeta: null, espnRefName: '' };
   } catch (e: any) {
-    return { lineups: null, debug: `ESPN error: ${e.message}`, espnMeta: null };
+    return { lineups: null, debug: `ESPN error: ${e.message}`, espnMeta: null, espnRefName: '' };
   }
 }
 
