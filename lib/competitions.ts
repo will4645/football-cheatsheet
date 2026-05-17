@@ -24,7 +24,6 @@ export const COMPETITION_CONFIG: CompetitionConfig[] = [
   { slug: 'scottish-prem',     label: 'Scottish Prem',     country: 'Scotland',    apiNames: ['Scottish Premiership', 'Premiership'],     color: '#003087', badge: AF(179) },
   { slug: 'belgian-pro-league',label: 'Belgian Pro League',country: 'Belgium',     apiNames: ['Belgian Pro League', 'First Division A'], color: '#FDDA24', badge: AF(144) },
   { slug: 'super-lig',         label: 'Süper Lig',         country: 'Turkey',      apiNames: ['Süper Lig', 'Super Lig'],                  color: '#E30A17', badge: AF(203) },
-  { slug: 'fa-cup',            label: 'FA Cup',            country: 'England',     apiNames: ['FA Cup'],                                  color: '#1A1A2E', badge: AF(45)  },
 ];
 
 export function slugToConfig(slug: string): CompetitionConfig | undefined {
