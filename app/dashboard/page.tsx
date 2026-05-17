@@ -50,17 +50,18 @@ export default function Dashboard() {
         <OnboardingModal />
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-8 sm:mb-10">
-          <div className="text-center flex-1">
+        <div className="flex items-center mb-8 sm:mb-10">
+          <div className="flex-1" />
+          <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-1">
               <img src="/logo.svg" alt="" className="w-7 h-7" />
               <h1 className="text-2xl font-black text-white tracking-tight">Cheat Sheets</h1>
             </div>
             <p className="text-[11px] uppercase tracking-widest text-gray-600">Select a competition</p>
           </div>
-          <div className="flex items-center gap-2 absolute right-4 sm:right-6 lg:right-10 top-4 sm:top-6 lg:top-10">
+          <div className="flex-1 flex items-center justify-end gap-2">
             <Link href="/account"
-              className="text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors"
+              className="hidden sm:block text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors"
               style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
               Account
             </Link>
