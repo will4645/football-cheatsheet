@@ -15,7 +15,10 @@ export default async function LandingPage() {
 
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
-        <span className="text-base font-black tracking-tight text-white">Cheat Sheets</span>
+        <div className="flex items-center gap-2">
+          <img src="/logo.svg" alt="Cheat Sheets" className="w-7 h-7" />
+          <span className="text-base font-black tracking-tight text-white">Cheat Sheets</span>
+        </div>
         <div className="flex items-center gap-3">
           <Link href="/sign-in" className="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5">
             Sign in

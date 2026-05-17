@@ -52,7 +52,10 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8 sm:mb-10">
           <div className="text-center flex-1">
-            <h1 className="text-2xl font-black text-white tracking-tight mb-1">Cheat Sheets</h1>
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <img src="/logo.svg" alt="" className="w-7 h-7" />
+              <h1 className="text-2xl font-black text-white tracking-tight">Cheat Sheets</h1>
+            </div>
             <p className="text-[11px] uppercase tracking-widest text-gray-600">Select a competition</p>
           </div>
           <div className="flex items-center gap-2 absolute right-4 sm:right-6 lg:right-10 top-4 sm:top-6 lg:top-10">
