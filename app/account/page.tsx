@@ -9,6 +9,8 @@ export default function AccountPage() {
   const { user, isLoaded } = useUser();
   const router = useRouter();
   const [subscribed, setSubscribed] = useState<boolean | null>(null);
+  const [subStatus, setSubStatus] = useState<string | null>(null);
+  const [periodEnd, setPeriodEnd] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -16,9 +18,9 @@ export default function AccountPage() {
   useEffect(() => {
     fetch('/api/user/subscription')
       .then(r => r.json())
-      .then(({ subscribed: s }) => {
+      .then(({ subscribed: s, status, currentPeriodEnd }) => {
         if (!s) router.replace('/pricing');
-        else setSubscribed(s);
+        else { setSubscribed(s); setSubStatus(status); setPeriodEnd(currentPeriodEnd); }
       })
       .catch(() => {});
   }, [router]);
@@ -80,11 +82,23 @@ export default function AccountPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-sm font-bold text-white">Pro Plan</p>
-              <p className="text-xs text-gray-500">£9.99 / month · Auto-renews</p>
+              <p className="text-xs text-gray-500">
+                {subStatus === 'trialing'
+                  ? `Free trial${periodEnd ? ` · ends ${new Date(periodEnd).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}`
+                  : subStatus === 'past_due'
+                  ? 'Payment past due'
+                  : periodEnd
+                  ? `Renews ${new Date(periodEnd).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                  : 'Auto-renews'}
+              </p>
             </div>
             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide"
-              style={{ background: 'rgba(22,163,74,0.15)', color: '#4ade80', border: '1px solid rgba(22,163,74,0.3)' }}>
-              Active
+              style={{
+                background: subStatus === 'trialing' ? 'rgba(59,130,246,0.15)' : subStatus === 'past_due' ? 'rgba(239,68,68,0.15)' : 'rgba(22,163,74,0.15)',
+                color: subStatus === 'trialing' ? '#93c5fd' : subStatus === 'past_due' ? '#f87171' : '#4ade80',
+                border: `1px solid ${subStatus === 'trialing' ? 'rgba(59,130,246,0.3)' : subStatus === 'past_due' ? 'rgba(239,68,68,0.3)' : 'rgba(22,163,74,0.3)'}`,
+              }}>
+              {subStatus === 'trialing' ? 'Trial' : subStatus === 'past_due' ? 'Past Due' : 'Active'}
             </span>
           </div>
           <button

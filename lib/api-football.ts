@@ -713,6 +713,7 @@ export async function fetchApiFootballTeamHistory(
       // ── Player stats ──
       const teamPlayers = pd?.response?.[0];
       let fixtureTackles = 0;
+      let fixtureSaves = 0;
       if (teamPlayers?.players) {
         for (const p of (teamPlayers.players as any[])) {
           const pName: string = p.player?.name ?? '';
@@ -720,6 +721,7 @@ export async function fetchApiFootballTeamHistory(
           const s = p.statistics?.[0];
           if (!s) continue;
           fixtureTackles += s.tackles?.total ?? 0;
+          fixtureSaves   += s.goals?.saves ?? s.goalkeeper?.saves ?? 0;
           const stat: PlayerGameStat = {
             goals:       s.goals?.total     ?? 0,
             assists:     s.goals?.assists   ?? 0,
@@ -765,7 +767,7 @@ export async function fetchApiFootballTeamHistory(
           offsides:    getFixStat('Offsides'),
           tackles:     fixtureTackles || getFixStat('Tackles'),
           yellowCards: getFixStat('Yellow Cards'),
-          saves:       getFixStat('Goalkeeper Saves'),
+          saves:       fixtureSaves || getFixStat('Goalkeeper Saves'),
           goalKicks:   getFixStat('Goal Kicks'),
         });
       }
@@ -795,7 +797,7 @@ export async function fetchApiFootballTeamHistory(
         offsidesFor:    +(sum('offsides')    / n).toFixed(2),
         tacklesFor:     avgOrNull('tackles'),
         yellowCardsFor: +(sum('yellowCards') / n).toFixed(2),
-        savesFor:       +(sum('saves')       / n).toFixed(2),
+        savesFor:       avgOrNull('saves'),
         goalKicksFor:   avgOrNull('goalKicks'),
         fixtureCount:   n,
       };

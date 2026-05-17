@@ -19,7 +19,6 @@ function parseKickoff(match: any): Date | null {
 }
 
 export async function GET() {
-  console.log('[matches] env check: SUPABASE_URL=', !!process.env.SUPABASE_URL, 'KEY=', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const { createClient } = require('@supabase/supabase-js');
@@ -30,7 +29,6 @@ export async function GET() {
         sb.from('match_cache').select('value').eq('key', 'matches').single(),
         sb.from('match_cache').select('value').eq('key', 'upcoming').single(),
       ]);
-      console.log('[matches] live err:', live.error?.message, '| upcoming err:', upcoming.error?.message);
       const now = Date.now();
       const liveFiltered = (live.data?.value ?? []).filter((m: any) => {
         const ko = parseKickoff(m);
@@ -43,7 +41,6 @@ export async function GET() {
         if (!ko) return true;
         return ko.getTime() > now - 4 * 60 * 60 * 1000;
       });
-      console.log('[matches] upcoming count:', rawUpcoming.length, '→', upcomingFiltered.length, '| now:', new Date(now).toISOString());
       return NextResponse.json({
         live: liveFiltered,
         upcoming: upcomingFiltered,

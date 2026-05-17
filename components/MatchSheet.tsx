@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { matchData as staticMatchData, TeamData, Form, CardsPlayer, GkPlayer } from '@/data/match';
 import { nameToSlug, COMPETITION_CONFIG } from '@/lib/competitions';
@@ -79,10 +79,8 @@ function TeamStatsPanel({ team, compColor }: { team: TeamData; compColor: string
         <StatGroup l1="Shots on Target For" v1={stats.sotFor} l2="Shots on Target Against" v2={stats.sotAgainst} overLabel="Over 6.5 Shots on Target" prob={stats.over95SoT} />
         <StatGroup l1="Fouls Committed" v1={stats.foulsCommitted} l2="Fouls Won" v2={stats.foulsWon} overLabel="Over 15.5 Fouls" prob={stats.over155Fouls} />
         <StatGroup l1="Cards For" v1={stats.cardsFor} l2="Cards Against" v2={stats.cardsAgainst} overLabel="Over 4.5 Cards" prob={stats.over45Cards} />
-        <StatGroup l1="Tackles For" v1={stats.tacklesFor} l2="Tackles Against" v2={stats.tacklesAgainst} overLabel="Over 34.5 Tackles" prob={stats.over345Tackles} />
         <StatGroup l1="Offsides For" v1={stats.offsidesFor} l2="Offsides Against" v2={stats.offsidesAgainst} overLabel="Over 3.5 Offsides" prob={stats.over35Offsides} />
         <StatGroup l1="Free Kicks For" v1={stats.freeKicksFor} l2="Free Kicks Against" v2={stats.freeKicksAgainst} overLabel="Over 19.5 Free Kicks" prob={stats.over195FreeKicks} />
-        <StatGroup l1="Saves For" v1={stats.savesFor} l2="Saves Against" v2={stats.savesAgainst} overLabel="Over 7.5 Saves" prob={stats.over75Saves} />
       </div>
     </div>
   );
@@ -365,6 +363,8 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
     setTimeout(updateThumb, 50);
   }, [updateThumb]);
 
+  useEffect(() => { updateTabsThumb(); }, [updateTabsThumb]);
+
   const tabs: { key: Tab; label: string }[] = [
     { key: 'defensive',   label: 'Defensive' },
     { key: 'offensive',   label: 'Offensive' },
@@ -442,60 +442,65 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
         </div>
 
         {/* ── Team stats + referee ── */}
-        <div className="flex flex-col gap-3 lg:grid lg:gap-4 lg:grid-cols-[1fr_180px_1fr]">
+        <div className="flex flex-col gap-3 lg:grid lg:gap-4 lg:grid-cols-[1fr_190px_1fr]">
           <TeamStatsPanel team={homeTeam} compColor={compColor} />
 
-          {/* Referee card */}
-          <div className="rounded-xl p-4 flex flex-col gap-4 lg:flex-col" style={{ background: '#111827', border: `1px solid ${compColor}50`, boxShadow: `0 0 12px ${compColor}18` }}>
-            {/* Mobile: horizontal layout for ref stats */}
-            <div className="flex items-center gap-4 lg:flex-col lg:items-stretch lg:gap-4">
-              <div className="text-center shrink-0">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-1 font-black text-[10px]"
+          {/* Centre column: two separate boxes stacked */}
+          <div className="flex flex-col gap-3">
+
+            {/* Referee box */}
+            <div className="rounded-xl p-4" style={{ background: '#111827', border: `1px solid ${compColor}50`, boxShadow: `0 0 12px ${compColor}18` }}>
+              <p className="text-[9px] uppercase tracking-widest text-gray-600 mb-3">Referee</p>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-black text-[9px]"
                      style={{ background: 'rgba(234,179,8,0.15)', border: '2px solid rgba(234,179,8,0.4)', color: '#facc15' }}>
                   REF
                 </div>
-                <p className="text-xs font-bold text-white">{referee.name}</p>
-                <p className="text-[9px] text-gray-500 uppercase tracking-wide mt-0.5">Referee</p>
+                <p className="text-sm font-bold text-white leading-tight">{referee.name}</p>
               </div>
-
-              <div className="flex-1 grid grid-cols-2 gap-3 lg:flex lg:flex-col lg:gap-4">
-                <div>
-                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Exp. Fouls</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg p-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-1.5">Exp. Fouls</p>
                   <p className="text-base font-bold text-white">{referee.matchAvg?.fouls ?? '-'}</p>
                   <p className="text-[9px] text-gray-600 mt-0.5">Match avg</p>
                 </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Exp. Cards</p>
+                <div className="rounded-lg p-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-1.5">Exp. Cards</p>
                   <p className="text-base font-bold text-yellow-400">{referee.matchAvg?.cards ?? '-'}</p>
                   <p className="text-[9px] text-gray-600 mt-0.5">Match avg</p>
                 </div>
               </div>
             </div>
 
-            {/* BTTS + Result */}
-            <div className="grid grid-cols-2 gap-3 lg:flex lg:flex-col lg:gap-4">
-              <div>
-                <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Both Teams to Score</p>
-                <ProbBar value={probabilities.btts} />
-              </div>
-              <div>
-                <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Result Probability</p>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] text-gray-500 w-10 shrink-0">Home</span>
-                    <div className="flex-1"><ProbBar value={probabilities.homeWin} /></div>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] text-gray-500 w-10 shrink-0">Draw</span>
-                    <div className="flex-1"><ProbBar value={probabilities.draw} /></div>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] text-gray-500 w-10 shrink-0">Away</span>
-                    <div className="flex-1"><ProbBar value={probabilities.awayWin} /></div>
+            {/* Probabilities box */}
+            <div className="rounded-xl p-4" style={{ background: '#111827', border: `1px solid ${compColor}50`, boxShadow: `0 0 12px ${compColor}18` }}>
+              <p className="text-[9px] uppercase tracking-widest text-gray-600 mb-3">Probabilities</p>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Both Teams to Score</p>
+                  <ProbBar value={probabilities.btts} />
+                </div>
+                <div className="h-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
+                <div>
+                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Result</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[9px] text-gray-500 w-10 shrink-0">Home</span>
+                      <div className="flex-1"><ProbBar value={probabilities.homeWin} /></div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[9px] text-gray-500 w-10 shrink-0">Draw</span>
+                      <div className="flex-1"><ProbBar value={probabilities.draw} /></div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[9px] text-gray-500 w-10 shrink-0">Away</span>
+                      <div className="flex-1"><ProbBar value={probabilities.awayWin} /></div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+
           </div>
 
           <TeamStatsPanel team={awayTeam} compColor={compColor} />
@@ -556,7 +561,7 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
               <div
                 ref={tabsThumbRef}
                 className="absolute top-0 h-full rounded-full"
-                style={{ width: '60%', left: '0%', backgroundColor: compColor, boxShadow: `0 0 6px ${compColor}80` }}
+                style={{ width: '100%', left: '0%', backgroundColor: compColor, boxShadow: `0 0 6px ${compColor}80` }}
               />
             </div>
           </div>

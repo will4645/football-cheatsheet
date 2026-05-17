@@ -1058,8 +1058,8 @@ async function runSync() {
       const ds = `${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}`;
       let board: any;
       try {
-        // Only throttle near-term days; far-future fixture discovery doesn't need the delay
-        if (d < 8) await new Promise(r => setTimeout(r, scanDays ? 150 : 300));
+        // Throttle only the first 2 days — far-future fixture discovery doesn't need it
+        if (d < 2) await new Promise(r => setTimeout(r, scanDays ? 150 : 300));
         const res = await fetch(
           `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${ds}&_cb=${Date.now()}`,
           { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36', 'Accept': 'application/json' }, cache: 'no-store' }
@@ -1198,9 +1198,10 @@ async function runSync() {
   // Matches >4h away stay as pending cards; no sheet processing needed until they're close.
   const alreadyBuiltIds = new Set(liveMatches.map((m: any) => m.id));
   nearTermMatches.sort((a, b) => {
-    const aSupp = (a._fromEspn || a._fromAf) ? 0 : 1;
-    const bSupp = (b._fromEspn || b._fromAf) ? 0 : 1;
-    return aSupp - bSupp;
+    const aLive = LIVE_STATUSES.has(a.status) ? 0 : 1;
+    const bLive = LIVE_STATUSES.has(b.status) ? 0 : 1;
+    if (aLive !== bLive) return aLive - bLive;
+    return new Date(a.utcDate ?? 0).getTime() - new Date(b.utcDate ?? 0).getTime();
   });
   for (const match of nearTermMatches) {
     const id     = matchId(match.homeTeam?.name, match.awayTeam?.name);
@@ -1367,6 +1368,26 @@ async function runSync() {
       afOdds         = prefetched.odds;
       log(`[sync] AF data from prefetch — home ${homeAfResult.playerIds.size} ids, away ${awayAfResult.playerIds.size} ids`);
     } else {
+      if (!isLive) {
+        // Guard: skip if we have a recently-built sheet — 6h before kickoff, 2h after
+        const existingSheet = await sbGet(`match:${id}`) as any;
+        const sheetAge = existingSheet?._builtAt ? Date.now() - existingSheet._builtAt : Infinity;
+        const guardTtl = hoursAway > 0 ? 6 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000;
+        if (sheetAge < guardTtl) {
+          log(`[sync] Skipping AF fetch for ${id} — sheet built ${Math.round(sheetAge / 60000)}m ago`);
+          if (!liveMatches.find((m: any) => m.id === id)) {
+            liveMatches.push({
+              id, competition: existingSheet.competition ?? 'Football', stage,
+              date: existingSheet.date ?? formatDate(match.utcDate),
+              kickoff: existingSheet.kickoff ?? formatKickoff(match.utcDate),
+              utcDate: match.utcDate,
+              homeTeam: { name: homeName, badge: homeBadge, primaryColor: getTeamColor(homeName) },
+              awayTeam: { name: awayName, badge: awayBadge, primaryColor: getTeamColor(awayName) },
+            });
+          }
+          continue;
+        }
+      }
       [homeAfResult, awayAfResult, homeSquadResult, awaySquadResult, afReferee, afOdds] = await Promise.all([
         afApiKey ? fetchApiFootballTeamHistory(homeName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
         afApiKey ? fetchApiFootballTeamHistory(awayName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
@@ -1516,6 +1537,7 @@ async function runSync() {
         }
         return null;
       })(),
+      _builtAt: Date.now(),
     };
 
     await sbSet(`match:${id}`, matchData, log);
