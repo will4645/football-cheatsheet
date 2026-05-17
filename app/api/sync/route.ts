@@ -1307,7 +1307,7 @@ async function runSync() {
 
     if (!hasLineups) {
       log(`[sync] No lineups yet: ${homeName} vs ${awayName}`);
-      if (hoursAway > -4 && !liveMatches.find((m: any) => m.id === id)) {
+      if (hoursAway > -4 && !liveMatches.find((m: any) => m.id === id) && !pendingList.find((m: any) => m.id === id)) {
         pendingList.push({
           id, competition: match.competition?.name || 'Football', stage,
           utcDate: match.utcDate,
