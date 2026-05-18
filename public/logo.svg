@@ -16,15 +16,15 @@
     </filter>
   </defs>
 
-  <!-- C-arc + bars, centre (50,50), radius 32 -->
+  <!-- C-arc: centre (50,50), radius 35, ~90° gap opening to the right -->
   <g filter="url(#glow)">
-    <path d="M 71 26 A 32 32 0 1 0 71 74"
-          stroke="url(#g)" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <path d="M 75 25 A 35 35 0 1 0 75 75"
+          stroke="url(#g)" stroke-width="9" fill="none" stroke-linecap="round"/>
     <!-- Left bar (shortest) -->
-    <rect x="28" y="57" width="7" height="14" rx="2" fill="url(#g)"/>
+    <rect x="34" y="57" width="9" height="17" rx="2" fill="url(#g)"/>
     <!-- Middle bar -->
-    <rect x="39" y="50" width="7" height="21" rx="2" fill="url(#g)"/>
+    <rect x="45" y="48" width="9" height="26" rx="2" fill="url(#g)"/>
     <!-- Right bar (tallest) -->
-    <rect x="50" y="41" width="7" height="30" rx="2" fill="url(#g)"/>
+    <rect x="56" y="39" width="9" height="35" rx="2" fill="url(#g)"/>
   </g>
 </svg>

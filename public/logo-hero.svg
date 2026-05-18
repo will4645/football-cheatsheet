@@ -5,7 +5,6 @@
       <stop offset="100%" stop-color="#16a34a"/>
     </linearGradient>
 
-    <!-- Double-layer glow for icon -->
     <filter id="icon-glow" x="-80%" y="-80%" width="260%" height="260%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur-outer"/>
       <feGaussianBlur in="SourceGraphic" stdDeviation="5"  result="blur-inner"/>
@@ -17,7 +16,6 @@
       </feMerge>
     </filter>
 
-    <!-- Glow for green tagline -->
     <filter id="tag-glow" x="-40%" y="-120%" width="180%" height="340%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
       <feMerge>
@@ -27,20 +25,20 @@
     </filter>
   </defs>
 
-  <!-- ── Icon: C-arc + ascending bars ───────────────────────────────── -->
-  <!-- Circle centre (300, 118), radius 62. Arc opens to the upper-right. -->
+  <!-- Icon: C-arc + ascending bars, centre (300,118), radius 62 -->
+  <!-- Same proportions as logo.svg scaled ~1.77x -->
   <g filter="url(#icon-glow)">
-    <path d="M 340 71 A 62 62 0 1 0 340 165"
-          stroke="url(#g)" stroke-width="13" fill="none" stroke-linecap="round"/>
+    <path d="M 344 74 A 62 62 0 1 0 344 162"
+          stroke="url(#g)" stroke-width="16" fill="none" stroke-linecap="round"/>
     <!-- Left bar (shortest) -->
-    <rect x="263" y="137" width="13" height="28" rx="3.5" fill="url(#g)"/>
+    <rect x="272" y="131" width="16" height="30" rx="3.5" fill="url(#g)"/>
     <!-- Middle bar -->
-    <rect x="280" y="123" width="13" height="42" rx="3.5" fill="url(#g)"/>
+    <rect x="291" y="115" width="16" height="46" rx="3.5" fill="url(#g)"/>
     <!-- Right bar (tallest) -->
-    <rect x="297" y="107" width="13" height="58" rx="3.5" fill="url(#g)"/>
+    <rect x="311" y="99" width="16" height="62" rx="3.5" fill="url(#g)"/>
   </g>
 
-  <!-- ── CHEAT SHEETS ─────────────────────────────────────────────────── -->
+  <!-- CHEAT SHEETS -->
   <text x="300" y="242"
         text-anchor="middle"
         font-family="'Arial Black', Impact, 'Helvetica Neue', sans-serif"
@@ -49,7 +47,7 @@
         letter-spacing="9"
         fill="white">CHEAT SHEETS</text>
 
-  <!-- ── KNOW THE GAME. ──────────────────────────────────────────────── -->
+  <!-- KNOW THE GAME. -->
   <g filter="url(#tag-glow)">
     <text x="300" y="278"
           text-anchor="middle"
