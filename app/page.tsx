@@ -33,17 +33,12 @@ export default async function LandingPage() {
       {/* Hero */}
       <section className="text-center px-6 pt-6 pb-20 max-w-3xl mx-auto">
         {/* Brand logo */}
-        <div className="mb-6">
+        <div className="mb-4">
           <img
-            src="/logo-hero.png"
+            src="/logo-hero.svg"
             alt="Cheat Sheets — Know the game."
-            className="mx-auto object-contain"
-            style={{
-              height: '280px',
-              width: 'auto',
-              mixBlendMode: 'screen',
-              filter: 'drop-shadow(0 0 28px rgba(22,163,74,0.55)) drop-shadow(0 0 60px rgba(22,163,74,0.25))',
-            }}
+            className="mx-auto"
+            style={{ height: '260px', width: 'auto' }}
           />
         </div>
         <div className="inline-block text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-6"
