@@ -36,10 +36,12 @@ export default async function LandingPage() {
         <div className="mb-4">
           <img
             src="/logo-icon.png"
-            alt="Cheat Sheets — Know the game."
+            alt="Cheat Sheets"
             className="mx-auto"
-            style={{ height: '200px', width: 'auto' }}
+            style={{ height: '180px', width: 'auto' }}
           />
+          <p className="text-3xl sm:text-4xl font-black tracking-[0.18em] text-white mt-3">CHEAT SHEETS</p>
+          <p className="text-xs font-bold tracking-[0.45em] mt-1" style={{ color: '#4ade80' }}>KNOW THE GAME.</p>
         </div>
         <div className="inline-block text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-6"
           style={{ background: 'rgba(22,163,74,0.15)', color: '#4ade80', border: '1px solid rgba(22,163,74,0.3)' }}>
