@@ -58,7 +58,7 @@ export default function TermsPage() {
           <ul className="list-disc pl-5 space-y-2">
             <li>You must register for an account to access the Service. You agree to provide accurate, current, and complete information.</li>
             <li>You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account.</li>
-            <li>You must notify us immediately at <a href="mailto:williamcook046@gmail.com" className="text-green-400 hover:underline">williamcook046@gmail.com</a> if you suspect any unauthorised use of your account.</li>
+            <li>You must notify us immediately at <a href="mailto:support@cheatsheets.co.uk" className="text-green-400 hover:underline">support@cheatsheets.co.uk</a> if you suspect any unauthorised use of your account.</li>
             <li>We reserve the right to terminate or suspend accounts that provide false information or violate these Terms.</li>
             <li>You may not create multiple accounts for the purpose of accessing the Service without paying the applicable subscription fee.</li>
           </ul>
@@ -96,7 +96,7 @@ export default function TermsPage() {
               the cooling-off period once the Service has been fully performed or you have accessed it.
             </li>
             <li>Outside of statutory rights, all subscription fees are non-refundable.</li>
-            <li>If you believe you have been charged in error, contact us within 7 days at <a href="mailto:williamcook046@gmail.com" className="text-green-400 hover:underline">williamcook046@gmail.com</a>.</li>
+            <li>If you believe you have been charged in error, contact us within 7 days at <a href="mailto:support@cheatsheets.co.uk" className="text-green-400 hover:underline">support@cheatsheets.co.uk</a>.</li>
           </ul>
 
           <h3 className="text-gray-300 font-semibold mt-4 mb-2">5.5 Price Changes</h3>
@@ -217,7 +217,7 @@ export default function TermsPage() {
           </p>
           <p className="mt-2">
             Before initiating formal proceedings, we encourage you to contact us at{' '}
-            <a href="mailto:williamcook046@gmail.com" className="text-green-400 hover:underline">williamcook046@gmail.com</a>{' '}
+            <a href="mailto:support@cheatsheets.co.uk" className="text-green-400 hover:underline">support@cheatsheets.co.uk</a>{' '}
             to attempt informal resolution.
           </p>
         </section>
@@ -253,7 +253,7 @@ export default function TermsPage() {
           <h2 className="text-white font-bold text-base mb-3">17. Contact</h2>
           <p>
             Questions about these Terms? Contact us at:{' '}
-            <a href="mailto:williamcook046@gmail.com" className="text-green-400 hover:underline">williamcook046@gmail.com</a>
+            <a href="mailto:support@cheatsheets.co.uk" className="text-green-400 hover:underline">support@cheatsheets.co.uk</a>
           </p>
         </section>
 

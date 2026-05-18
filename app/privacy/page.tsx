@@ -18,9 +18,9 @@ export default function PrivacyPage() {
           <h2 className="text-white font-bold text-base mb-3">1. Who We Are</h2>
           <p>
             Cheat Sheets (&ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;our&rdquo;) operates the website and service available at{' '}
-            <span className="text-gray-300">football-cheatsheet.vercel.app</span> (the &ldquo;Service&rdquo;).
+            <span className="text-gray-300">cheatsheets.co.uk</span> (the &ldquo;Service&rdquo;).
             We are based in the United Kingdom. For any privacy-related queries, contact us at{' '}
-            <a href="mailto:williamcook046@gmail.com" className="text-green-400 hover:underline">williamcook046@gmail.com</a>.
+            <a href="mailto:support@cheatsheets.co.uk" className="text-green-400 hover:underline">support@cheatsheets.co.uk</a>.
           </p>
           <p className="mt-2">
             This Privacy Policy explains what personal data we collect, why we collect it, how we use and protect it,
@@ -205,7 +205,7 @@ export default function PrivacyPage() {
           </ul>
           <p className="mt-3">
             To exercise any of these rights, email us at{' '}
-            <a href="mailto:williamcook046@gmail.com" className="text-green-400 hover:underline">williamcook046@gmail.com</a>.
+            <a href="mailto:support@cheatsheets.co.uk" className="text-green-400 hover:underline">support@cheatsheets.co.uk</a>.
             We will respond within 30 days. If you are unsatisfied with our response, you have the right to lodge a complaint
             with the <strong className="text-gray-300">Information Commissioner&apos;s Office (ICO)</strong> at{' '}
             <span className="text-gray-300">ico.org.uk</span>.
@@ -234,7 +234,7 @@ export default function PrivacyPage() {
           <h2 className="text-white font-bold text-base mb-3">13. Contact Us</h2>
           <p>
             For any questions, data requests, or complaints regarding this Privacy Policy, contact us at:{' '}
-            <a href="mailto:williamcook046@gmail.com" className="text-green-400 hover:underline">williamcook046@gmail.com</a>
+            <a href="mailto:support@cheatsheets.co.uk" className="text-green-400 hover:underline">support@cheatsheets.co.uk</a>
           </p>
         </section>
 

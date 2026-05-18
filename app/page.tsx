@@ -88,15 +88,45 @@ export default async function LandingPage() {
       </section>
 
       {/* Competitions */}
-      <section className="max-w-5xl mx-auto px-6 pb-20">
-        <p className="text-center text-[10px] uppercase tracking-widest text-gray-600 mb-6">Covers all major competitions</p>
-        <div className="flex flex-wrap gap-2 justify-center">
-          {['Premier League', 'Champions League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1', 'Europa League', 'FA Cup', 'Conference League'].map(c => (
-            <span key={c} className="text-[11px] font-medium px-3 py-1 rounded-full"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
-              {c}
-            </span>
-          ))}
+      <section className="max-w-3xl mx-auto px-6 pb-20">
+        <p className="text-center text-[10px] uppercase tracking-widest text-gray-600 mb-8">Covers all major competitions</p>
+
+        <div className="space-y-6">
+          {/* Leagues */}
+          <div>
+            <div className="flex justify-center mb-4">
+              <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full"
+                style={{ background: 'rgba(22,163,74,0.12)', color: '#4ade80', border: '1px solid rgba(22,163,74,0.25)' }}>
+                Leagues
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {['Premier League', 'Championship', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1', 'Primeira Liga', 'Eredivisie', 'Belgian Pro League', 'Scottish Premiership', 'Süper Lig'].map(c => (
+                <span key={c} className="text-[11px] font-medium px-3 py-1 rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Cups */}
+          <div>
+            <div className="flex justify-center mb-4">
+              <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full"
+                style={{ background: 'rgba(22,163,74,0.12)', color: '#4ade80', border: '1px solid rgba(22,163,74,0.25)' }}>
+                Cups
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {['Champions League', 'Europa League', 'Conference League'].map(c => (
+                <span key={c} className="text-[11px] font-medium px-3 py-1 rounded-full"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 

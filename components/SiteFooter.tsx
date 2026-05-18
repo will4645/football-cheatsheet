@@ -13,7 +13,7 @@ export default function SiteFooter() {
       <span>© {new Date().getFullYear()} Cheat Sheets</span>
       <Link href="/privacy" className="hover:text-gray-400 transition-colors">Privacy Policy</Link>
       <Link href="/terms" className="hover:text-gray-400 transition-colors">Terms of Service</Link>
-      <a href="mailto:williamcook046@gmail.com" className="hover:text-gray-400 transition-colors">Contact</a>
+      <a href="mailto:support@cheatsheets.co.uk" className="hover:text-gray-400 transition-colors">Contact</a>
     </footer>
   );
 }
