@@ -14,7 +14,11 @@ export default async function LandingPage() {
     <div className="min-h-screen" style={{ background: '#080c14', color: '#fff' }}>
 
       {/* Nav */}
-      <nav className="flex items-center justify-end px-6 py-4 max-w-6xl mx-auto">
+      <nav className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
+        <div className="flex items-center gap-2">
+          <img src="/logo.svg" alt="Cheat Sheets" className="w-7 h-7" />
+          <span className="text-base font-black tracking-tight text-white">Cheat Sheets</span>
+        </div>
         <div className="flex items-center gap-3">
           <Link href="/sign-in" className="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5">
             Sign in
@@ -34,7 +38,12 @@ export default async function LandingPage() {
             src="/logo-hero.png"
             alt="Cheat Sheets — Know the game."
             className="mx-auto object-contain"
-            style={{ height: '200px', width: 'auto' }}
+            style={{
+              height: '280px',
+              width: 'auto',
+              mixBlendMode: 'screen',
+              filter: 'drop-shadow(0 0 28px rgba(22,163,74,0.55)) drop-shadow(0 0 60px rgba(22,163,74,0.25))',
+            }}
           />
         </div>
         <div className="inline-block text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-6"
