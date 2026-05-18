@@ -4,6 +4,10 @@
  * Scrapes confirmed lineups and per-player match history from ESPN's public API.
  */
 
+import { kvGet, kvSet } from '@/lib/store';
+
+const PLAYER_ID_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
+
 const ESPN_LEAGUES = [
   'eng.1',               // Premier League
   'uefa.champions',      // Champions League
@@ -674,11 +678,11 @@ export async function fetchApiFootballTeamHistory(
     const teamId: number = best?.team?.id;
     if (!teamId) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: `no id: ${searchName}` };
 
-    // Fetch 8 recent fixtures across all competitions so player history includes cup/European games
-    let fd = await afFetch(`/fixtures?team=${teamId}&last=8&season=2025`, apiKey);
+    // Fetch 10 recent fixtures across all competitions so player history includes cup/European games
+    let fd = await afFetch(`/fixtures?team=${teamId}&last=10&season=2025`, apiKey);
     let fixtures: any[] = fd?.response ?? [];
     if (!fixtures.length) {
-      fd = await afFetch(`/fixtures?team=${teamId}&last=8&season=2024`, apiKey);
+      fd = await afFetch(`/fixtures?team=${teamId}&last=10&season=2024`, apiKey);
       fixtures = fd?.response ?? [];
     }
     if (!fixtures.length) return { history: new Map(), playerIds: new Map(), afTeamId: teamId, afTeamStats: null, debug: `no fixtures: ${teamId}` };
@@ -1072,13 +1076,16 @@ export async function fetchPlayerPersonalHistoryBatch(
   const result = new Map<number, PlayerGameStat[]>();
   if (!apiKey || !playerAfIds.length) return result;
 
-  // Step 1: get each player's recent fixture IDs
+  // Fetch more fixtures than needed so gaps from missing stats don't shrink the window
+  const fetchCount = Math.max(last * 2, 10);
+
+  // Step 1: get each player's recent fixture IDs (all competitions incl. internationals)
   const playerFixtureMap = new Map<number, Array<{ id: number; date: string }>>();
   const allFixtureIds = new Set<number>();
 
   for (const playerId of playerAfIds) {
     try {
-      const fd = await afFetch(`/fixtures?player=${playerId}&last=${last}`, apiKey);
+      const fd = await afFetch(`/fixtures?player=${playerId}&last=${fetchCount}`, apiKey);
       const fixtures: any[] = fd?.response ?? [];
       if (fixtures.length > 0) {
         const FINISHED = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO']);
@@ -1121,14 +1128,17 @@ export async function fetchPlayerPersonalHistoryBatch(
     } catch {}
   }
 
-  // Step 3: build per-player history (newest first)
+  // Step 3: build per-player history (newest first).
+  // Only include games where we actually found the player's stats — skipping a fixture
+  // where stats are missing is more accurate than inserting zeros that shift all other
+  // dot positions. We fetched fetchCount fixtures so there's buffer to still reach `last`.
   for (const [playerId, fixtures] of Array.from(playerFixtureMap)) {
     const sorted = [...fixtures].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const games: PlayerGameStat[] = [];
     for (const { id: fixtureId } of sorted) {
       const stat = fixturePlayerStats.get(fixtureId)?.get(playerId);
-      // Always push — missing stats become zeros so game position stays correct in the timeline
-      games.push(stat ?? { goals: 0, assists: 0, shots: 0, sot: 0, fc: 0, fd: 0, yellowCards: 0, saves: 0 });
+      if (stat !== undefined) games.push(stat);
+      if (games.length >= last) break;
     }
     if (games.length > 0) result.set(playerId, games);
   }
@@ -1144,6 +1154,9 @@ export async function lookupAfPlayerId(
   apiKey: string,
 ): Promise<number | null> {
   if (!apiKey || !afTeamId) return null;
+  const cacheKey = `af:plid:${norm(playerName)}:${afTeamId}`;
+  const cached = await kvGet<{ id: number | null; cachedAt: number }>(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < PLAYER_ID_CACHE_TTL) return cached.id;
   try {
     const parts = norm(playerName).split(' ').filter(w => w.length >= 3).slice(0, 2);
     const searchName = parts.join(' ');
@@ -1158,8 +1171,12 @@ export async function lookupAfPlayerId(
         return n === pNorm || pNorm.split(' ').filter(w => w.length > 3).some((w: string) => n.includes(w));
       }) ?? players[0];
       const id = match?.player?.id;
-      if (id) return id;
+      if (id) {
+        await kvSet(cacheKey, { id, cachedAt: Date.now() });
+        return id;
+      }
     }
+    await kvSet(cacheKey, { id: null, cachedAt: Date.now() });
     return null;
   } catch {
     return null;

@@ -17,6 +17,60 @@ import {
 import type { AfTeamFixtureStats, AfSquadPlayer, MatchOdds, PlayerGameStat } from '@/lib/api-football';
 import { kvGet, kvSet } from '@/lib/store';
 
+// ── Component cache TTLs ───────────────────────────────────────────────────
+const HIST_TTL    = 20 * 60 * 60 * 1000; // 20h — expires before any realistic turnaround
+const SQUAD_TTL   = 44 * 60 * 60 * 1000; // 44h — safe for Tue→Thu turnaround (shortest in football)
+const PLAYERS_TTL = 20 * 60 * 60 * 1000; // 20h
+const ODDS_TTL    =  6 * 60 * 60 * 1000; // 6h  — odds genuinely move
+const REF_TTL     = 24 * 60 * 60 * 1000; // 24h
+
+// ── Serialised shapes for KV storage (Maps → plain objects) ───────────────
+interface CachedHist {
+  cachedAt: number;
+  afTeamId: number;
+  history: Record<string, PlayerGameStat[]>;
+  playerIds: Record<string, number>;
+  afTeamStats: AfTeamFixtureStats | null;
+}
+interface CachedSquad {
+  cachedAt: number;
+  stats: Record<string, AfSquadPlayer>;
+}
+interface CachedPlayers {
+  cachedAt: number;
+  histories: Record<string, PlayerGameStat[]>; // playerId (string) → stats
+}
+interface CachedOdds   { cachedAt: number; odds: MatchOdds | null; }
+interface CachedRef    { cachedAt: number; referee: string; }
+
+type HistResult   = Awaited<ReturnType<typeof fetchApiFootballTeamHistory>>;
+type SquadResult  = Awaited<ReturnType<typeof fetchApiFootballSquadStats>>;
+
+function toHistCache(r: HistResult): CachedHist {
+  return {
+    cachedAt:   Date.now(),
+    afTeamId:   r.afTeamId,
+    history:    Object.fromEntries(r.history),
+    playerIds:  Object.fromEntries(r.playerIds),
+    afTeamStats: r.afTeamStats,
+  };
+}
+function fromHistCache(c: CachedHist): HistResult {
+  return {
+    history:    new Map(Object.entries(c.history) as [string, PlayerGameStat[]][]),
+    playerIds:  new Map(Object.entries(c.playerIds).map(([k, v]) => [k, Number(v)])),
+    afTeamId:   c.afTeamId,
+    afTeamStats: c.afTeamStats,
+    debug: 'from-component-cache',
+  };
+}
+function toSquadCache(r: SquadResult): CachedSquad {
+  return { cachedAt: Date.now(), stats: Object.fromEntries(r.stats) };
+}
+function fromSquadCache(c: CachedSquad): SquadResult {
+  return { stats: new Map(Object.entries(c.stats) as [string, AfSquadPlayer][]), debug: 'from-component-cache' };
+}
+
 // ── Stored data shapes ─────────────────────────────────────────────────────
 
 export interface PrefetchTeam {
@@ -62,39 +116,108 @@ export async function prefetchMatch(
   if (!apiKey) { log('[prefetch] no API key'); return false; }
   try {
     log(`[prefetch] Starting: ${homeName} vs ${awayName}`);
+    const hk = normPrefetch(homeName);
+    const ak = normPrefetch(awayName);
 
-    // Fetch team fixture history + squad season stats in parallel for both teams
-    const [homeHistory, awayHistory, homeSquad, awaySquad] = await Promise.all([
-      fetchApiFootballTeamHistory(homeName, apiKey),
-      fetchApiFootballTeamHistory(awayName, apiKey),
-      fetchApiFootballSquadStats(homeName, apiKey),
-      fetchApiFootballSquadStats(awayName, apiKey),
+    // ── Step 1: team history + squad stats (parallel, each component cached) ──
+    const [chHome, chAway, csHome, csAway] = await Promise.all([
+      kvGet<CachedHist>(`pc:hist:${hk}`),
+      kvGet<CachedHist>(`pc:hist:${ak}`),
+      kvGet<CachedSquad>(`pc:squad:${hk}`),
+      kvGet<CachedSquad>(`pc:squad:${ak}`),
     ]);
+
+    const now = Date.now();
+    const needHomeHist  = !chHome  || now - chHome.cachedAt  >= HIST_TTL;
+    const needAwayHist  = !chAway  || now - chAway.cachedAt  >= HIST_TTL;
+    const needHomeSquad = !csHome  || now - csHome.cachedAt  >= SQUAD_TTL;
+    const needAwaySquad = !csAway  || now - csAway.cachedAt  >= SQUAD_TTL;
+
+    const [freshHomeHist, freshAwayHist, freshHomeSquad, freshAwaySquad] = await Promise.all([
+      needHomeHist  ? fetchApiFootballTeamHistory(homeName, apiKey)  : Promise.resolve(null),
+      needAwayHist  ? fetchApiFootballTeamHistory(awayName, apiKey)  : Promise.resolve(null),
+      needHomeSquad ? fetchApiFootballSquadStats(homeName, apiKey)   : Promise.resolve(null),
+      needAwaySquad ? fetchApiFootballSquadStats(awayName, apiKey)   : Promise.resolve(null),
+    ]);
+
+    // Save each fresh component immediately so a later failure doesn't lose them
+    if (freshHomeHist  && freshHomeHist.afTeamId)   await kvSet(`pc:hist:${hk}`,  toHistCache(freshHomeHist));
+    if (freshAwayHist  && freshAwayHist.afTeamId)   await kvSet(`pc:hist:${ak}`,  toHistCache(freshAwayHist));
+    if (freshHomeSquad && freshHomeSquad.stats.size) await kvSet(`pc:squad:${hk}`, toSquadCache(freshHomeSquad));
+    if (freshAwaySquad && freshAwaySquad.stats.size) await kvSet(`pc:squad:${ak}`, toSquadCache(freshAwaySquad));
+
+    const homeHistory = freshHomeHist ?? (chHome ? fromHistCache(chHome)   : await fetchApiFootballTeamHistory(homeName, apiKey));
+    const awayHistory = freshAwayHist ?? (chAway ? fromHistCache(chAway)   : await fetchApiFootballTeamHistory(awayName, apiKey));
+    const homeSquad   = freshHomeSquad ?? (csHome ? fromSquadCache(csHome) : await fetchApiFootballSquadStats(homeName, apiKey));
+    const awaySquad   = freshAwaySquad ?? (csAway ? fromSquadCache(csAway) : await fetchApiFootballSquadStats(awayName, apiKey));
+
     log(`[prefetch] history: home=${homeHistory.debug} | away=${awayHistory.debug}`);
     log(`[prefetch] squad:   home=${homeSquad.debug}   | away=${awaySquad.debug}`);
 
-    // Collect unique AF player IDs from each team's recent fixtures
+    // ── Step 2: personal histories (cached per team, depends on playerIds) ──
     const homePlayerIds = Array.from(new Set(homeHistory.playerIds.values()));
     const awayPlayerIds = Array.from(new Set(awayHistory.playerIds.values()));
     log(`[prefetch] personal histories: ${homePlayerIds.length} home, ${awayPlayerIds.length} away players`);
 
-    // Fetch personal histories for all known squad members in parallel
-    const [homePersonal, awayPersonal] = await Promise.all([
-      fetchPlayerPersonalHistoryBatch(homePlayerIds, apiKey),
-      fetchPlayerPersonalHistoryBatch(awayPlayerIds, apiKey),
+    const [cpHome, cpAway] = await Promise.all([
+      kvGet<CachedPlayers>(`pc:players:${hk}`),
+      kvGet<CachedPlayers>(`pc:players:${ak}`),
     ]);
+
+    const needHomePlayers = !cpHome || now - cpHome.cachedAt >= PLAYERS_TTL;
+    const needAwayPlayers = !cpAway || now - cpAway.cachedAt >= PLAYERS_TTL;
+
+    const [freshHomePlayers, freshAwayPlayers] = await Promise.all([
+      needHomePlayers ? fetchPlayerPersonalHistoryBatch(homePlayerIds, apiKey) : Promise.resolve(null),
+      needAwayPlayers ? fetchPlayerPersonalHistoryBatch(awayPlayerIds, apiKey) : Promise.resolve(null),
+    ]);
+
+    if (freshHomePlayers && freshHomePlayers.size) {
+      const h: Record<string, PlayerGameStat[]> = {};
+      freshHomePlayers.forEach((v, k) => { h[String(k)] = v; });
+      await kvSet(`pc:players:${hk}`, { cachedAt: Date.now(), histories: h } as CachedPlayers);
+    }
+    if (freshAwayPlayers && freshAwayPlayers.size) {
+      const h: Record<string, PlayerGameStat[]> = {};
+      freshAwayPlayers.forEach((v, k) => { h[String(k)] = v; });
+      await kvSet(`pc:players:${ak}`, { cachedAt: Date.now(), histories: h } as CachedPlayers);
+    }
+
+    const restorePlayers = (c: CachedPlayers): Map<number, PlayerGameStat[]> =>
+      new Map(Object.entries(c.histories).map(([k, v]) => [Number(k), v]));
+
+    const homePersonal = freshHomePlayers ?? (cpHome ? restorePlayers(cpHome) : new Map<number, PlayerGameStat[]>());
+    const awayPersonal = freshAwayPlayers ?? (cpAway ? restorePlayers(cpAway) : new Map<number, PlayerGameStat[]>());
     log(`[prefetch] personal done: home=${homePersonal.size} away=${awayPersonal.size}`);
 
-    // Odds + referee
+    // ── Step 3: odds + referee (cached per match) ─────────────────────────
     const afLeagueId = guessDomesticLeagueId(homeName) || guessDomesticLeagueId(awayName);
-    const [odds, referee] = await Promise.all([
-      fetchApiFootballOdds(homeName, awayName, matchDate, apiKey, afLeagueId || undefined),
-      afLeagueId
-        ? fetchApiFootballRefereeByLeague(afLeagueId, matchDate, homeName, awayName, apiKey)
-        : fetchApiFootballReferee(homeName, apiKey, matchDate),
+
+    const [coOdds, coRef] = await Promise.all([
+      kvGet<CachedOdds>(`pc:odds:${matchId}`),
+      kvGet<CachedRef>(`pc:ref:${matchId}`),
     ]);
+
+    const needOdds = !coOdds || now - coOdds.cachedAt >= ODDS_TTL;
+    const needRef  = !coRef  || now - coRef.cachedAt  >= REF_TTL;
+
+    const [freshOdds, freshRef] = await Promise.all([
+      needOdds ? fetchApiFootballOdds(homeName, awayName, matchDate, apiKey, afLeagueId || undefined) : Promise.resolve(null),
+      needRef
+        ? (afLeagueId
+            ? fetchApiFootballRefereeByLeague(afLeagueId, matchDate, homeName, awayName, apiKey)
+            : fetchApiFootballReferee(homeName, apiKey, matchDate))
+        : Promise.resolve(null),
+    ]);
+
+    if (needOdds) await kvSet(`pc:odds:${matchId}`, { cachedAt: Date.now(), odds: freshOdds } as CachedOdds);
+    if (needRef && freshRef !== null) await kvSet(`pc:ref:${matchId}`, { cachedAt: Date.now(), referee: freshRef } as CachedRef);
+
+    const odds     = needOdds ? freshOdds     : (coOdds?.odds ?? null);
+    const referee  = needRef  ? (freshRef ?? '') : (coRef?.referee ?? '');
     log(`[prefetch] odds=${odds ? `${odds.homeWin}/${odds.draw}/${odds.awayWin}` : 'none'} ref="${referee || 'none'}"`);
 
+    // ── Assemble final blob (sync reads this, format unchanged) ─────────────
     const buildTeamData = (
       history: typeof homeHistory,
       squad: typeof homeSquad,

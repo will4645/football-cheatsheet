@@ -86,8 +86,8 @@ export async function GET(req: NextRequest) {
 
       if (!force) {
         const existing = await kvGet<any>(`prefetch:${id}`);
-        // Skip if prefetched within the last 6 hours
-        if (existing?.fetchedAt && Date.now() - existing.fetchedAt < 6 * 60 * 60 * 1000) {
+        // Skip if prefetched within the last 20 hours (component caches own freshness)
+        if (existing?.fetchedAt && Date.now() - existing.fetchedAt < 20 * 60 * 60 * 1000) {
           log(`[prefetch] skip (fresh): ${id}`);
           skipped++;
           continue;

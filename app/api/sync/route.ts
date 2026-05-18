@@ -1439,8 +1439,17 @@ async function runSync() {
             if (!name) continue;
             const afId = await resolveAfId(name, team, afApiKey, log);
             if (afId != null) {
-              const history = team.personalHistories[String(afId)] ?? [];
-              result.set(normPrefetch(name), history);
+              let history: PlayerGameStat[] = team.personalHistories[String(afId)] ?? [];
+              if (history.length === 0) {
+                // Player wasn't in the prefetch batch (e.g. fringe/returning player) — fetch on demand
+                const batch = await fetchPlayerPersonalHistoryBatch([afId], afApiKey);
+                const fetched = batch.get(afId);
+                if (fetched && fetched.length > 0) {
+                  history = fetched;
+                  log(`[per-player] on-demand: "${name}" af:${afId} → ${history.length} games`);
+                }
+              }
+              if (history.length > 0) result.set(normPrefetch(name), history);
             }
           }
           return result;
