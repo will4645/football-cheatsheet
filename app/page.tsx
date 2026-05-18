@@ -16,7 +16,7 @@ export default async function LandingPage() {
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
         <div className="flex items-center gap-2">
-          <img src="/logo.svg" alt="Cheat Sheets" className="w-7 h-7" />
+          <img src="/logo-icon.png" alt="Cheat Sheets" className="w-7 h-7" />
           <span className="text-base font-black tracking-tight text-white">Cheat Sheets</span>
         </div>
         <div className="flex items-center gap-3">
@@ -35,10 +35,10 @@ export default async function LandingPage() {
         {/* Brand logo */}
         <div className="mb-4">
           <img
-            src="/logo-hero.svg"
+            src="/logo-icon.png"
             alt="Cheat Sheets — Know the game."
             className="mx-auto"
-            style={{ height: '260px', width: 'auto' }}
+            style={{ height: '200px', width: 'auto' }}
           />
         </div>
         <div className="inline-block text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-6"

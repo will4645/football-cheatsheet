@@ -54,7 +54,7 @@ export default function Dashboard() {
           <div className="flex-1" />
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-1">
-              <img src="/logo.svg" alt="" className="w-7 h-7" />
+              <img src="/logo-icon.png" alt="" className="w-7 h-7" />
               <h1 className="text-2xl font-black text-white tracking-tight">Cheat Sheets</h1>
             </div>
             <p className="text-[11px] uppercase tracking-widest text-gray-600">Select a competition</p>
