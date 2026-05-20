@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/dashboard', '/match/', '/competition/', '/api/', '/account'],
       },
     ],
-    sitemap: 'https://football-cheatsheet.vercel.app/sitemap.xml',
+    sitemap: 'https://cheatsheets.co.uk/sitemap.xml',
   };
 }

@@ -1190,6 +1190,14 @@ export interface MatchOdds {
   awayWin: number;
   btts: number;
   referee?: string;
+  // Fair decimal odds (overround removed), present when bookmaker data is available
+  homeOdd?: number;
+  drawOdd?: number;
+  awayOdd?: number;
+  bttsYesOdd?: number;
+  bttsNoOdd?: number;
+  over25Odd?: number;
+  under25Odd?: number;
 }
 
 export async function fetchApiFootballOdds(
@@ -1234,6 +1242,7 @@ export async function fetchApiFootballOdds(
 
     const h2hSamples: { home: number; draw: number; away: number }[] = [];
     const bttsSamples: { yes: number; no: number }[] = [];
+    const ou25Samples: { over: number; under: number }[] = [];
 
     for (const bm of bookmakers) {
       for (const bet of (bm.bets ?? [])) {
@@ -1248,6 +1257,11 @@ export async function fetchApiFootballOdds(
           const no  = parseFloat(bet.values?.find((v: any) => v.value === 'No')?.odd  ?? '0');
           if (yes > 1 && no > 1) bttsSamples.push({ yes, no });
         }
+        if (bet.name === 'Goals Over/Under' || bet.name === 'Over/Under') {
+          const over  = parseFloat(bet.values?.find((v: any) => v.value === 'Over 2.5')?.odd  ?? '0');
+          const under = parseFloat(bet.values?.find((v: any) => v.value === 'Under 2.5')?.odd ?? '0');
+          if (over > 1 && under > 1) ou25Samples.push({ over, under });
+        }
       }
     }
 
@@ -1261,11 +1275,31 @@ export async function fetchApiFootballOdds(
     };
     const total = avg.home + avg.draw + avg.away;
 
+    // Fair decimal odds (overround stripped)
+    const homeOdd    = parseFloat((total / avg.home).toFixed(2));
+    const drawOdd    = parseFloat((total / avg.draw).toFixed(2));
+    const awayOdd    = parseFloat((total / avg.away).toFixed(2));
+
     let btts = 50;
+    let bttsYesOdd: number | undefined;
+    let bttsNoOdd: number | undefined;
     if (bttsSamples.length > 0) {
       const yesP = bttsSamples.reduce((s, o) => s + 1 / o.yes, 0) / bttsSamples.length;
       const noP  = bttsSamples.reduce((s, o) => s + 1 / o.no,  0) / bttsSamples.length;
-      btts = Math.round((yesP / (yesP + noP)) * 100);
+      const bttsTotal = yesP + noP;
+      btts = Math.round((yesP / bttsTotal) * 100);
+      bttsYesOdd = parseFloat((bttsTotal / yesP).toFixed(2));
+      bttsNoOdd  = parseFloat((bttsTotal / noP).toFixed(2));
+    }
+
+    let over25Odd: number | undefined;
+    let under25Odd: number | undefined;
+    if (ou25Samples.length > 0) {
+      const overP  = ou25Samples.reduce((s, o) => s + 1 / o.over,  0) / ou25Samples.length;
+      const underP = ou25Samples.reduce((s, o) => s + 1 / o.under, 0) / ou25Samples.length;
+      const ouTotal = overP + underP;
+      over25Odd  = parseFloat((ouTotal / overP).toFixed(2));
+      under25Odd = parseFloat((ouTotal / underP).toFixed(2));
     }
 
     return {
@@ -1273,6 +1307,9 @@ export async function fetchApiFootballOdds(
       draw:    Math.round((avg.draw / total) * 100),
       awayWin: Math.round((avg.away / total) * 100),
       btts,
+      homeOdd, drawOdd, awayOdd,
+      ...(bttsYesOdd  !== undefined ? { bttsYesOdd, bttsNoOdd }   : {}),
+      ...(over25Odd   !== undefined ? { over25Odd, under25Odd }   : {}),
       ...(referee ? { referee } : {}),
     };
   } catch {

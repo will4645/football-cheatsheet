@@ -50,22 +50,24 @@ export default function Dashboard() {
         <OnboardingModal />
 
         {/* Header */}
-        <div className="flex items-center mb-8 sm:mb-10">
-          <div className="flex-1" />
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <img src="/logo-icon.png" alt="" className="w-7 h-7" />
-              <h1 className="text-2xl font-black text-white tracking-tight">Cheat Sheets</h1>
+        <div className="relative flex items-center min-h-[60px] mb-8 sm:mb-10">
+          <Link href="/home" className="relative z-10 text-gray-600 hover:text-gray-400 transition-colors text-sm">← Home</Link>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto text-center">
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <img src="/logo-icon.png" alt="" className="w-7 h-7" />
+                <h1 className="text-2xl font-black text-white tracking-tight">Cheat Sheets</h1>
+              </div>
+              <p className="text-[11px] uppercase tracking-widest text-gray-600">Select a competition</p>
             </div>
-            <p className="text-[11px] uppercase tracking-widest text-gray-600">Select a competition</p>
           </div>
-          <div className="flex-1 flex items-center justify-end gap-2">
+          <div className="ml-auto relative z-10 flex flex-col items-center sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+            <UserButton afterSignOutUrl="/" />
             <Link href="/account"
-              className="hidden sm:block text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors"
+              className="text-[11px] font-medium px-2.5 py-1 rounded-lg transition-colors"
               style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
               Account
             </Link>
-            <UserButton afterSignOutUrl="/" />
           </div>
         </div>
 
@@ -132,28 +134,5 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
-  );
-}
-
-function ManageBillingButton() {
-  const [loading, setLoading] = useState(false);
-
-  async function handleClick() {
-    setLoading(true);
-    const res = await fetch('/api/stripe/portal', { method: 'POST' });
-    const { url } = await res.json();
-    if (url) window.location.href = url;
-    else setLoading(false);
-  }
-
-  return (
-    <button
-      onClick={handleClick}
-      disabled={loading}
-      className="text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-      style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}
-    >
-      {loading ? '...' : 'Billing'}
-    </button>
   );
 }

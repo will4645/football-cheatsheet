@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       ? (process.env.STRIPE_ANNUAL_PRICE_ID ?? process.env.STRIPE_PRICE_ID!)
       : process.env.STRIPE_PRICE_ID!;
 
-    const origin = req.headers.get('origin') ?? 'https://football-cheatsheet.vercel.app';
+    const origin = req.headers.get('origin') ?? 'https://cheatsheets.co.uk';
 
     const existing = await getSubscription(userId);
     const customerParams = existing?.stripe_customer_id

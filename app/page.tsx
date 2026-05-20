@@ -7,7 +7,7 @@ export default async function LandingPage() {
   // Send logged-in subscribers straight to dashboard
   const { userId } = await auth();
   if (userId && process.env.SUPABASE_SERVICE_ROLE_KEY && await isSubscribed(userId)) {
-    redirect('/dashboard');
+    redirect('/home');
   }
 
   return (
@@ -20,6 +20,9 @@ export default async function LandingPage() {
           <span className="text-base font-black tracking-tight text-white">Cheat Sheets</span>
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/how-it-works" className="text-sm text-gray-500 hover:text-white transition-colors px-3 py-1.5 hidden sm:block">
+            How it works
+          </Link>
           <Link href="/sign-in" className="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5">
             Sign in
           </Link>
@@ -66,6 +69,9 @@ export default async function LandingPage() {
             View live demo
           </Link>
         </div>
+        <Link href="/how-it-works" className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-4 inline-block">
+          See how every section works →
+        </Link>
       </section>
 
       {/* Feature strip */}
@@ -84,7 +90,7 @@ export default async function LandingPage() {
             },
             {
               title: '15+ Stat Markets',
-              desc: 'Corners, shots, tackles, offsides, goal kicks, free kicks. All with Poisson probabilities.',
+              desc: 'Corners, shots, fouls, cards, offsides and free kicks as season averages. Goals from last 10 games. All with market-calibrated probabilities.',
               icon: '%',
             },
           ].map(f => (
@@ -142,35 +148,72 @@ export default async function LandingPage() {
       </section>
 
       {/* Pricing */}
-      <section className="max-w-sm mx-auto px-6 pb-24 text-center">
-        <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-6">Pricing</p>
-        <div className="rounded-2xl p-8"
-          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(22,163,74,0.3)' }}>
-          <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#4ade80' }}>Pro</p>
-          <div className="flex items-baseline justify-center gap-1 mb-1">
-            <span className="text-4xl font-black text-white">£9.99</span>
-            <span className="text-sm text-gray-500">/month</span>
+      <section className="max-w-xl mx-auto px-6 pb-24">
+        <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-6 text-center">Pricing</p>
+        <div className="flex flex-col sm:flex-row gap-4">
+
+          {/* Monthly */}
+          <div className="flex-1 rounded-2xl p-7 flex flex-col"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <p className="text-xs font-bold uppercase tracking-widest mb-4 text-center" style={{ color: '#4ade80' }}>Monthly</p>
+            <div className="flex items-baseline justify-center gap-1 mb-4">
+              <span className="text-4xl font-black text-white">£9.99</span>
+              <span className="text-sm text-gray-500">/month</span>
+            </div>
+            <ul className="text-left space-y-2 mb-8 flex-1">
+              {[
+                'All competitions & matches',
+                'Real-time lineup stats',
+                'Player form last-5 dots',
+                '15+ stat markets with probabilities',
+                'GK saves tracking',
+                'Automatic updates',
+              ].map(item => (
+                <li key={item} className="flex items-center gap-2 text-xs text-gray-300">
+                  <span style={{ color: '#4ade80' }}>✓</span> {item}
+                </li>
+              ))}
+            </ul>
+            <Link href="/sign-up"
+              className="block w-full py-3 rounded-xl font-bold text-sm text-center transition-all hover:brightness-110"
+              style={{ background: '#16a34a', color: '#fff' }}>
+              Get Started
+            </Link>
           </div>
-          <p className="text-xs text-gray-600 mb-6">Cancel any time</p>
-          <ul className="text-left space-y-2 mb-8">
-            {[
-              'All competitions & matches',
-              'Real-time lineup stats',
-              'Player form last-5 dots',
-              '15+ stat markets with probabilities',
-              'GK saves tracking',
-              'Automatic updates every 2 hours',
-            ].map(item => (
-              <li key={item} className="flex items-center gap-2 text-xs text-gray-300">
-                <span style={{ color: '#4ade80' }}>✓</span> {item}
-              </li>
-            ))}
-          </ul>
-          <Link href="/sign-up"
-            className="block w-full py-3 rounded-xl font-bold text-sm text-center transition-all hover:brightness-110"
-            style={{ background: '#16a34a', color: '#fff' }}>
-            Get Started
-          </Link>
+
+          {/* Yearly */}
+          <div className="flex-1 rounded-2xl p-7 flex flex-col"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(22,163,74,0.4)', boxShadow: '0 0 32px rgba(22,163,74,0.1)' }}>
+            <div className="text-center mb-3">
+              <span className="text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
+                style={{ background: 'rgba(22,163,74,0.15)', color: '#4ade80', border: '1px solid rgba(22,163,74,0.3)' }}>
+                Best value
+              </span>
+            </div>
+            <p className="text-xs font-bold uppercase tracking-widest mb-4 text-center" style={{ color: '#4ade80' }}>Yearly</p>
+            <div className="flex items-baseline justify-center gap-1 mb-1">
+              <span className="text-4xl font-black text-white">£6.66</span>
+              <span className="text-sm text-gray-500">/mo</span>
+            </div>
+            <p className="text-xs text-center mb-1" style={{ color: '#4ade80' }}>Billed as £79.99 / year · Save 33%</p>
+            <p className="text-[10px] text-center mb-4" style={{ color: 'rgba(255,255,255,0.25)' }}>Non-refundable once payment is taken</p>
+            <ul className="text-left space-y-2 mb-8 flex-1">
+              {[
+                'Everything in Monthly',
+                'Save £39.89 compared to monthly',
+              ].map(item => (
+                <li key={item} className="flex items-center gap-2 text-xs text-gray-300">
+                  <span style={{ color: '#4ade80' }}>✓</span> {item}
+                </li>
+              ))}
+            </ul>
+            <Link href="/sign-up"
+              className="block w-full py-3 rounded-xl font-bold text-sm text-center transition-all hover:brightness-110"
+              style={{ background: '#16a34a', color: '#fff' }}>
+              Get Started
+            </Link>
+          </div>
+
         </div>
       </section>
 

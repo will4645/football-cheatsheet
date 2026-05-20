@@ -29,7 +29,7 @@ export default function CookieNotice() {
       }}
     >
       <p className="flex-1">
-        This site uses strictly necessary cookies to keep you signed in.{' '}
+        This site uses strictly necessary cookies to keep you signed in, and anonymous analytics via PostHog.{' '}
         <Link href="/privacy#cookies" className="underline hover:text-gray-300 transition-colors">
           Learn more
         </Link>

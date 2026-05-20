@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No subscription found' }, { status: 404 });
   }
 
-  const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? 'https://football-cheatsheet.vercel.app';
+  const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? 'https://cheatsheets.co.uk';
 
   const session = await stripe.billingPortal.sessions.create({
     customer: sub.stripe_customer_id,

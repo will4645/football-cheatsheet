@@ -324,7 +324,7 @@ function PlayerTable({ team, tab }: { team: TeamData; tab: Tab }) {
 }
 
 /* ── Main component ──────────────────────────────────── */
-export default function MatchSheet({ data }: { data?: MatchData }) {
+export default function MatchSheet({ data, backHref, backLabel }: { data?: MatchData; backHref?: string; backLabel?: string }) {
   const [activeTab, setActiveTab] = useState<Tab>('defensive');
   const [activeTeam, setActiveTeam] = useState<'home' | 'away'>('home');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -382,9 +382,9 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
 
         {/* ── Back button ── */}
         <div>
-          <Link href={nameToSlug(competition) ? `/competition/${nameToSlug(competition)}` : '/'} className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-500 hover:text-white transition-colors">
+          <Link href={backHref ?? (nameToSlug(competition) ? `/competition/${nameToSlug(competition)}` : '/')} className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-500 hover:text-white transition-colors">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7L9 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            All Matches
+            {backLabel ?? 'All Matches'}
           </Link>
         </div>
 
@@ -474,34 +474,59 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
 
             {/* Probabilities box */}
             <div className="rounded-xl p-4" style={{ background: '#111827', border: `1px solid ${compColor}50`, boxShadow: `0 0 12px ${compColor}18` }}>
-              <p className="text-[9px] uppercase tracking-widest text-gray-600 mb-3">Probabilities</p>
+              <p className="text-[9px] uppercase tracking-widest text-gray-600 mb-3">Match Probabilities</p>
               <div className="space-y-3">
+
                 <div>
-                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Both Teams to Score</p>
-                  <ProbBar value={probabilities.btts} />
-                </div>
-                <div>
-                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Over 2.5 Goals</p>
-                  <ProbBar value={(probabilities as any).over25 ?? 50} />
-                </div>
-                <div className="h-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
-                <div>
-                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-2">Result</p>
+                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-1.5">Match Result</p>
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[9px] text-gray-500 w-10 shrink-0">Home</span>
-                      <div className="flex-1"><ProbBar value={probabilities.homeWin} /></div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[9px] text-gray-500 w-10 shrink-0">Draw</span>
-                      <div className="flex-1"><ProbBar value={probabilities.draw} /></div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[9px] text-gray-500 w-10 shrink-0">Away</span>
-                      <div className="flex-1"><ProbBar value={probabilities.awayWin} /></div>
-                    </div>
+                    {[
+                      { label: 'Home Win', prob: probabilities.homeWin },
+                      { label: 'Draw',     prob: probabilities.draw },
+                      { label: 'Away Win', prob: probabilities.awayWin },
+                    ].map(({ label, prob }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <span className="text-[9px] text-gray-500 w-14 shrink-0">{label}</span>
+                        <ProbBar value={prob} />
+                      </div>
+                    ))}
                   </div>
                 </div>
+
+                <div className="h-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
+
+                <div>
+                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-1.5">Both Teams to Score</p>
+                  <div className="space-y-1.5">
+                    {[
+                      { label: 'Yes', prob: probabilities.btts },
+                      { label: 'No',  prob: 100 - probabilities.btts },
+                    ].map(({ label, prob }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <span className="text-[9px] text-gray-500 w-14 shrink-0">{label}</span>
+                        <ProbBar value={prob} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="h-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
+
+                <div>
+                  <p className="text-[9px] uppercase tracking-wide text-gray-600 mb-1.5">Over 2.5 Goals</p>
+                  <div className="space-y-1.5">
+                    {[
+                      { label: 'Over',  prob: (probabilities as any).over25 ?? 50 },
+                      { label: 'Under', prob: 100 - ((probabilities as any).over25 ?? 50) },
+                    ].map(({ label, prob }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <span className="text-[9px] text-gray-500 w-14 shrink-0">{label}</span>
+                        <ProbBar value={prob} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             </div>
 
@@ -625,7 +650,7 @@ export default function MatchSheet({ data }: { data?: MatchData }) {
 
         {/* Footer */}
         <p className="text-center text-[10px] text-gray-700 pb-2">
-          Stats based on season averages &nbsp;•&nbsp; For reference only
+          Goals from last 10 games &nbsp;•&nbsp; All other stats from season averages &nbsp;•&nbsp; For reference only
         </p>
       </div>
     </div>

@@ -10,7 +10,7 @@ export default function TermsPage() {
       <Link href="/" className="text-[11px] text-gray-600 hover:text-gray-400 transition-colors">← Back</Link>
 
       <h1 className="text-2xl font-black text-white mt-6 mb-2 tracking-tight">Terms of Service</h1>
-      <p className="text-xs text-gray-500 mb-10">Last updated: 12 May 2025</p>
+      <p className="text-xs text-gray-500 mb-10">Last updated: 19 May 2026</p>
 
       <div className="space-y-8 text-sm leading-relaxed text-gray-400">
 
@@ -18,12 +18,14 @@ export default function TermsPage() {
           <h2 className="text-white font-bold text-base mb-3">1. Agreement to Terms</h2>
           <p>
             By accessing or using the Cheat Sheets service available at{' '}
-            <span className="text-gray-300">football-cheatsheet.vercel.app</span> (the &ldquo;Service&rdquo;), you agree to be bound
+            <span className="text-gray-300">cheatsheets.co.uk</span> (the &ldquo;Service&rdquo;), you agree to be bound
             by these Terms of Service (&ldquo;Terms&rdquo;). If you do not agree to these Terms, do not use the Service.
           </p>
           <p className="mt-2">
-            These Terms constitute a legally binding agreement between you (&ldquo;User&rdquo;, &ldquo;you&rdquo;) and Cheat Sheets
-            (&ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;our&rdquo;), a trading name operated in the United Kingdom.
+            These Terms constitute a legally binding agreement between you (&ldquo;User&rdquo;, &ldquo;you&rdquo;) and{' '}
+            <strong className="text-gray-300">Cheat Sheets Ltd</strong> (&ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;our&rdquo;),
+            a company registered in England and Wales (Company No.{' '}
+            <span className="text-gray-300">17225134</span>).
           </p>
         </section>
 
@@ -74,7 +76,7 @@ export default function TermsPage() {
 
           <h3 className="text-gray-300 font-semibold mt-4 mb-2">5.2 Billing and Auto-Renewal</h3>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Subscriptions are billed monthly in advance on a recurring basis.</li>
+            <li>Subscriptions are available on a monthly or annual basis and are billed in advance on a recurring basis.</li>
             <li>Your subscription will automatically renew at the end of each billing period unless you cancel before the renewal date.</li>
             <li>Payment is processed by Stripe. By subscribing, you authorise Stripe to charge your payment method on a recurring basis.</li>
             <li>All prices are inclusive of applicable VAT where required by law.</li>
@@ -84,18 +86,27 @@ export default function TermsPage() {
           <ul className="list-disc pl-5 space-y-1">
             <li>You may cancel your subscription at any time from your account settings.</li>
             <li>Cancellation takes effect at the end of your current billing period. You retain access to the Service until that date.</li>
-            <li>We do not offer partial-month refunds upon cancellation.</li>
+            <li>We do not offer partial-period refunds upon cancellation of any plan.</li>
+            <li>
+              <strong className="text-gray-300">Annual subscriptions are non-refundable once payment has been taken.</strong>{' '}
+              Cancelling an annual plan stops it from renewing at the end of the year but does not entitle you to a refund
+              of any amount already charged.
+            </li>
           </ul>
 
           <h3 className="text-gray-300 font-semibold mt-4 mb-2">5.4 Refunds</h3>
           <ul className="list-disc pl-5 space-y-1">
             <li>
               Under UK consumer law, you have a 14-day &ldquo;cooling-off&rdquo; right for digital services purchased online.
-              However, by accessing the Service immediately after subscribing, you expressly consent to the Service
-              beginning before the 14-day period expires and acknowledge that you lose your right to cancel under
-              the cooling-off period once the Service has been fully performed or you have accessed it.
+              However, by accessing the Service immediately after subscribing, you expressly request and consent to the Service
+              commencing before the 14-day cooling-off period expires, and you acknowledge that you thereby waive your right
+              to cancel under the Consumer Contracts Regulations 2013.
             </li>
-            <li>Outside of statutory rights, all subscription fees are non-refundable.</li>
+            <li>
+              <strong className="text-gray-300">Annual plan payments are non-refundable.</strong> Once the annual fee has been
+              charged, no refund will be issued regardless of when in the subscription year you cancel.
+            </li>
+            <li>Monthly subscription fees are non-refundable for any portion of a billing period already paid.</li>
             <li>If you believe you have been charged in error, contact us within 7 days at <a href="mailto:support@cheatsheets.co.uk" className="text-green-400 hover:underline">support@cheatsheets.co.uk</a>.</li>
           </ul>
 

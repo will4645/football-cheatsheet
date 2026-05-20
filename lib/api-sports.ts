@@ -20,24 +20,12 @@ const COMPETITIONS = [
   { id: 2,   name: 'Champions League' },
   { id: 3,   name: 'Europa League' },
   { id: 848, name: 'Conference League' },
-  // Other UEFA domestic leagues (clubs appear in CL/EL/ECL)
-  { id: 94,  name: 'Primeira Liga' },       // Portugal
-  { id: 88,  name: 'Eredivisie' },          // Netherlands
-  { id: 144, name: 'Pro League' },          // Belgium
-  { id: 271, name: 'Scottish Premiership' },// Scotland
-  { id: 203, name: 'Süper Lig' },           // Turkey
-  { id: 113, name: 'Allsvenskan' },         // Sweden
-  { id: 119, name: 'Superligaen' },         // Denmark
-  { id: 103, name: 'Eliteserien' },         // Norway
-  { id: 218, name: 'Austrian Bundesliga' }, // Austria
-  { id: 169, name: 'Swiss Super League' },  // Switzerland
-  { id: 197, name: 'Super League' },        // Greece
-  { id: 106, name: 'Ekstraklasa' },         // Poland
-  { id: 210, name: 'HNL' },                 // Croatia
-  { id: 286, name: 'SuperLiga' },           // Serbia
-  { id: 333, name: 'Ukrainian PL' },        // Ukraine
-  { id: 283, name: 'Liga I' },              // Romania
-  { id: 244, name: 'Czech Liga' },          // Czech Republic
+  // Domestic leagues covered by AF supplement
+  { id: 94,  name: 'Primeira Liga' },        // Portugal
+  { id: 88,  name: 'Eredivisie' },           // Netherlands
+  { id: 144, name: 'Pro League' },           // Belgium
+  { id: 271, name: 'Scottish Premiership' }, // Scotland
+  { id: 203, name: 'Süper Lig' },            // Turkey
 ];
 
 export interface ApiSportsPlayer {

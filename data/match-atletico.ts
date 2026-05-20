@@ -4,7 +4,7 @@ export const atleticoMatchData: {
   competition: string; stage: string; date: string; kickoff: string;
   homeTeam: TeamData; awayTeam: TeamData;
   referee: { name: string; matchAvg: { fouls: number; cards: number } };
-  probabilities: { btts: number; over25: number; homeWin: number; draw: number; awayWin: number };
+  probabilities: { btts: number; over25: number; homeWin: number; draw: number; awayWin: number; homeOdd?: number; drawOdd?: number; awayOdd?: number; bttsYesOdd?: number; bttsNoOdd?: number; over25Odd?: number; under25Odd?: number };
   aggregate?: { home: number; away: number } | null;
 } = {
   competition: 'UEFA Champions League',
@@ -179,5 +179,10 @@ export const atleticoMatchData: {
   },
 
   referee: { name: 'Clément Turpin', matchAvg: { fouls: 22.8, cards: 3.4 } },
-  probabilities: { btts: 65, over25: 72, homeWin: 30, draw: 25, awayWin: 45 },
+  probabilities: {
+    btts: 65, over25: 72, homeWin: 30, draw: 25, awayWin: 45,
+    homeOdd: 3.33, drawOdd: 4.00, awayOdd: 2.22,
+    bttsYesOdd: 1.54, bttsNoOdd: 2.86,
+    over25Odd: 1.39, under25Odd: 3.57,
+  },
 };

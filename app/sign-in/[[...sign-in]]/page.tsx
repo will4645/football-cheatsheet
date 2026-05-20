@@ -72,7 +72,7 @@ export default function SignInPage() {
           <SignIn
             appearance={clerkAppearance}
             signUpUrl="/sign-up"
-            fallbackRedirectUrl="/dashboard"
+            fallbackRedirectUrl="/home"
           />
 
           <p className="mt-8 text-xs text-gray-700 text-center leading-relaxed">

@@ -219,17 +219,26 @@ async function getApiSportsIndex(): Promise<Map<string, ApiSportsPlayer>> {
   if (!apiKey) return new Map();
   const cached = await sbGet('api_sports_v2_cache') as { scraped: number; players: ApiSportsPlayer[] } | null;
   if (cached && Date.now() - cached.scraped < STATS_TTL) {
+    const ageMin = Math.round((Date.now() - cached.scraped) / 60000);
+    console.log(`[api-sports] cache HIT — ${cached.players?.length ?? 0} players, ${ageMin}m old`);
     return buildApiSportsNameIndex(cached.players);
   }
+  console.log(`[api-sports] cache MISS — rebuilding (cached=${!!cached}, age=${cached ? Math.round((Date.now() - cached.scraped) / 3600000) + 'h' : 'none'})`);
   try {
     const index = await fetchApiSportsIndex(apiKey);
     const players = Array.from(index.values());
     if (players.length > 0) {
       await sbSet('api_sports_v2_cache', { scraped: Date.now(), players });
+      console.log(`[api-sports] cache saved — ${players.length} players`);
       return buildApiSportsNameIndex(players);
     }
-  } catch {}
-  if (cached?.players?.length) return buildApiSportsNameIndex(cached.players);
+  } catch (err: any) {
+    console.error(`[api-sports] rebuild failed: ${err.message}`);
+  }
+  if (cached?.players?.length) {
+    console.log(`[api-sports] using stale cache (${cached.players.length} players)`);
+    return buildApiSportsNameIndex(cached.players);
+  }
   return new Map();
 }
 
@@ -920,9 +929,16 @@ async function runSync() {
 
   log(`[sync] Running — ${new Date().toISOString()}`);
 
-  // Load paid API-Sports global index (fallback for players not covered by squad stats)
-  const apiSportsIdx = await getApiSportsIndex();
-  log(`[sync] API-Sports index: ${apiSportsIdx.size} name keys`);
+  // Loaded lazily in Phase 2 — only when a match actually needs buildPlayers()
+  // Avoids ~400 AF calls per run on days with no near-term matches
+  let apiSportsIdx: Map<string, ApiSportsPlayer> | null = null;
+  const ensureApiSportsIdx = async () => {
+    if (!apiSportsIdx) {
+      apiSportsIdx = await getApiSportsIndex();
+      log(`[sync] API-Sports index loaded: ${apiSportsIdx.size} name keys`);
+    }
+    return apiSportsIdx;
+  };
 
   const today = new Date();
   const twoDaysAgo = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000);
@@ -1508,7 +1524,7 @@ async function runSync() {
       }
     }
 
-    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, espnHistory, apiSportsIdx, combinedRosterMap, homeAfResult.history, awayAfResult.history, homeSquadResult.stats, awaySquadResult.stats, perPlayerHistoryHome, perPlayerHistoryAway);
+    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, espnHistory, await ensureApiSportsIdx(), combinedRosterMap, homeAfResult.history, awayAfResult.history, homeSquadResult.stats, awaySquadResult.stats, perPlayerHistoryHome, perPlayerHistoryAway);
     log(`[buildPlayers] ${players.diag}`);
 
     const matchData = {
@@ -1531,10 +1547,34 @@ async function runSync() {
         const over25 = toScale(poissonAtLeast(lH + lA, 3));
         // Use bookmaker odds when available; for BTTS, use Poisson if no BTTS market found
         // (the default of exactly 50 signals no market was found, not a real bookmaker value)
+        const toOdd = (pct: number) => +( 100 / Math.max(1, pct) ).toFixed(2);
         if (afOdds && afOdds.homeWin > 0) {
-          return { ...afOdds, btts: afOdds.btts !== 50 ? afOdds.btts : poissonBtts, over25 };
+          const resolvedBtts = afOdds.btts !== 50 ? afOdds.btts : poissonBtts;
+          // Derive over25 % from bookmaker odd when available, otherwise keep Poisson
+          const resolvedOver25 = afOdds.over25Odd
+            ? Math.round(100 / afOdds.over25Odd)
+            : over25;
+          return {
+            ...afOdds,
+            btts: resolvedBtts,
+            over25: resolvedOver25,
+            over25Odd:   afOdds.over25Odd   ?? toOdd(over25),
+            under25Odd:  afOdds.under25Odd  ?? toOdd(100 - over25),
+            bttsYesOdd:  afOdds.bttsYesOdd  ?? toOdd(resolvedBtts),
+            bttsNoOdd:   afOdds.bttsNoOdd   ?? toOdd(100 - resolvedBtts),
+          };
         }
-        return { btts: poissonBtts, over25, ...matchOutcomes(lH, lA) };
+        const outcomes = matchOutcomes(lH, lA);
+        return {
+          btts: poissonBtts, over25, ...outcomes,
+          homeOdd:    toOdd(outcomes.homeWin),
+          drawOdd:    toOdd(outcomes.draw),
+          awayOdd:    toOdd(outcomes.awayWin),
+          bttsYesOdd: toOdd(poissonBtts),
+          bttsNoOdd:  toOdd(100 - poissonBtts),
+          over25Odd:  toOdd(over25),
+          under25Odd: toOdd(100 - over25),
+        };
       })(),
       fixtureId: match.id, status,
       aggregate: await (async () => {
@@ -1755,7 +1795,21 @@ async function runDemoSync() {
         cards:  +(homeStats.cardsFor + awayStats.cardsFor).toFixed(1),
       },
     },
-    probabilities: { btts: poissonBtts, ...matchOutcomes(lH, lA) },
+    probabilities: (() => {
+      const outcomes = matchOutcomes(lH, lA);
+      const over25 = toScale(poissonAtLeast(lH + lA, 3));
+      const toOdd = (pct: number) => +(100 / Math.max(1, pct)).toFixed(2);
+      return {
+        btts: poissonBtts, over25, ...outcomes,
+        homeOdd:    toOdd(outcomes.homeWin),
+        drawOdd:    toOdd(outcomes.draw),
+        awayOdd:    toOdd(outcomes.awayWin),
+        bttsYesOdd: toOdd(poissonBtts),
+        bttsNoOdd:  toOdd(100 - poissonBtts),
+        over25Odd:  toOdd(over25),
+        under25Odd: toOdd(100 - over25),
+      };
+    })(),
     aggregate: null,
   };
 

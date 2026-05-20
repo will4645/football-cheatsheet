@@ -10,21 +10,25 @@ export default function PrivacyPage() {
       <Link href="/" className="text-[11px] text-gray-600 hover:text-gray-400 transition-colors">← Back</Link>
 
       <h1 className="text-2xl font-black text-white mt-6 mb-2 tracking-tight">Privacy Policy</h1>
-      <p className="text-xs text-gray-500 mb-10">Last updated: 12 May 2025</p>
+      <p className="text-xs text-gray-500 mb-10">Last updated: 19 May 2026</p>
 
       <div className="space-y-8 text-sm leading-relaxed text-gray-400">
 
         <section>
           <h2 className="text-white font-bold text-base mb-3">1. Who We Are</h2>
           <p>
-            Cheat Sheets (&ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;our&rdquo;) operates the website and service available at{' '}
-            <span className="text-gray-300">cheatsheets.co.uk</span> (the &ldquo;Service&rdquo;).
-            We are based in the United Kingdom. For any privacy-related queries, contact us at{' '}
+            <strong className="text-gray-300">Cheat Sheets Ltd</strong> (&ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;our&rdquo;) is the data controller for personal data collected through this website and service available at{' '}
+            <span className="text-gray-300">cheatsheets.co.uk</span> (the &ldquo;Service&rdquo;). We are a company registered in England and Wales (Company No.{' '}
+            <span className="text-gray-300">17225134</span>). For any privacy-related queries, contact us at{' '}
             <a href="mailto:support@cheatsheets.co.uk" className="text-green-400 hover:underline">support@cheatsheets.co.uk</a>.
           </p>
           <p className="mt-2">
             This Privacy Policy explains what personal data we collect, why we collect it, how we use and protect it,
             and your rights under the UK General Data Protection Regulation (UK GDPR) and the Data Protection Act 2018.
+          </p>
+          <p className="mt-2">
+            We are in the process of registering with the Information Commissioner&apos;s Office (ICO) as required under UK law.
+            Our ICO registration number will be published here once confirmed.
           </p>
         </section>
 
@@ -121,6 +125,12 @@ export default function PrivacyPage() {
               including IP addresses and request data.
               Privacy policy: <span className="text-gray-300">vercel.com/legal/privacy-policy</span>
             </li>
+            <li>
+              <strong className="text-gray-300">PostHog (PostHog Inc.)</strong>: Product analytics. When active, records
+              page views and navigation patterns using browser localStorage (not cookies). No personally identifiable
+              information is sent. Data stored in the EU.
+              Privacy policy: <span className="text-gray-300">posthog.com/privacy</span>
+            </li>
           </ul>
           <p className="mt-3">
             We do not sell, rent, or share your personal data with any third party for marketing purposes.
@@ -141,7 +151,9 @@ export default function PrivacyPage() {
             </li>
           </ul>
           <p className="mt-2">
-            We do not use advertising or tracking cookies. No third-party analytics (e.g., Google Analytics) are currently used.
+            We do not use advertising or tracking cookies. We use PostHog for basic product analytics (page views and
+            navigation patterns). PostHog is configured to use browser localStorage rather than cookies, so it does not
+            set any tracking cookies. No personally identifiable information is included in analytics data.
           </p>
         </section>
 
@@ -215,9 +227,11 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-white font-bold text-base mb-3">11. Children&apos;s Privacy</h2>
           <p>
-            The Service is not directed at children under the age of 13. We do not knowingly collect personal data from
-            anyone under 13. If you believe a child has provided us with personal data, please contact us immediately and
-            we will delete it promptly.
+            The Service is strictly for users aged 18 and over, as set out in our Terms of Service. We do not knowingly
+            collect personal data from anyone under 18. If you believe a minor has provided us with personal data,
+            please contact us immediately at{' '}
+            <a href="mailto:support@cheatsheets.co.uk" className="text-green-400 hover:underline">support@cheatsheets.co.uk</a>{' '}
+            and we will delete it promptly.
           </p>
         </section>
 

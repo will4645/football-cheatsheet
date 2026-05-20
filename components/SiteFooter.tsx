@@ -10,7 +10,8 @@ export default function SiteFooter() {
         background: '#080c14',
       }}
     >
-      <span>© {new Date().getFullYear()} Cheat Sheets</span>
+      <span>© {new Date().getFullYear()} Cheat Sheets Ltd · CRN 17225134</span>
+      <Link href="/how-it-works" className="hover:text-gray-400 transition-colors">How It Works</Link>
       <Link href="/privacy" className="hover:text-gray-400 transition-colors">Privacy Policy</Link>
       <Link href="/terms" className="hover:text-gray-400 transition-colors">Terms of Service</Link>
       <a href="mailto:support@cheatsheets.co.uk" className="hover:text-gray-400 transition-colors">Contact</a>

@@ -84,12 +84,17 @@ export default function CompetitionPage() {
           <Link href="/dashboard" className="text-gray-600 hover:text-gray-400 transition-colors text-sm">
             ← Back
           </Link>
-          <div>
+          <div className="flex-1">
             <p className="text-[10px] uppercase tracking-widest font-semibold mb-0.5" style={{ color: comp.color }}>
               {comp.country}
             </p>
             <h1 className="text-xl font-black text-white tracking-tight">{comp.label}</h1>
           </div>
+          <Link href="/home"
+            className="text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors"
+            style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            Home
+          </Link>
         </div>
 
         <div className="flex flex-col gap-3">

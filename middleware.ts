@@ -9,14 +9,18 @@ const isPublic = createRouteMatcher([
   '/pricing',
   '/privacy',
   '/terms',
+  '/how-it-works',
   '/api/matches',
   '/api/stripe/webhook',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (isPublic(req)) return NextResponse.next();
-  // Exclude /api/sync so the cron job is never blocked
-  if (req.nextUrl.pathname.startsWith('/api/sync')) return NextResponse.next();
+  // Exclude cron/internal API routes so they are never blocked by Clerk
+  const pathname = req.nextUrl.pathname;
+  if (pathname.startsWith('/api/sync') || pathname.startsWith('/api/prefetch') || pathname.startsWith('/api/debug')) {
+    return NextResponse.next();
+  }
   const { userId, redirectToSignIn } = await auth();
   if (!userId) return redirectToSignIn();
 });
