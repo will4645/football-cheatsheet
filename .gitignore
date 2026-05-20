@@ -43,3 +43,6 @@ next-env.d.ts
 /.clerk/
 
 .env*.local
+
+# private ops runbook — contains keys and secrets, never commit
+RUNBOOK.md
