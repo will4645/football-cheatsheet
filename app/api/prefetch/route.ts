@@ -37,6 +37,11 @@ export async function GET(req: NextRequest) {
 
   const force = req.nextUrl.searchParams.get('force') === '1';
 
+  // fd.org competition code → AF domestic league ID (cups omitted — guessDomesticLeagueId handles those)
+  const FD_CODE_TO_AF_LEAGUE: Record<string, number> = {
+    PL: 39, PD: 140, BL1: 78, SA: 135, FL1: 61, DED: 88, PPL: 94,
+  };
+
   try {
     // Get upcoming matches from football-data.org
     const today = new Date();
@@ -55,26 +60,33 @@ export async function GET(req: NextRequest) {
     log(`[prefetch] ${matches.length} matches from fd.org`);
 
     // Only pre-fetch matches within 24h of kickoff that have known team names
-    let nearTerm: Array<{ homeTeam: { name: string }; awayTeam: { name: string }; utcDate: string }> =
-      matches.filter((m: any) => {
-        if (!m.homeTeam?.name || !m.awayTeam?.name) return false;
-        const hoursAway = (new Date(m.utcDate).getTime() - Date.now()) / 3_600_000;
-        return hoursAway > -2 && hoursAway < 24;
-      });
+    let nearTerm: Array<{ homeTeam: { name: string }; awayTeam: { name: string }; utcDate: string; afLeagueId?: number }> =
+      matches
+        .filter((m: any) => {
+          if (!m.homeTeam?.name || !m.awayTeam?.name) return false;
+          const hoursAway = (new Date(m.utcDate).getTime() - Date.now()) / 3_600_000;
+          return hoursAway > -2 && hoursAway < 24;
+        })
+        .map((m: any) => ({
+          homeTeam: m.homeTeam,
+          awayTeam: m.awayTeam,
+          utcDate: m.utcDate,
+          afLeagueId: FD_CODE_TO_AF_LEAGUE[m.competition?.code ?? ''],
+        }));
 
     // Also prefetch AF-supplement leagues (Championship, Scottish Prem, etc.)
     const AF_PREFETCH_LEAGUES = [40, 179, 144, 203];
     const afFixtureBatches = await Promise.all(
       AF_PREFETCH_LEAGUES.map(id =>
-        fetchAfFixturesByDateRange(id, fmt(from), fmt(to), 2025, afApiKey).catch(() => [])
+        fetchAfFixturesByDateRange(id, fmt(from), fmt(to), 2025, afApiKey).catch(() => []).then(fixes => ({ id, fixes }))
       )
     );
-    for (const batch of afFixtureBatches) {
-      for (const fix of batch) {
+    for (const { id: lgId, fixes } of afFixtureBatches) {
+      for (const fix of fixes) {
         if (!fix.home.name || !fix.away.name) continue;
         const hoursAway = (new Date(fix.utcDate).getTime() - Date.now()) / 3_600_000;
         if (hoursAway > -2 && hoursAway < 24) {
-          nearTerm.push({ homeTeam: { name: fix.home.name }, awayTeam: { name: fix.away.name }, utcDate: fix.utcDate });
+          nearTerm.push({ homeTeam: { name: fix.home.name }, awayTeam: { name: fix.away.name }, utcDate: fix.utcDate, afLeagueId: lgId });
         }
       }
     }
@@ -94,7 +106,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const ok = await prefetchMatch(id, m.homeTeam.name, m.awayTeam.name, m.utcDate, afApiKey, log);
+      const ok = await prefetchMatch(id, m.homeTeam.name, m.awayTeam.name, m.utcDate, afApiKey, log, m.afLeagueId);
       if (ok) done++;
     }
 
