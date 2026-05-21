@@ -607,7 +607,8 @@ async function afFetch(path: string, apiKey: string): Promise<any> {
 function cleanForSearch(name: string): string {
   return name
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/\b(FC|CF|SC|RFC|RC|GFC|AFC|BFC|SSC|AC|AS|RB|VfB|VfL|TSV|SV|FSV|Borussia|Club|KAA|KRC|KV|OHL|del|de|des|du|der|van|den|het)\b\.?/gi, ' ')
+    // Strip common club prefixes/suffixes from all major European football countries
+    .replace(/\b(FC|CF|SC|RFC|RC|GFC|AFC|BFC|SSC|AC|AS|RB|VfB|VfL|TSV|SV|FSV|Borussia|Club|KAA|KRC|KV|OHL|FK|NK|HNK|GNK|SK|IFK|IF|IK|BK|BSC|NEC|PEC|RKC|NAC|CFR|AEK|del|de|des|du|der|van|den|het)\b\.?/gi, ' ')
     .replace(/[^a-zA-Z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ').trim()
     .split(' ').filter(w => w.length >= 2).slice(0, 3).join(' ');
@@ -664,10 +665,17 @@ export async function fetchApiFootballTeamHistory(
       teams.push(...(td2?.response ?? []));
     }
     if (!teams.length) {
-      // Last resort: search by first keyword only, no league filter
-      const firstWord = searchName.split(' ').find(w => w.length >= 5) ?? searchName.split(' ')[0];
-      const td3 = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}`, apiKey);
-      teams.push(...(td3?.response ?? []));
+      // Last resort: try each significant word (≥4 chars) from the cleaned name, longest first
+      const words = searchName.split(' ').filter(w => w.length >= 4).sort((a, b) => b.length - a.length);
+      for (const word of words) {
+        const td3 = await afFetch(`/teams?search=${encodeURIComponent(word)}${leagueParam}`, apiKey);
+        teams.push(...(td3?.response ?? []));
+        if (teams.length) break;
+        // Also try without league filter
+        const td4 = await afFetch(`/teams?search=${encodeURIComponent(word)}`, apiKey);
+        teams.push(...(td4?.response ?? []));
+        if (teams.length) break;
+      }
     }
     if (!teams.length) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: `no team: ${searchName}` };
 
@@ -917,9 +925,15 @@ export async function fetchApiFootballSquadStats(
       teams = td?.response ?? [];
     }
     if (!teams.length) {
-      const firstWord = searchName.split(' ').find(w => w.length >= 5) ?? searchName.split(' ')[0];
-      td = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}`, apiKey);
-      teams = td?.response ?? [];
+      const words = searchName.split(' ').filter(w => w.length >= 4).sort((a, b) => b.length - a.length);
+      for (const word of words) {
+        td = await afFetch(`/teams?search=${encodeURIComponent(word)}${leagueParam}`, apiKey);
+        teams = td?.response ?? [];
+        if (teams.length) break;
+        td = await afFetch(`/teams?search=${encodeURIComponent(word)}`, apiKey);
+        teams = td?.response ?? [];
+        if (teams.length) break;
+      }
     }
     if (!teams.length) return { stats: new Map(), debug: `no team: ${searchName}` };
 
@@ -1039,10 +1053,14 @@ export async function fetchApiFootballReferee(teamName: string, apiKey: string, 
       teams = td?.response ?? [];
     }
     if (!teams.length) {
-      const firstWord = searchName.split(' ')[0];
-      if (firstWord !== searchName) {
-        td = await afFetch(`/teams?search=${encodeURIComponent(firstWord)}`, apiKey);
+      const words = searchName.split(' ').filter(w => w.length >= 4).sort((a, b) => b.length - a.length);
+      for (const word of words) {
+        td = await afFetch(`/teams?search=${encodeURIComponent(word)}${leagueParam}`, apiKey);
         teams = td?.response ?? [];
+        if (teams.length) break;
+        td = await afFetch(`/teams?search=${encodeURIComponent(word)}`, apiKey);
+        teams = td?.response ?? [];
+        if (teams.length) break;
       }
     }
     if (!teams.length) return '';
