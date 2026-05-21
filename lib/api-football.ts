@@ -607,7 +607,7 @@ async function afFetch(path: string, apiKey: string): Promise<any> {
 function cleanForSearch(name: string): string {
   return name
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/\b(FC|CF|SC|RFC|RC|GFC|AFC|BFC|SSC|AC|AS|RB|VfB|VfL|TSV|SV|FSV|Borussia|Club|del|de|des|du|der|van|den|het)\b\.?/gi, ' ')
+    .replace(/\b(FC|CF|SC|RFC|RC|GFC|AFC|BFC|SSC|AC|AS|RB|VfB|VfL|TSV|SV|FSV|Borussia|Club|KAA|KRC|KV|OHL|del|de|des|du|der|van|den|het)\b\.?/gi, ' ')
     .replace(/[^a-zA-Z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ').trim()
     .split(' ').filter(w => w.length >= 2).slice(0, 3).join(' ');
@@ -643,13 +643,14 @@ export interface AfTeamFixtureStats {
 export async function fetchApiFootballTeamHistory(
   teamName: string,
   apiKey: string,
+  leagueHint?: number,
 ): Promise<{ history: Map<string, PlayerGameStat[]>; playerIds: Map<string, number>; afTeamId: number; afTeamStats: AfTeamFixtureStats | null; debug: string }> {
   if (!apiKey) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: 'no key' };
   const result = new Map<string, PlayerGameStat[]>();
   const playerIds = new Map<string, number>();
   try {
     const searchName = cleanForSearch(teamName);
-    const leagueId = guessDomesticLeagueId(teamName);
+    const leagueId = leagueHint || guessDomesticLeagueId(teamName);
     const leagueParam = leagueId ? `&league=${leagueId}` : '';
     // Note: no season= in /teams search — it conflicts with the search param and blocks results
     const td = await afFetch(
@@ -900,12 +901,13 @@ export interface AfSquadPlayer {
 export async function fetchApiFootballSquadStats(
   teamName: string,
   apiKey: string,
+  leagueHint?: number,
 ): Promise<{ stats: Map<string, AfSquadPlayer>; debug: string }> {
   if (!apiKey) return { stats: new Map(), debug: 'no key' };
   const result = new Map<string, AfSquadPlayer>();
   try {
     const searchName = cleanForSearch(teamName);
-    const leagueId = guessDomesticLeagueId(teamName);
+    const leagueId = leagueHint || guessDomesticLeagueId(teamName);
     const leagueParam = leagueId ? `&league=${leagueId}` : '';
 
     let td = await afFetch(`/teams?search=${encodeURIComponent(searchName)}${leagueParam}`, apiKey);
