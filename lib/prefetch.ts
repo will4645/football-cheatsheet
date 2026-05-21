@@ -18,11 +18,12 @@ import type { AfTeamFixtureStats, AfSquadPlayer, MatchOdds, PlayerGameStat } fro
 import { kvGet, kvSet } from '@/lib/store';
 
 // ── Component cache TTLs ───────────────────────────────────────────────────
-const HIST_TTL    = 20 * 60 * 60 * 1000; // 20h — expires before any realistic turnaround
-const SQUAD_TTL   = 44 * 60 * 60 * 1000; // 44h — safe for Tue→Thu turnaround (shortest in football)
-const PLAYERS_TTL = 20 * 60 * 60 * 1000; // 20h
+const HIST_TTL    = 44 * 60 * 60 * 1000; // 44h — covers Tue→Thu turnaround, avoids double-fetch
+const SQUAD_TTL   = 72 * 60 * 60 * 1000; // 72h — squad season stats barely change within a week
+const PLAYERS_TTL = 44 * 60 * 60 * 1000; // 44h — personal histories stable between matchdays
 const ODDS_TTL    =  6 * 60 * 60 * 1000; // 6h  — odds genuinely move
 const REF_TTL     = 24 * 60 * 60 * 1000; // 24h
+const FAILED_TTL  =  2 * 60 * 60 * 1000; // 2h  — retry failed team lookups more aggressively
 
 // ── Serialised shapes for KV storage (Maps → plain objects) ───────────────
 interface CachedHist {
@@ -112,6 +113,7 @@ export async function prefetchMatch(
   matchDate: string,
   apiKey: string,
   log: (s: string) => void,
+  leagueId?: number,
 ): Promise<boolean> {
   if (!apiKey) { log('[prefetch] no API key'); return false; }
   try {
@@ -128,44 +130,54 @@ export async function prefetchMatch(
     ]);
 
     const now = Date.now();
-    const needHomeHist  = !chHome  || now - chHome.cachedAt  >= HIST_TTL;
-    const needAwayHist  = !chAway  || now - chAway.cachedAt  >= HIST_TTL;
-    const needHomeSquad = !csHome  || now - csHome.cachedAt  >= SQUAD_TTL;
-    const needAwaySquad = !csAway  || now - csAway.cachedAt  >= SQUAD_TTL;
+    // Failed lookups (afTeamId=0) use a short 2h TTL so they retry sooner rather than staying stale for 44h
+    const histTtlFor  = (c: CachedHist | null) => c?.afTeamId ? HIST_TTL : FAILED_TTL;
+    const squadTtlFor = (c: CachedSquad | null) => (c && Object.keys(c.stats).length > 0) ? SQUAD_TTL : FAILED_TTL;
+    const needHomeHist  = !chHome  || now - chHome.cachedAt  >= histTtlFor(chHome);
+    const needAwayHist  = !chAway  || now - chAway.cachedAt  >= histTtlFor(chAway);
+    const needHomeSquad = !csHome  || now - csHome.cachedAt  >= squadTtlFor(csHome);
+    const needAwaySquad = !csAway  || now - csAway.cachedAt  >= squadTtlFor(csAway);
 
     const [freshHomeHist, freshAwayHist, freshHomeSquad, freshAwaySquad] = await Promise.all([
-      needHomeHist  ? fetchApiFootballTeamHistory(homeName, apiKey)  : Promise.resolve(null),
-      needAwayHist  ? fetchApiFootballTeamHistory(awayName, apiKey)  : Promise.resolve(null),
-      needHomeSquad ? fetchApiFootballSquadStats(homeName, apiKey)   : Promise.resolve(null),
-      needAwaySquad ? fetchApiFootballSquadStats(awayName, apiKey)   : Promise.resolve(null),
+      needHomeHist  ? fetchApiFootballTeamHistory(homeName, apiKey, leagueId)  : Promise.resolve(null),
+      needAwayHist  ? fetchApiFootballTeamHistory(awayName, apiKey, leagueId)  : Promise.resolve(null),
+      needHomeSquad ? fetchApiFootballSquadStats(homeName, apiKey, leagueId)   : Promise.resolve(null),
+      needAwaySquad ? fetchApiFootballSquadStats(awayName, apiKey, leagueId)   : Promise.resolve(null),
     ]);
 
-    // Save each fresh component immediately so a later failure doesn't lose them
-    if (freshHomeHist  && freshHomeHist.afTeamId)   await kvSet(`pc:hist:${hk}`,  toHistCache(freshHomeHist));
-    if (freshAwayHist  && freshAwayHist.afTeamId)   await kvSet(`pc:hist:${ak}`,  toHistCache(freshAwayHist));
-    if (freshHomeSquad && freshHomeSquad.stats.size) await kvSet(`pc:squad:${hk}`, toSquadCache(freshHomeSquad));
-    if (freshAwaySquad && freshAwaySquad.stats.size) await kvSet(`pc:squad:${ak}`, toSquadCache(freshAwaySquad));
+    // Save each fresh component immediately so a later failure doesn't lose them.
+    // Always save even on failure (afTeamId=0 / empty squad) so we don't re-hit AF on every cron
+    // for teams that genuinely don't resolve — the FAILED_TTL gives a 2h retry window.
+    if (freshHomeHist)  await kvSet(`pc:hist:${hk}`,  toHistCache(freshHomeHist));
+    if (freshAwayHist)  await kvSet(`pc:hist:${ak}`,  toHistCache(freshAwayHist));
+    if (freshHomeSquad) await kvSet(`pc:squad:${hk}`, toSquadCache(freshHomeSquad));
+    if (freshAwaySquad) await kvSet(`pc:squad:${ak}`, toSquadCache(freshAwaySquad));
 
-    const homeHistory = freshHomeHist ?? (chHome ? fromHistCache(chHome)   : await fetchApiFootballTeamHistory(homeName, apiKey));
-    const awayHistory = freshAwayHist ?? (chAway ? fromHistCache(chAway)   : await fetchApiFootballTeamHistory(awayName, apiKey));
-    const homeSquad   = freshHomeSquad ?? (csHome ? fromSquadCache(csHome) : await fetchApiFootballSquadStats(homeName, apiKey));
-    const awaySquad   = freshAwaySquad ?? (csAway ? fromSquadCache(csAway) : await fetchApiFootballSquadStats(awayName, apiKey));
+    const homeHistory = freshHomeHist ?? (chHome ? fromHistCache(chHome)   : await fetchApiFootballTeamHistory(homeName, apiKey, leagueId));
+    const awayHistory = freshAwayHist ?? (chAway ? fromHistCache(chAway)   : await fetchApiFootballTeamHistory(awayName, apiKey, leagueId));
+    const homeSquad   = freshHomeSquad ?? (csHome ? fromSquadCache(csHome) : await fetchApiFootballSquadStats(homeName, apiKey, leagueId));
+    const awaySquad   = freshAwaySquad ?? (csAway ? fromSquadCache(csAway) : await fetchApiFootballSquadStats(awayName, apiKey, leagueId));
 
     log(`[prefetch] history: home=${homeHistory.debug} | away=${awayHistory.debug}`);
     log(`[prefetch] squad:   home=${homeSquad.debug}   | away=${awaySquad.debug}`);
 
     // ── Step 2: personal histories (cached per team, depends on playerIds) ──
+    // Skip for non-top-5 leagues: their /fixtures/players endpoint doesn't return fouls/shots,
+    // so personal history is unreliable for the main stats — bestLast5 falls back to team history instead.
+    const TOP5_LEAGUE_IDS = new Set([39, 140, 78, 135, 61]); // PL, La Liga, Bundesliga, Serie A, Ligue 1
+    const isTop5 = !leagueId || TOP5_LEAGUE_IDS.has(leagueId); // unknown league (cups etc.) → fetch anyway
+
     const homePlayerIds = Array.from(new Set(homeHistory.playerIds.values()));
     const awayPlayerIds = Array.from(new Set(awayHistory.playerIds.values()));
-    log(`[prefetch] personal histories: ${homePlayerIds.length} home, ${awayPlayerIds.length} away players`);
+    log(`[prefetch] personal histories: ${homePlayerIds.length} home, ${awayPlayerIds.length} away players${isTop5 ? '' : ' (skipped — non-top-5 league)'}`);
 
     const [cpHome, cpAway] = await Promise.all([
-      kvGet<CachedPlayers>(`pc:players:${hk}`),
-      kvGet<CachedPlayers>(`pc:players:${ak}`),
+      isTop5 ? kvGet<CachedPlayers>(`pc:players:${hk}`) : Promise.resolve(null),
+      isTop5 ? kvGet<CachedPlayers>(`pc:players:${ak}`) : Promise.resolve(null),
     ]);
 
-    const needHomePlayers = !cpHome || now - cpHome.cachedAt >= PLAYERS_TTL;
-    const needAwayPlayers = !cpAway || now - cpAway.cachedAt >= PLAYERS_TTL;
+    const needHomePlayers = isTop5 && (!cpHome || now - cpHome.cachedAt >= PLAYERS_TTL);
+    const needAwayPlayers = isTop5 && (!cpAway || now - cpAway.cachedAt >= PLAYERS_TTL);
 
     const [freshHomePlayers, freshAwayPlayers] = await Promise.all([
       needHomePlayers ? fetchPlayerPersonalHistoryBatch(homePlayerIds, apiKey) : Promise.resolve(null),

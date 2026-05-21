@@ -657,18 +657,29 @@ async function buildPlayers(
 
     // Pick the best source for dots per stat field.
     // Priority: per-player personal history (true last 5 across all comps) > AF team history > ESPN team history.
+    // Exception: some leagues (e.g. Eredivisie) don't populate per-fixture fouls/shots in the AF players endpoint,
+    // so personal history can have all-zero values for a field even when the player regularly commits fouls.
+    // In that case we fall through to AF/ESPN team history which does have the data.
     function bestLast5(name: string, espnId: string, field: keyof PlayerGameStat, threshold: number): boolean[] | null {
-      // Per-player personal history is the most accurate source — player's own last 5 regardless of competition
-      const personal = perPlayerLast5(name, field, threshold);
-      if (personal) return personal;
+      const pKey = normN(name);
+      const personalGames = perPlayerHistory.get(pKey)
+        ?? perPlayerHistory.get(pKey.split(' ').pop() ?? '')
+        ?? fuzzyPlayerLookup(pKey, perPlayerHistory);
 
       const afGames   = lookupAF(name);
       const espnGames = espnId ? espnHistory.get(espnId) : undefined;
       const afCount   = afGames?.length  ?? 0;
       const espnCount = espnGames?.length ?? 0;
 
+      const personalNonZero = personalGames ? personalGames.filter(g => (g[field] ?? 0) > 0).length : 0;
       const afNonZero   = afGames   ? afGames.filter(g   => (g[field] ?? 0) > 0).length : 0;
       const espnNonZero = espnGames ? espnGames.filter(g => (g[field] ?? 0) > 0).length : 0;
+
+      // Use personal history if it has real data for this field, or if no other source does either
+      if (personalGames?.length && (personalNonZero > 0 || (afNonZero === 0 && espnNonZero === 0))) {
+        const personal = perPlayerLast5(name, field, threshold);
+        if (personal) return personal;
+      }
 
       let games: PlayerGameStat[] | null | undefined;
       if (afNonZero > espnNonZero) {
@@ -1250,7 +1261,10 @@ async function runSync() {
       const hasGoodRef   = existingSheet?.referee?.name && existingSheet.referee.name !== 'TBC';
       const hasGoodGoals = (existingSheet?.homeTeam?.stats?.goalsFor ?? 0) > 0 &&
                            (existingSheet?.awayTeam?.stats?.goalsFor ?? 0) > 0;
-      if (sheetAge < guardTtl && hasGoodRef && hasGoodGoals) {
+      // Also require corners > 0 — a reliable signal that team stats were actually populated
+      const hasGoodStats = (existingSheet?.homeTeam?.stats?.cornersFor ?? 0) > 0 &&
+                           (existingSheet?.awayTeam?.stats?.cornersFor ?? 0) > 0;
+      if (sheetAge < guardTtl && hasGoodRef && hasGoodGoals && hasGoodStats) {
         log(`[sync] Skipping ${id} — sheet complete, built ${Math.round(sheetAge / 60000)}m ago`);
         if (!liveMatches.find((m: any) => m.id === id)) {
           liveMatches.push({
@@ -1389,7 +1403,11 @@ async function runSync() {
     // Load AF data from prefetch (zero quota) or fetch live as fallback
     const afApiKey = (process.env.API_SPORTS_KEY ?? '').trim();
     const espnLeagueToAfId: Record<string, number> = {
+      // European cups
       'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
+      // Domestic leagues — ensures correct AF team search when match comes from ESPN path
+      'eng.1': 39, 'eng.2': 40, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135,
+      'fra.1': 61, 'ned.1': 88, 'por.1': 94, 'bel.1': 144, 'sco.1': 179, 'tur.1': 203,
     };
     const afLeagueId = fromEspn
       ? (espnLeagueToAfId[(match as any)._espnLeague ?? ''] ?? 0)
@@ -1412,11 +1430,15 @@ async function runSync() {
       afOdds         = prefetched.odds;
       log(`[sync] AF data from prefetch — home ${homeAfResult.playerIds.size} ids, away ${awayAfResult.playerIds.size} ids`);
     } else {
+      // For domestic competitions, pass the known AF league ID to avoid team name guessing.
+      // For European cups (2, 3, 848), pass undefined so guessDomesticLeagueId finds the team's domestic league.
+      const EUROPEAN_CUP_IDS = new Set([2, 3, 848]);
+      const domesticLeagueHint = (afLeagueId && !EUROPEAN_CUP_IDS.has(afLeagueId)) ? afLeagueId : undefined;
       [homeAfResult, awayAfResult, homeSquadResult, awaySquadResult, afReferee, afOdds] = await Promise.all([
-        afApiKey ? fetchApiFootballTeamHistory(homeName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
-        afApiKey ? fetchApiFootballTeamHistory(awayName, afApiKey) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
-        afApiKey ? fetchApiFootballSquadStats(homeName, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
-        afApiKey ? fetchApiFootballSquadStats(awayName, afApiKey) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
+        afApiKey ? fetchApiFootballTeamHistory(homeName, afApiKey, domesticLeagueHint) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
+        afApiKey ? fetchApiFootballTeamHistory(awayName, afApiKey, domesticLeagueHint) : Promise.resolve({ history: new Map<string, PlayerGameStat[]>(), playerIds: new Map<string, number>(), afTeamId: 0, afTeamStats: null as AfTeamFixtureStats | null, debug: 'no key' }),
+        afApiKey ? fetchApiFootballSquadStats(homeName, afApiKey, domesticLeagueHint) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
+        afApiKey ? fetchApiFootballSquadStats(awayName, afApiKey, domesticLeagueHint) : Promise.resolve({ stats: new Map<string, AfSquadPlayer>(), debug: 'no key' }),
         (() => {
           if (!afApiKey) return Promise.resolve('');
           if (afLeagueId) return fetchApiFootballRefereeByLeague(afLeagueId, match.utcDate ?? '', homeName, awayName, afApiKey);
@@ -1428,6 +1450,20 @@ async function runSync() {
       log(`[af-history] away: ${awayAfResult.debug}`);
       log(`[af-squad] home: ${homeSquadResult.debug}`);
       log(`[af-squad] away: ${awaySquadResult.debug}`);
+    }
+
+    // When prefetch exists, the ESPN block above was skipped so __homeStats/__awayStats are unset.
+    // If AF team stats are also missing (e.g. Belgian/Scottish/Turkish fixtures where the AF
+    // statistics endpoint returns zeros), fall back to ESPN season stats now — free and lightweight.
+    if (confirmedEspnMeta && !(espnHistory as any).__homeStats &&
+        (!homeAfResult.afTeamStats || (homeAfResult.afTeamStats.shotsFor === 0 && homeAfResult.afTeamStats.cornersFor === 0))) {
+      const [homeResult, awayResult] = await Promise.all([
+        fetchTeamPlayerHistory(confirmedEspnMeta.homeTeamId, confirmedEspnMeta.league, homeName),
+        fetchTeamPlayerHistory(confirmedEspnMeta.awayTeamId, confirmedEspnMeta.league, awayName),
+      ]);
+      (espnHistory as any).__homeStats = homeResult.seasonStats;
+      (espnHistory as any).__awayStats = awayResult.seasonStats;
+      log(`[sync] ESPN season stats fallback: home corners=${homeResult.seasonStats?.cornersFor ?? 'n/a'} shots=${homeResult.seasonStats?.shotsFor ?? 'n/a'} | away corners=${awayResult.seasonStats?.cornersFor ?? 'n/a'} shots=${awayResult.seasonStats?.shotsFor ?? 'n/a'}`);
     }
 
     const homeStats = buildTeamStats(homeResults?.matches, match.homeTeam.id, (espnHistory as any).__homeStats ?? null, (espnHistory as any).__awayStats ?? null, homeAfResult.afTeamStats ?? null, awayAfResult.afTeamStats ?? null);

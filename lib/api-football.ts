@@ -81,12 +81,16 @@ function teamMatch(a: string, b: string) {
   return wordsA.some(w => nb.includes(w)) || wordsB.some(w => na.includes(w));
 }
 
-async function espnFetch(url: string) {
+async function espnFetch(url: string, _retries = 2): Promise<any> {
   await new Promise(r => setTimeout(r, 300));
   // Add cache-bust to bypass ESPN CDN caching on Vercel's shared IPs
   const sep = url.includes('?') ? '&' : '?';
   const bustUrl = `${url}${sep}_cb=${Date.now()}`;
   const res = await fetch(bustUrl, { headers: HEADERS, cache: 'no-store' });
+  if ((res.status === 429 || res.status >= 500) && _retries > 0) {
+    await new Promise(r => setTimeout(r, 1500 * (3 - _retries)));
+    return espnFetch(url, _retries - 1);
+  }
   if (!res.ok) throw new Error(`ESPN HTTP ${res.status} for ${url}`);
   return res.json();
 }
@@ -329,22 +333,31 @@ export async function fetchTeamPlayerHistory(
 
   const teamStatSamples: Array<{ mine: Record<string, number>; opp: Record<string, number> }> = [];
 
-  for (const eventId of eventIds) {
-    try {
+  // Fetch all event summaries in parallel (batches of 4 to avoid hammering ESPN)
+  const BATCH = 4;
+  for (let i = 0; i < eventIds.length; i += BATCH) {
+    const batch = eventIds.slice(i, i + BATCH);
+    const results = await Promise.allSettled(batch.map(async eventId => {
       const evLeague = leagueForId.get(eventId) ?? primaryLeague;
       const summary = await espnFetch(
         `https://site.api.espn.com/apis/site/v2/sports/soccer/${evLeague}/summary?event=${eventId}`
       );
-      const { stats, debug: eDebug } = extractEventStats(summary);
-      eventDebugs.push(`evt${eventId}:${eDebug}`);
-      for (const [athleteId, stat] of Array.from(stats)) {
-        if (!result.has(athleteId)) result.set(athleteId, []);
-        result.get(athleteId)!.push(stat);
+      return { eventId, summary };
+    }));
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        const { eventId, summary } = r.value;
+        const { stats, debug: eDebug } = extractEventStats(summary);
+        eventDebugs.push(`evt${eventId}:${eDebug}`);
+        for (const [athleteId, stat] of Array.from(stats)) {
+          if (!result.has(athleteId)) result.set(athleteId, []);
+          result.get(athleteId)!.push(stat);
+        }
+        const teamBox = extractBoxscoreTeamStats(summary, teamId);
+        if (teamBox) teamStatSamples.push(teamBox);
+      } else {
+        eventDebugs.push(`evt:error(${(r.reason as any)?.message ?? r.reason})`);
       }
-      const teamBox = extractBoxscoreTeamStats(summary, teamId);
-      if (teamBox) teamStatSamples.push(teamBox);
-    } catch (err: any) {
-      eventDebugs.push(`evt${eventId}:error(${err.message})`);
     }
   }
 
@@ -594,12 +607,16 @@ export async function findEspnFirstLeg(
 // ── API-Football fixture player stats (real last-5 game data) ────────────
 const AF_BASE = 'https://v3.football.api-sports.io';
 
-async function afFetch(path: string, apiKey: string): Promise<any> {
+async function afFetch(path: string, apiKey: string, _retries = 2): Promise<any> {
   await new Promise(r => setTimeout(r, 250));
   const res = await fetch(`${AF_BASE}${path}`, {
     headers: { 'x-apisports-key': apiKey },
     cache: 'no-store',
   });
+  if ((res.status === 429 || res.status >= 500) && _retries > 0) {
+    await new Promise(r => setTimeout(r, 1500 * (3 - _retries)));
+    return afFetch(path, apiKey, _retries - 1);
+  }
   if (!res.ok) throw new Error(`AF ${res.status}: ${path}`);
   return res.json();
 }
