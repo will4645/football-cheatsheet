@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const BASE_URL = 'https://api.football-data.org/v4';
-const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1', 'DED', 'PPL'];
+const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1'];
 
 function isAuthorized(req: NextRequest): boolean {
   const syncSecret = (process.env.SYNC_SECRET ?? '').trim();
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   // fd.org competition code → AF domestic league ID (cups omitted — guessDomesticLeagueId handles those)
   const FD_CODE_TO_AF_LEAGUE: Record<string, number> = {
-    PL: 39, PD: 140, BL1: 78, SA: 135, FL1: 61, DED: 88, PPL: 94,
+    PL: 39, PD: 140, BL1: 78, SA: 135, FL1: 61,
   };
 
   try {
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
         }));
 
     // Also prefetch AF-supplement leagues (Championship, Scottish Prem, etc.)
-    const AF_PREFETCH_LEAGUES = [40, 179, 144, 203];
+    const AF_PREFETCH_LEAGUES = [40];
     const afFixtureBatches = await Promise.all(
       AF_PREFETCH_LEAGUES.map(id =>
         fetchAfFixturesByDateRange(id, fmt(from), fmt(to), 2025, afApiKey).catch(() => []).then(fixes => ({ id, fixes }))

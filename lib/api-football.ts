@@ -19,11 +19,6 @@ const ESPN_LEAGUES = [
   'ger.1',               // Bundesliga
   'ita.1',               // Serie A
   'fra.1',               // Ligue 1
-  'por.1',               // Primeira Liga
-  'ned.1',               // Eredivisie
-  'bel.1',               // Belgian Pro League
-  'sco.1',               // Scottish Premiership
-  'tur.1',               // Süper Lig
 ];
 
 // Maps team name patterns to their domestic ESPN league slug

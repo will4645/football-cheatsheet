@@ -922,7 +922,7 @@ async function findEspnTeamId(league: string, teamName: string): Promise<string 
 
 // ── Football-data.org fetch ────────────────────────────────────────────────
 const BASE_URL = 'https://api.football-data.org/v4';
-const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1', 'DED', 'PPL'];
+const COMPETITIONS = ['PL', 'CL', 'EL', 'ECL', 'PD', 'BL1', 'SA', 'FL1'];
 const FINISHED_STATUSES = new Set(['FINISHED', 'AWARDED', 'CANCELLED']);
 
 const _apiCache = new Map<string, { data: any; exp: number }>();
@@ -1069,8 +1069,6 @@ async function runSync(forceRebuild = false) {
     { league: 'ita.1', compName: 'Serie A',           days: 14 },
     { league: 'esp.1', compName: 'La Liga',           days: 14 },
     { league: 'fra.1', compName: 'Ligue 1',           days: 14 },
-    { league: 'ned.1', compName: 'Eredivisie',        days: 14 },
-    { league: 'por.1', compName: 'Primeira Liga',     days: 14 },
   ];
   // Exclude liveMatches from seenIds so ESPN-sourced EL/ECL/CL matches get re-processed
   // every sync cycle (keeps referee, stats, etc. fresh throughout matchday)
@@ -1154,9 +1152,6 @@ async function runSync(forceRebuild = false) {
   // Uses API-Football as the match source for leagues outside fd.org's free tier.
   const AF_SUPPLEMENT_LEAGUES = [
     { leagueId: 40,  compName: 'EFL Championship',    espnSlug: 'eng.2' as string | null },
-    { leagueId: 179, compName: 'Scottish Premiership', espnSlug: 'sco.1' },
-    { leagueId: 144, compName: 'Belgian Pro League',   espnSlug: 'bel.1' },
-    { leagueId: 203, compName: 'Süper Lig',            espnSlug: 'tur.1' },
   ];
   const afSupKey = (process.env.API_SPORTS_KEY ?? '').trim();
   let afAdded = 0;
@@ -1415,7 +1410,7 @@ async function runSync(forceRebuild = false) {
       'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
       // Domestic leagues — ensures correct AF team search when match comes from ESPN path
       'eng.1': 39, 'eng.2': 40, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135,
-      'fra.1': 61, 'ned.1': 88, 'por.1': 94, 'bel.1': 144, 'sco.1': 179, 'tur.1': 203,
+      'fra.1': 61,
     };
     const afLeagueId = fromEspn
       ? (espnLeagueToAfId[(match as any)._espnLeague ?? ''] ?? 0)
