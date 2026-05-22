@@ -10,7 +10,7 @@ export default function PrivacyPage() {
       <Link href="/" className="text-[11px] text-gray-600 hover:text-gray-400 transition-colors">← Back</Link>
 
       <h1 className="text-2xl font-black text-white mt-6 mb-2 tracking-tight">Privacy Policy</h1>
-      <p className="text-xs text-gray-500 mb-10">Last updated: 19 May 2026</p>
+      <p className="text-xs text-gray-500 mb-10">Last updated: 22 May 2026</p>
 
       <div className="space-y-8 text-sm leading-relaxed text-gray-400">
 
@@ -27,8 +27,8 @@ export default function PrivacyPage() {
             and your rights under the UK General Data Protection Regulation (UK GDPR) and the Data Protection Act 2018.
           </p>
           <p className="mt-2">
-            We are in the process of registering with the Information Commissioner&apos;s Office (ICO) as required under UK law.
-            Our ICO registration number will be published here once confirmed.
+            We are registered with the Information Commissioner&apos;s Office (ICO) as required under UK law.
+            Our ICO registration reference is <span className="text-gray-300">ZC153221</span>.
           </p>
         </section>
 
