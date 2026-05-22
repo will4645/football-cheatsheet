@@ -671,14 +671,22 @@ async function buildPlayers(
       const afCount   = afGames?.length  ?? 0;
       const espnCount = espnGames?.length ?? 0;
 
+      const personalGameCount = personalGames?.length ?? 0;
       const personalNonZero = personalGames ? personalGames.filter(g => (g[field] ?? 0) > 0).length : 0;
       const afNonZero   = afGames   ? afGames.filter(g   => (g[field] ?? 0) > 0).length : 0;
       const espnNonZero = espnGames ? espnGames.filter(g => (g[field] ?? 0) > 0).length : 0;
+      const bestOtherNonZero = Math.max(afNonZero, espnNonZero);
 
-      // Use personal history if it has real data for this field, or if no other source does either
-      if (personalGames?.length && (personalNonZero > 0 || (afNonZero === 0 && espnNonZero === 0))) {
-        const personal = perPlayerLast5(name, field, threshold);
-        if (personal) return personal;
+      // Prefer personal history (true last 5 across all comps) only when it has at least as
+      // many non-zero values as AF/ESPN team history AND a full 5-game window.
+      // European cup fixtures often return all-zero stats for fouls/shots from the AF API,
+      // so personal history can look weaker than it is — if AF team history has more non-zero
+      // hits for a field, it's the more reliable source for that stat.
+      if (personalGames?.length && personalNonZero > 0) {
+        if (personalNonZero > bestOtherNonZero || (personalNonZero >= bestOtherNonZero && personalGameCount >= 5)) {
+          const personal = perPlayerLast5(name, field, threshold);
+          if (personal) return personal;
+        }
       }
 
       let games: PlayerGameStat[] | null | undefined;
@@ -934,7 +942,7 @@ async function apiFetch(path: string, ttlMs = 5 * 60 * 1000) {
 }
 
 // ── Main sync logic ────────────────────────────────────────────────────────
-async function runSync() {
+async function runSync(forceRebuild = false) {
   const logs: string[] = [];
   const log = (msg: string) => { console.log(msg); logs.push(msg); };
 
@@ -1254,7 +1262,7 @@ async function runSync() {
     // ── Early rebuild guard: skip ALL API calls if we have a good recent sheet ──
     // Only bypassed for live matches. Sheets with missing ref or zero goals are NOT
     // guarded so they get rebuilt when quota recovers.
-    if (!isLive) {
+    if (!isLive && !forceRebuild) {
       const existingSheet = await sbGet(`match:${id}`) as any;
       const sheetAge = existingSheet?._builtAt ? Date.now() - existingSheet._builtAt : Infinity;
       const guardTtl = hoursAway > 0 ? 6 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000;
@@ -1873,7 +1881,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
-    const logs = await runSync();
+    const force = req.nextUrl.searchParams.get('force') === '1';
+    const logs = await runSync(force);
     return NextResponse.json({ ok: true, logs });
   } catch (e: any) {
     console.error('[sync] Error:', e);

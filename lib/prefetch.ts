@@ -162,22 +162,24 @@ export async function prefetchMatch(
     log(`[prefetch] squad:   home=${homeSquad.debug}   | away=${awaySquad.debug}`);
 
     // ── Step 2: personal histories (cached per team, depends on playerIds) ──
-    // Skip for non-top-5 leagues: their /fixtures/players endpoint doesn't return fouls/shots,
-    // so personal history is unreliable for the main stats — bestLast5 falls back to team history instead.
-    const TOP5_LEAGUE_IDS = new Set([39, 140, 78, 135, 61]); // PL, La Liga, Bundesliga, Serie A, Ligue 1
-    const isTop5 = !leagueId || TOP5_LEAGUE_IDS.has(leagueId); // unknown league (cups etc.) → fetch anyway
+    // Skip for non-top-5 domestic leagues (Championship, Scottish Prem, etc.) whose
+    // /fixtures/players endpoint doesn't return fouls/shots — personal history adds noise there.
+    // Always fetch for top-5 leagues + European cups (CL/EL/ECL): cup games are critical
+    // for the true last-5-all-comps window and their per-player stats endpoint is reliable.
+    const PERSONAL_HISTORY_LEAGUES = new Set([39, 140, 78, 135, 61, 2, 3, 848]); // Top5 + CL/EL/ECL
+    const shouldFetchPersonal = !leagueId || PERSONAL_HISTORY_LEAGUES.has(leagueId);
 
     const homePlayerIds = Array.from(new Set(homeHistory.playerIds.values()));
     const awayPlayerIds = Array.from(new Set(awayHistory.playerIds.values()));
-    log(`[prefetch] personal histories: ${homePlayerIds.length} home, ${awayPlayerIds.length} away players${isTop5 ? '' : ' (skipped — non-top-5 league)'}`);
+    log(`[prefetch] personal histories: ${homePlayerIds.length} home, ${awayPlayerIds.length} away players${shouldFetchPersonal ? '' : ' (skipped — non-top-5 domestic league)'}`);
 
     const [cpHome, cpAway] = await Promise.all([
-      isTop5 ? kvGet<CachedPlayers>(`pc:players:${hk}`) : Promise.resolve(null),
-      isTop5 ? kvGet<CachedPlayers>(`pc:players:${ak}`) : Promise.resolve(null),
+      shouldFetchPersonal ? kvGet<CachedPlayers>(`pc:players:${hk}`) : Promise.resolve(null),
+      shouldFetchPersonal ? kvGet<CachedPlayers>(`pc:players:${ak}`) : Promise.resolve(null),
     ]);
 
-    const needHomePlayers = isTop5 && (!cpHome || now - cpHome.cachedAt >= PLAYERS_TTL);
-    const needAwayPlayers = isTop5 && (!cpAway || now - cpAway.cachedAt >= PLAYERS_TTL);
+    const needHomePlayers = shouldFetchPersonal && (!cpHome || now - cpHome.cachedAt >= PLAYERS_TTL);
+    const needAwayPlayers = shouldFetchPersonal && (!cpAway || now - cpAway.cachedAt >= PLAYERS_TTL);
 
     const [freshHomePlayers, freshAwayPlayers] = await Promise.all([
       needHomePlayers ? fetchPlayerPersonalHistoryBatch(homePlayerIds, apiKey) : Promise.resolve(null),
