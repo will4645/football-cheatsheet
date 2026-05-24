@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic';
+// Short CDN cache — competition page auto-refreshes every 60s anyway.
+export const dynamic = 'force-static';
 
 function parseKickoff(match: any): Date | null {
   if (match.utcDate) {
@@ -44,7 +45,7 @@ export async function GET() {
       return NextResponse.json({
         live: liveFiltered,
         upcoming: upcomingFiltered,
-      }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
+      }, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' } });
     } catch (e: any) {
       console.error('[matches] error:', e.message);
       return NextResponse.json({ live: [], upcoming: [], error: e.message });

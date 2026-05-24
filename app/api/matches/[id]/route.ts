@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
+// CDN-cached: Vercel edge serves this to all users for 55s before revalidating.
+// The sync cron writes a new sheet every 5 min, so max staleness is ~55s + propagation.
+// stale-while-revalidate=300 means the edge revalidates in the background — zero cold-cache
+// latency for any user.
+export const dynamic = 'force-static';
 
 export async function GET(
   _req: NextRequest,
@@ -17,7 +20,7 @@ export async function GET(
     });
     const { data } = await sb.from('match_cache').select('value').eq('key', `match:${id}`).single();
     if (data?.value) return NextResponse.json(data.value, {
-      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+      headers: { 'Cache-Control': 'public, s-maxage=55, stale-while-revalidate=300' },
     });
   }
 
