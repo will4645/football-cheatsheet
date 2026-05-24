@@ -1520,24 +1520,41 @@ async function runSync(forceRebuild = false) {
           team: PrefetchData['home'],
         ): Promise<Map<string, PlayerGameStat[]>> => {
           const result = new Map<string, PlayerGameStat[]>();
+          const nameToAfId = new Map<string, number>();
+          const needFetch: number[] = []; // AF IDs with empty personal history in prefetch
+
+          // Step 1: resolve AF IDs and collect which players need on-demand fetching.
+          // resolveAfId steps 1-3 are pure in-memory; only step 4 (lookupAfPlayerId) hits AF.
           for (const p of starters) {
             const name: string = p.name || '';
             if (!name) continue;
             const afId = await resolveAfId(name, team, afApiKey, log);
-            if (afId != null) {
-              let history: PlayerGameStat[] = team.personalHistories[String(afId)] ?? [];
-              if (history.length === 0) {
-                // Player wasn't in the prefetch batch (e.g. fringe/returning player) — fetch on demand
-                const batch = await fetchPlayerPersonalHistoryBatch([afId], afApiKey);
-                const fetched = batch.get(afId);
-                if (fetched && fetched.length > 0) {
-                  history = fetched;
-                  log(`[per-player] on-demand: "${name}" af:${afId} → ${history.length} games`);
-                }
-              }
-              if (history.length > 0) result.set(normPrefetch(name), history);
+            if (afId == null) continue;
+            nameToAfId.set(name, afId);
+            const history: PlayerGameStat[] = team.personalHistories[String(afId)] ?? [];
+            if (history.length > 0) {
+              result.set(normPrefetch(name), history);
+            } else {
+              needFetch.push(afId);
             }
           }
+
+          // Step 2: batch-fetch personal histories for all players missing from prefetch.
+          // One call instead of N — teammates share recent fixtures so fixture-stats calls
+          // (the expensive part) are deduplicated across the whole batch.
+          if (needFetch.length > 0) {
+            log(`[per-player] on-demand batch: ${needFetch.length} players`);
+            const batch = await fetchPlayerPersonalHistoryBatch(needFetch, afApiKey);
+            for (const [name, afId] of Array.from(nameToAfId)) {
+              if (result.has(normPrefetch(name))) continue; // already had cached history
+              const fetched = batch.get(afId);
+              if (fetched && fetched.length > 0) {
+                result.set(normPrefetch(name), fetched);
+                log(`[per-player] on-demand: "${name}" af:${afId} → ${fetched.length} games`);
+              }
+            }
+          }
+
           return result;
         };
 
