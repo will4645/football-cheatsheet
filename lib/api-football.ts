@@ -24,8 +24,9 @@ const ESPN_LEAGUES = [
 // Maps team name patterns to their domestic ESPN league slug
 const DOMESTIC_LEAGUE_HINTS: [RegExp, string][] = [
   // Championship teams first — prevents them matching the eng.1 pattern below
-  [/sunderland|burnley|leeds|luton|sheffield united|coventry|middlesbrough|norwich|swansea|cardiff|millwall|hull|derby|watford|stoke|qpr|queens park|preston|blackburn|bristol city|plymouth|oxford|portsmouth|sheff wed|sheffield wednesday|wba|west brom|barnsley|birmingham|rotherham|peterborough|reading|wigan|ipswich town/i, 'eng.2'],
-  [/arsenal|chelsea|liverpool|manchester|tottenham|brighton|aston villa|west ham|newcastle|brentford|fulham|everton|wolves|wolverhampton|crystal palace|bournemouth|nottingham|ipswich|leicester|southampton/i, 'eng.1'],
+  // NOTE: sunderland, burnley, leeds removed — they were promoted to the PL for 2025-26
+  [/luton|sheffield united|coventry|middlesbrough|norwich|swansea|cardiff|millwall|hull|derby|watford|stoke|qpr|queens park|preston|blackburn|bristol city|plymouth|oxford|portsmouth|sheff wed|sheffield wednesday|wba|west brom|barnsley|birmingham|rotherham|peterborough|reading|wigan|ipswich town/i, 'eng.2'],
+  [/arsenal|chelsea|liverpool|manchester|tottenham|brighton|aston villa|west ham|newcastle|brentford|fulham|everton|wolves|wolverhampton|crystal palace|bournemouth|nottingham|ipswich|leicester|southampton|sunderland|burnley|leeds/i, 'eng.1'],
   [/atlético|atletico|real madrid|barcelona|sevilla|villarreal|betis|osasuna|girona|athletic bilbao|athletic club|valencia|celta|getafe|mallorca|levante|espanol|espanyol|oviedo|alaves|álaves|rayo vallecano|rayo|leganes|leganés|valladolid|granada|almeria|almería/i, 'esp.1'],
   [/psg|paris saint|paris fc|lyon|marseille|monaco|lille|nice|lens|rennes|nantes|strasbourg|toulouse|auxerre|brest|metz|lorient|angers|havre|le havre|reims|montpellier|troyes|clermont|ajaccio|guingamp/i, 'fra.1'],
   [/bayern|dortmund|leverkusen|leipzig|frankfurt|freiburg|union berlin|wolfsburg|stuttgart|gladbach|monchengladbach|hoffenheim|augsburg|hamburger|hamburgsv|hamburg sv|köln|koln|st pauli|pauli|heidenheim|mainz|werder|bremen|bochum|schalke|paderborn|sandhausen|dusseldorf|düsseldorf/i, 'ger.1'],
@@ -642,13 +643,21 @@ export interface AfTeamFixtureStats {
   goalsFor: number;
   goalsAgainst: number;
   cornersFor: number;
+  cornersAgainst: number;
   shotsFor: number;
+  shotsAgainst: number;
   sotFor: number;
+  sotAgainst: number;
   foulsFor: number;
+  foulsAgainst: number;
   offsidesFor: number;
+  offsidesAgainst: number;
   tacklesFor: number;
+  tacklesAgainst: number;
   yellowCardsFor: number;
+  yellowCardsAgainst: number;
   savesFor: number;
+  savesAgainst: number;
   goalKicksFor: number;
   fixtureCount: number;
 }
@@ -717,6 +726,10 @@ export async function fetchApiFootballTeamHistory(
       offsides: number; tackles: number; yellowCards: number; saves: number;
       goalKicks: number;
     }> = [];
+    const fixtureOppStatsList: Array<{
+      corners: number; shots: number; sot: number; fouls: number;
+      offsides: number; yellowCards: number; saves: number;
+    }> = [];
     const goalsArr: { gf: number; ga: number }[] = [];
 
     const FINISHED = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO']);
@@ -734,9 +747,10 @@ export async function fetchApiFootballTeamHistory(
       if (gf >= 0 && ga >= 0) goalsArr.push({ gf, ga });
 
       // Fetch player stats and team fixture stats in parallel for the same fixture
+      // Statistics endpoint returns both teams — no &team= filter so we get opponent stats too
       const [pd, sd] = await Promise.all([
         afFetch(`/fixtures/players?fixture=${fid}&team=${teamId}`, apiKey),
-        afFetch(`/fixtures/statistics?fixture=${fid}&team=${teamId}`, apiKey),
+        afFetch(`/fixtures/statistics?fixture=${fid}`, apiKey),
       ]);
 
       // ── Player stats ──
@@ -777,17 +791,18 @@ export async function fetchApiFootballTeamHistory(
 
       // ── Team fixture stats ──
       const fixStatsArr: any[] = sd?.response ?? [];
-      // Response may contain both teams; find ours
       const fixTeam = fixStatsArr.find((r: any) => r.team?.id === teamId || r.team?.id === String(teamId))
         ?? fixStatsArr[0];
+      const fixOpp  = fixStatsArr.find((r: any) => r.team?.id !== teamId && r.team?.id !== String(teamId) && r !== fixTeam);
+      const makeStat = (statsBlock: any) => (type: string): number => {
+        const entry = (statsBlock.statistics as any[]).find((s: any) => s.type === type);
+        const val = entry?.value;
+        if (val === null || val === undefined) return 0;
+        if (typeof val === 'string' && val.endsWith('%')) return 0;
+        return typeof val === 'number' ? val : (parseInt(String(val)) || 0);
+      };
       if (fixTeam?.statistics) {
-        const getFixStat = (type: string): number => {
-          const entry = (fixTeam.statistics as any[]).find((s: any) => s.type === type);
-          const val = entry?.value;
-          if (val === null || val === undefined) return 0;
-          if (typeof val === 'string' && val.endsWith('%')) return 0;
-          return typeof val === 'number' ? val : (parseInt(String(val)) || 0);
-        };
+        const getFixStat = makeStat(fixTeam);
         fixtureTeamStatsList.push({
           corners:     getFixStat('Corner Kicks'),
           shots:       getFixStat('Total Shots'),
@@ -800,6 +815,18 @@ export async function fetchApiFootballTeamHistory(
           goalKicks:   getFixStat('Goal Kicks'),
         });
       }
+      if (fixOpp?.statistics) {
+        const getOppStat = makeStat(fixOpp);
+        fixtureOppStatsList.push({
+          corners:     getOppStat('Corner Kicks'),
+          shots:       getOppStat('Total Shots'),
+          sot:         getOppStat('Shots on Goal'),
+          fouls:       getOppStat('Fouls'),
+          offsides:    getOppStat('Offsides'),
+          yellowCards: getOppStat('Yellow Cards'),
+          saves:       getOppStat('Goalkeeper Saves'),
+        });
+      }
     }
 
     // Aggregate fixture team stats into per-game averages
@@ -808,27 +835,40 @@ export async function fetchApiFootballTeamHistory(
       const n = fixtureTeamStatsList.length;
       const sum = (key: keyof typeof fixtureTeamStatsList[0]) =>
         fixtureTeamStatsList.reduce((acc, x) => acc + x[key], 0);
-      // For stats that may be absent (return 0) in some leagues, only average the
-      // fixtures where the stat was actually reported (value > 0), so a missing stat
-      // doesn't drag the average down to near-zero.
       const avgOrNull = (key: keyof typeof fixtureTeamStatsList[0]): number => {
         const present = fixtureTeamStatsList.filter(x => x[key] > 0);
         if (present.length === 0) return 0;
         return +(present.reduce((acc, x) => acc + x[key], 0) / present.length).toFixed(2);
       };
+      // Opponent stats for "against" averages (real defensive data, not a proxy)
+      const no = fixtureOppStatsList.length;
+      const oppAvg = (key: keyof typeof fixtureOppStatsList[0]): number => {
+        if (no === 0) return 0;
+        const present = fixtureOppStatsList.filter(x => x[key] > 0);
+        if (present.length === 0) return 0;
+        return +(present.reduce((acc, x) => acc + x[key], 0) / present.length).toFixed(2);
+      };
       afTeamStats = {
-        goalsFor:       goalsArr.length > 0 ? +(goalsArr.reduce((s, x) => s + x.gf, 0) / goalsArr.length).toFixed(2) : 0,
-        goalsAgainst:   goalsArr.length > 0 ? +(goalsArr.reduce((s, x) => s + x.ga, 0) / goalsArr.length).toFixed(2) : 0,
-        cornersFor:     +(sum('corners')     / n).toFixed(2),
-        shotsFor:       +(sum('shots')       / n).toFixed(2),
-        sotFor:         +(sum('sot')         / n).toFixed(2),
-        foulsFor:       +(sum('fouls')       / n).toFixed(2),
-        offsidesFor:    +(sum('offsides')    / n).toFixed(2),
-        tacklesFor:     avgOrNull('tackles'),
-        yellowCardsFor: +(sum('yellowCards') / n).toFixed(2),
-        savesFor:       avgOrNull('saves'),
-        goalKicksFor:   avgOrNull('goalKicks'),
-        fixtureCount:   n,
+        goalsFor:          goalsArr.length > 0 ? +(goalsArr.reduce((s, x) => s + x.gf, 0) / goalsArr.length).toFixed(2) : 0,
+        goalsAgainst:      goalsArr.length > 0 ? +(goalsArr.reduce((s, x) => s + x.ga, 0) / goalsArr.length).toFixed(2) : 0,
+        cornersFor:        +(sum('corners')     / n).toFixed(2),
+        cornersAgainst:    oppAvg('corners'),
+        shotsFor:          +(sum('shots')       / n).toFixed(2),
+        shotsAgainst:      oppAvg('shots'),
+        sotFor:            +(sum('sot')         / n).toFixed(2),
+        sotAgainst:        oppAvg('sot'),
+        foulsFor:          +(sum('fouls')       / n).toFixed(2),
+        foulsAgainst:      oppAvg('fouls'),
+        offsidesFor:       +(sum('offsides')    / n).toFixed(2),
+        offsidesAgainst:   oppAvg('offsides'),
+        tacklesFor:        avgOrNull('tackles'),
+        tacklesAgainst:    0,
+        yellowCardsFor:    +(sum('yellowCards') / n).toFixed(2),
+        yellowCardsAgainst: oppAvg('yellowCards'),
+        savesFor:          avgOrNull('saves'),
+        savesAgainst:      oppAvg('saves'),
+        goalKicksFor:      avgOrNull('goalKicks'),
+        fixtureCount:      n,
       };
     }
 
@@ -1117,7 +1157,12 @@ export async function fetchPlayerPersonalHistoryBatch(
 
   for (const playerId of playerAfIds) {
     try {
-      const fd = await afFetch(`/fixtures?player=${playerId}&last=${fetchCount}`, apiKey);
+      // Some AF plan tiers require an explicit season for /fixtures?player — try without first,
+      // then fall back to current season if the response is empty.
+      let fd = await afFetch(`/fixtures?player=${playerId}&last=${fetchCount}`, apiKey);
+      if (!fd?.response?.length) {
+        fd = await afFetch(`/fixtures?player=${playerId}&season=2025&last=${fetchCount}`, apiKey);
+      }
       const fixtures: any[] = fd?.response ?? [];
       if (fixtures.length > 0) {
         const FINISHED = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO']);

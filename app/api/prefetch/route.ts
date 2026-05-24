@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prefetchMatch } from '@/lib/prefetch';
 import { fetchAfFixturesByDateRange } from '@/lib/api-football';
-import { kvGet } from '@/lib/store';
+import { kvGet, kvSet } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -22,6 +22,12 @@ function isAuthorized(req: NextRequest): boolean {
 function matchSlug(home: string, away: string): string {
   const s = (v: string) => (v || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   return `${s(home)}-vs-${s(away)}`;
+}
+
+// Strip common club suffix tokens so the slug matches ESPN names (which omit " FC").
+// e.g. "Brighton & Hove Albion FC" → "Brighton & Hove Albion"
+function stripClubSuffix(name: string): string {
+  return name.replace(/\s+(fc|afc|sc|cf|fk|bk|if|sk|ac|bc|athletic)\s*$/i, '').trim();
 }
 
 export async function GET(req: NextRequest) {
@@ -53,9 +59,10 @@ export async function GET(req: NextRequest) {
       `${BASE_URL}/matches?competitions=${COMPETITIONS.join(',')}&dateFrom=${fmt(from)}&dateTo=${fmt(to)}`,
       { headers: { 'X-Auth-Token': process.env.FOOTBALL_DATA_KEY! }, cache: 'no-store' },
     );
-    if (!res.ok) return NextResponse.json({ error: `fd.org ${res.status}` }, { status: 500 });
+    // Don't bail early if fd.org is down — ESPN supplement covers PL and major leagues below
+    if (!res.ok) log(`[prefetch] fd.org ${res.status} — continuing with ESPN supplement`);
 
-    const data = await res.json();
+    const data = res.ok ? await res.json() : {};
     const matches: any[] = data?.matches ?? [];
     log(`[prefetch] ${matches.length} matches from fd.org`);
 
@@ -74,6 +81,51 @@ export async function GET(req: NextRequest) {
           afLeagueId: FD_CODE_TO_AF_LEAGUE[m.competition?.code ?? ''],
         }));
 
+    // ── ESPN supplement: discover matches when fd.org is down or missing leagues ──
+    // Hits the public ESPN scoreboard API for each major domestic + European league.
+    const ESPN_PREFETCH_LEAGUES = [
+      { slug: 'eng.1', afLeagueId: 39 },
+      { slug: 'uefa.champions', afLeagueId: 2 },
+      { slug: 'uefa.europa', afLeagueId: 3 },
+      { slug: 'uefa.europa.conf', afLeagueId: 848 },
+      { slug: 'esp.1', afLeagueId: 140 },
+      { slug: 'ger.1', afLeagueId: 78 },
+      { slug: 'ita.1', afLeagueId: 135 },
+      { slug: 'fra.1', afLeagueId: 61 },
+    ];
+    const nearTermIds = new Set(nearTerm.map(m => matchSlug(m.homeTeam.name, m.awayTeam.name)));
+    for (const { slug, afLeagueId } of ESPN_PREFETCH_LEAGUES) {
+      for (let d = 0; d <= 2; d++) {
+        const checkDate = new Date(today.getTime() + d * 24 * 60 * 60 * 1000);
+        const ds = checkDate.toISOString().slice(0, 10).replace(/-/g, '');
+        try {
+          const espnRes = await fetch(
+            `https://site.api.espn.com/apis/site/v2/sports/soccer/${slug}/scoreboard?dates=${ds}&_cb=${Date.now()}`,
+            { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36', 'Accept': 'application/json' }, cache: 'no-store' }
+          );
+          if (!espnRes.ok) continue;
+          const board = await espnRes.json();
+          for (const ev of (board.events ?? [])) {
+            const comp = ev.competitions?.[0];
+            if (!comp) continue;
+            const homeC = comp.competitors?.find((c: any) => c.homeAway === 'home');
+            const awayC = comp.competitors?.find((c: any) => c.homeAway === 'away');
+            if (!homeC?.team?.displayName || !awayC?.team?.displayName) continue;
+            const homeTeamName = homeC.team.displayName as string;
+            const awayTeamName = awayC.team.displayName as string;
+            const utcDate = ev.date as string;
+            const hoursAway = (new Date(utcDate).getTime() - Date.now()) / 3_600_000;
+            if (hoursAway < -2 || hoursAway > 24) continue;
+            const slug2 = matchSlug(homeTeamName, awayTeamName);
+            if (nearTermIds.has(slug2)) continue; // already have it from fd.org
+            nearTermIds.add(slug2);
+            nearTerm.push({ homeTeam: { name: homeTeamName }, awayTeam: { name: awayTeamName }, utcDate, afLeagueId });
+          }
+        } catch {}
+      }
+    }
+    log(`[prefetch] ${nearTerm.length} near-term matches after ESPN supplement`);
+
     // Also prefetch AF-supplement leagues (Championship, Scottish Prem, etc.)
     const AF_PREFETCH_LEAGUES = [40];
     const afFixtureBatches = await Promise.all(
@@ -90,7 +142,7 @@ export async function GET(req: NextRequest) {
         }
       }
     }
-    log(`[prefetch] ${nearTerm.length} near-term matches (fd.org + AF leagues)`);
+    log(`[prefetch] ${nearTerm.length} near-term matches total (fd.org + ESPN + AF supplement)`);
 
     let done = 0, skipped = 0;
     for (const m of nearTerm) {
@@ -107,7 +159,24 @@ export async function GET(req: NextRequest) {
       }
 
       const ok = await prefetchMatch(id, m.homeTeam.name, m.awayTeam.name, m.utcDate, afApiKey, log, m.afLeagueId);
-      if (ok) done++;
+      if (ok) {
+        done++;
+        // Mirror-save under the FC-stripped slug so the sync route (which derives match IDs
+        // from ESPN team names that omit " FC") can hit the prefetch cache even when fd.org
+        // supplied the original names. e.g. "Brighton & Hove Albion FC" → "Brighton & Hove Albion"
+        const mirrorId = matchSlug(stripClubSuffix(m.homeTeam.name), stripClubSuffix(m.awayTeam.name));
+        if (mirrorId !== id) {
+          try {
+            const blob = await kvGet<unknown>(`prefetch:${id}`);
+            if (blob) {
+              await kvSet(`prefetch:${mirrorId}`, blob);
+              log(`[prefetch] mirror-saved under ESPN key: ${mirrorId}`);
+            }
+          } catch (mirrorErr: any) {
+            log(`[prefetch] mirror-save failed: ${mirrorErr?.message}`);
+          }
+        }
+      }
     }
 
     log(`[prefetch] Done — ${done} fetched, ${skipped} skipped (fresh)`);

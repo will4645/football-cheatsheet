@@ -275,34 +275,32 @@ function buildTeamStats(
   const af = afStats;
   const oaf = oppAfStats;
 
-  // For "for" stats: own AF data is most accurate (from fixture stats endpoint, filtered to this team).
-  // For "against" stats: use this team's own ESPN season boxscore averages first (opp-side data
-  // from completed events gives genuine defensive averages), then fall back to opponent AF/ESPN.
-  // Do NOT use own AF "for" as a proxy for "against" — that causes for==against mirroring when
-  // opponent data is unavailable. Similarly do NOT use oaf "for" as a proxy for own "for" —
-  // opponent's corners/shots are not a proxy for your own corners/shots.
-  const cornersFor      = af?.cornersFor     || e?.cornersFor      || o?.cornersAgainst   || 5.0;
-  const cornersAgainst  = e?.cornersAgainst  || oaf?.cornersFor    || o?.cornersFor       || 5.0;
-  const shotsFor        = af?.shotsFor       || e?.shotsFor        || o?.shotsAgainst     || 13.0;
-  const shotsAgainst    = e?.shotsAgainst    || oaf?.shotsFor      || o?.shotsFor         || 11.0;
-  const sotFor          = af?.sotFor         || e?.sotFor          || o?.sotAgainst       || 4.5;
-  const sotAgainst      = e?.sotAgainst      || oaf?.sotFor        || o?.sotFor           || 3.8;
-  const foulsCommitted  = af?.foulsFor       || e?.foulsCommitted  || o?.foulsWon         || 11.0;
-  const foulsWon        = e?.foulsWon        || oaf?.foulsFor      || o?.foulsCommitted   || 11.0;
-  const cardsFor        = af?.yellowCardsFor || e?.cardsFor        || o?.cardsAgainst     || 1.8;
-  const cardsAgainst    = e?.cardsAgainst    || oaf?.yellowCardsFor|| o?.cardsFor         || 1.8;
-  // Tackles: aggregated from per-player AF stats (s.tackles.total) — real data, not a fixture-level stat
-  const tacklesFor      = af?.tacklesFor     || e?.tacklesFor      || o?.tacklesAgainst   || 18.0;
-  const tacklesAgainst  = oaf?.tacklesFor    || e?.tacklesAgainst  || o?.tacklesFor       || 18.0;
-  const offsidesFor     = af?.offsidesFor    || e?.offsidesFor     || o?.offsidesAgainst  || 2.0;
-  const offsidesAgainst = e?.offsidesAgainst || oaf?.offsidesFor   || o?.offsidesFor      || 2.0;
-  // Free kicks for = fouls this team WON = opponent's committed fouls (oaf.foulsFor is a good proxy)
-  const freeKicksFor    = e?.freeKicksFor    || oaf?.foulsFor      || o?.freeKicksAgainst || foulsWon    || 10.0;
-  // Free kicks against = fouls this team committed = own fouls (af.foulsFor is a good proxy here)
-  const freeKicksAgainst= e?.freeKicksAgainst|| af?.foulsFor       || o?.freeKicksFor     || foulsCommitted || 10.0;
-  // Saves: AF fixture data first, then ESPN season stats, then derive from SOT - goals (never use own data for against side)
-  const savesFor     = af?.savesFor  || e?.savesFor   || (sotAgainst > avgAgainst ? +(sotAgainst - avgAgainst).toFixed(2) : 0) || oaf?.savesFor || 3.8;
-  const savesAgainst = oaf?.savesFor || e?.savesAgainst|| (sotFor    > avgFor     ? +(sotFor     - avgFor    ).toFixed(2) : 0) || 3.5;
+  // For "for" stats: own AF fixture data is most accurate.
+  // For "against" stats: af.cornersAgainst etc. are now real defensive averages computed from
+  // opponent fixture stats — use these first. Fall back to ESPN season stats, then opponent AF,
+  // then opponent ESPN. Do NOT use own AF "for" as a proxy for "against".
+  const cornersFor      = af?.cornersFor        || e?.cornersFor      || o?.cornersAgainst    || 5.0;
+  const cornersAgainst  = af?.cornersAgainst    || e?.cornersAgainst  || oaf?.cornersFor      || o?.cornersFor        || 5.0;
+  const shotsFor        = af?.shotsFor          || e?.shotsFor        || o?.shotsAgainst      || 13.0;
+  const shotsAgainst    = af?.shotsAgainst      || e?.shotsAgainst    || oaf?.shotsFor        || o?.shotsFor          || 11.0;
+  const sotFor          = af?.sotFor            || e?.sotFor          || o?.sotAgainst        || 4.5;
+  const sotAgainst      = af?.sotAgainst        || e?.sotAgainst      || oaf?.sotFor          || o?.sotFor            || 3.8;
+  const foulsCommitted  = af?.foulsFor          || e?.foulsCommitted  || o?.foulsWon          || 11.0;
+  const foulsWon        = af?.foulsAgainst      || e?.foulsWon        || oaf?.foulsFor        || o?.foulsCommitted    || 11.0;
+  const cardsFor        = af?.yellowCardsFor    || e?.cardsFor        || o?.cardsAgainst      || 1.8;
+  const cardsAgainst    = af?.yellowCardsAgainst|| e?.cardsAgainst    || oaf?.yellowCardsFor  || o?.cardsFor          || 1.8;
+  // Tackles: aggregated from per-player AF stats — no fixture-level "against" available
+  const tacklesFor      = af?.tacklesFor        || e?.tacklesFor      || o?.tacklesAgainst    || 18.0;
+  const tacklesAgainst  = oaf?.tacklesFor       || e?.tacklesAgainst  || o?.tacklesFor        || 18.0;
+  const offsidesFor     = af?.offsidesFor       || e?.offsidesFor     || o?.offsidesAgainst   || 2.0;
+  const offsidesAgainst = af?.offsidesAgainst   || e?.offsidesAgainst || oaf?.offsidesFor     || o?.offsidesFor       || 2.0;
+  // Free kicks for = fouls this team WON = opponent's committed fouls
+  const freeKicksFor    = e?.freeKicksFor       || af?.foulsAgainst   || oaf?.foulsFor        || o?.freeKicksAgainst  || foulsWon    || 10.0;
+  // Free kicks against = fouls this team committed = own fouls
+  const freeKicksAgainst= e?.freeKicksAgainst   || af?.foulsFor       || o?.freeKicksFor      || foulsCommitted || 10.0;
+  // Saves
+  const savesFor     = af?.savesFor     || e?.savesFor    || (sotAgainst > avgAgainst ? +(sotAgainst - avgAgainst).toFixed(2) : 0) || oaf?.savesFor || 3.8;
+  const savesAgainst = af?.savesAgainst || oaf?.savesFor  || e?.savesAgainst || (sotFor > avgFor ? +(sotFor - avgFor).toFixed(2) : 0) || 3.5;
   return {
     goalsFor: +avgFor.toFixed(2), goalsAgainst: +avgAgainst.toFixed(2),
     over25Goals:    overProb(avgFor + avgAgainst, 2.5),
@@ -1350,7 +1348,40 @@ async function runSync(forceRebuild = false) {
 
     // Load prefetch data (zero AF calls if present).
     // Use prefetch even for live matches — player history and team stats don't change mid-game.
-    const prefetched = await sbGet(`prefetch:${id}`) as PrefetchData | null;
+    let prefetched = await sbGet(`prefetch:${id}`) as PrefetchData | null;
+    if (!prefetched) {
+      // fd.org team names often include a ' FC' suffix that ESPN names omit (e.g.
+      // "Brighton & Hove Albion FC" vs "Brighton & Hove Albion"). When fd.org is down
+      // and ESPN supplies team names, the exact prefetch key won't match. Fall back to
+      // a normMatchId-based scan so we still find the prefetched data.
+      try {
+        const sbScan = getSb();
+        if (sbScan) {
+          const { data: pRows } = await sbScan
+            .from('match_cache')
+            .select('key, value')
+            .like('key', 'prefetch:%')
+            .limit(60);
+          const normTarget = normMatchId(homeName, awayName);
+          for (const row of (pRows ?? [])) {
+            const slug = (row.key as string).slice('prefetch:'.length);
+            const parts = slug.split('-vs-');
+            if (parts.length !== 2) continue;
+            const rowNorm = normMatchId(
+              parts[0].replace(/-+/g, ' '),
+              parts[1].replace(/-+/g, ' '),
+            );
+            if (rowNorm === normTarget) {
+              prefetched = row.value as PrefetchData;
+              log(`[sync] Prefetch via norm-scan: ${row.key} → ${id}`);
+              break;
+            }
+          }
+        }
+      } catch (scanErr: any) {
+        log(`[sync] Prefetch scan error: ${scanErr?.message}`);
+      }
+    }
     if (prefetched) log(`[sync] Prefetch found for ${id} (fetched ${Math.round((Date.now() - prefetched.fetchedAt) / 60000)}m ago)`);
 
     // Step 3: Fetch per-player ESPN history — skip when prefetch covers it
