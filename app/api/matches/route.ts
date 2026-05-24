@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-// Short CDN cache — competition page auto-refreshes every 60s anyway.
-export const dynamic = 'force-static';
+// Keep dynamic — reads live Supabase data. Vercel CDN caching driven by Cache-Control header.
+export const dynamic = 'force-dynamic';
 
 function parseKickoff(match: any): Date | null {
   if (match.utcDate) {

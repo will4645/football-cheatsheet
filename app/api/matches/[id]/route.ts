@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// CDN-cached: Vercel edge serves this to all users for 55s before revalidating.
-// The sync cron writes a new sheet every 5 min, so max staleness is ~55s + propagation.
-// stale-while-revalidate=300 means the edge revalidates in the background — zero cold-cache
-// latency for any user.
-export const dynamic = 'force-static';
+// Keep dynamic — params.id is needed at runtime. Vercel CDN caching is driven by the
+// Cache-Control s-maxage header below, not by the dynamic export.
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   _req: NextRequest,
