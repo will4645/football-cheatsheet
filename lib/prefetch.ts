@@ -274,14 +274,13 @@ function levenshtein(a: string, b: string): number {
   if (Math.abs(a.length - b.length) > 3) return 99;
   const dp: number[] = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i = 1; i <= a.length; i++) {
-    let prev = i;
+    let prev = dp[0]; // dp[i-1][0] — must save before overwriting
+    dp[0] = i;
     for (let j = 1; j <= b.length; j++) {
-      const tmp = dp[j];
-      dp[j] = a[i-1] === b[j-1] ? dp[j-1] : 1 + Math.min(dp[j-1], dp[j], prev);
-      dp[j-1] = prev;
+      const tmp = dp[j]; // save dp[i-1][j] before overwriting
+      dp[j] = a[i-1] === b[j-1] ? prev : 1 + Math.min(tmp, dp[j-1], prev);
       prev = tmp;
     }
-    dp[b.length] = prev;
   }
   return dp[b.length];
 }
