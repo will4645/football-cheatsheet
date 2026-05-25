@@ -33,8 +33,9 @@ Three data sources, combined per match:
 2. **API-Football / api-sports.io** — player stats, squad history, odds, referee. Key: `API_SPORTS_KEY`
 3. **ESPN internal API** (free) — lineups, per-game player stats
 
-Two cron jobs:
-- **Prefetch (7am daily)**: pre-warms AF data into Supabase caches (`pc:hist:*`, `pc:squad:*`, `pc:players:*`, `pc:odds:*`, `pc:ref:*`)
+Three cron jobs:
+- **Prefetch (7am UTC daily)**: pre-warms AF data into Supabase caches (`pc:hist:*`, `pc:squad:*`, `pc:players:*`, `pc:odds:*`, `pc:ref:*`)
+- **Prefetch (11am UTC daily)**: second run — belt-and-suspenders for teams the 7am run missed
 - **Sync (every 5 min)**: reads prefetch cache + ESPN lineups → writes `match:{slug}` sheets
 
 ## Key Files — Do NOT touch carelessly
@@ -42,8 +43,8 @@ Two cron jobs:
 | File | Purpose |
 |------|---------|
 | `lib/api-football.ts` | All AF + ESPN fetching. Has retry logic, parallel ESPN batches, cleanForSearch prefix stripping |
-| `lib/prefetch.ts` | Morning cron: pre-warms AF data. `PERSONAL_HISTORY_LEAGUES` controls per-player history fetch |
-| `app/api/sync/route.ts` | 5-min cron: builds match sheets. `bestLast5()` source selection, `buildPlayers()` aggregation |
+| `lib/prefetch.ts` | Morning cron: pre-warms AF data. `PERSONAL_HISTORY_LEAGUES` controls per-player history fetch. `resolveAfId` 7-step name resolution |
+| `app/api/sync/route.ts` | 5-min cron: builds match sheets. `bestLast5()` source selection, `buildPlayers()` aggregation, ESPN fallback, on-demand re-prefetch |
 | `app/api/prefetch/route.ts` | HTTP endpoint for the prefetch cron |
 | `components/MatchSheet.tsx` | Cheatsheet UI. `Last5Dots` + `CardDots` render player stat dots |
 | `data/match.ts` | TypeScript types for match/player data |
@@ -56,10 +57,10 @@ Each player shows 5 dots per stat: fouls committed, fouls won, shots on target, 
 
 **Source priority inside `bestLast5()`:**
 1. Personal history (`perPlayerHistory`) — true last 5 games across ALL competitions per player by AF ID. Only used when `personalNonZero > bestOtherNonZero` OR (`personalNonZero >= bestOtherNonZero` AND full 5-game window, no gaps).
-2. AF team history (`afHistory`) — last 10 fixtures from `/fixtures/players?fixture=X&team=Y`, all comps, newest-first.
+2. AF team history (`afHistory`) — last 15 fixtures from `/fixtures/players?fixture=X&team=Y`, all comps, newest-first.
 3. ESPN team history (`espnHistory`) — from ESPN event summaries, fetched live at sync time.
 
-**Personal history leagues**: `PERSONAL_HISTORY_LEAGUES = {39,140,78,135,61,2,3,848}` (top-5 + CL/EL/ECL). Non-top-5 domestic leagues skipped because their AF endpoint returns zero fouls/shots.
+**Personal history leagues**: `PERSONAL_HISTORY_LEAGUES = {39,140,78,135,61,2,3,848}` (top-5 + CL/EL/ECL). Championship (40) excluded: AF `/players` endpoint returns zero fouls/shots for Championship, adding noise not signal. FA Cup has no AF league ID mapping so `!leagueId` evaluates true and personal history IS fetched for FA Cup. All leagues get AF team history + ESPN fallback.
 
 **Dot ordering**: arrays are `[oldest → newest]` left-to-right. Built by slicing newest-first array, reversing, then padding false at start for <5 games.
 
@@ -73,12 +74,31 @@ Each player shows 5 dots per stat: fouls committed, fouls won, shots on target, 
 - Word-by-word team search fallback (tries each word ≥4 chars, longest first, with/without league filter)
 - Failed team lookups cached with 2h TTL (`FAILED_TTL`) to stop wasting AF quota
 - `afLeagueId` threaded from prefetch route → `prefetchMatch` → team search (league-scoped)
-- `espnLeagueToAfId` covers Championship(40), Scottish Prem(179), Belgian(144), Turkish(203), Dutch(88), Portuguese(94)
+- `espnLeagueToAfId` covers Championship(40) and all active leagues
 - Guard TTL requires `cornersFor > 0` on both teams before locking sheet as fresh
+- Guard also requires `hasGoodPlayers` (both teams have defensive players) — prevents locking sheets with empty player tabs
 - ESPN season-stats fallback only triggers when both `shotsFor === 0 AND cornersFor === 0`
-- `resolveAfId` 4-step auto-repair name resolution (exact → surname → long word → AF live lookup)
+- `resolveAfId` 7-step auto-repair name resolution (see below)
+- `resolveFromPrefetch` word-scan fallback — matches on words ≥5 chars when all 7 steps fail
 - On-demand `fetchPlayerPersonalHistoryBatch` fallback in sync when prefetch has empty personal histories
+- On-demand re-prefetch mid-sync when `fixtureHistory` is empty for either team
+- ESPN player history fetched as fallback in sync when `fixtureHistory` empty and `confirmedEspnMeta` available
+- `hasLineups` requires BOTH home AND away lineup confirmed before building sheet
 - `?force=1` on `/api/sync` and `/api/prefetch` to bypass guards
+
+## resolveAfId — 7-Step Name Resolution (lib/prefetch.ts)
+
+Runs when a lineup player name doesn't match any prefetch cache key. Steps 1-5 are free (in-memory). Steps 6-7 cost 1-2 AF calls each, only fire when needed.
+
+1. **Exact match** — lowercase both sides
+2. **Surname match** — last word of lineup name matches last word of any cache key
+3. **Long word match** — any word ≥6 chars in lineup name found in any cache key
+4. **AF live lookup** — `lookupAfPlayerId(fullName, afTeamId)` — AF search scoped to the team
+5. **Short surname** — surname ≥3 chars, direct key lookup (catches "Ji" style short surnames)
+6. **Fuzzy surname** — Levenshtein edit distance ≤2 on surnames ≥5 chars, same first letter (catches typos/accent differences)
+7. **AF surname search** — `lookupAfPlayerId(surname, afTeamId)` — retry with surname only
+
+`levenshtein()` uses standard one-row DP: saves `prev = dp[0]`, sets `dp[0] = i`, then `prev = tmp` only in body. DO NOT add `dp[j-1] = prev` or `dp[b.length] = prev` — those lines corrupt the array (were present in a buggy version deployed briefly in May 2026 and caused Step 6 to return wrong distances for all inputs).
 
 ## AF League IDs Reference
 
@@ -91,37 +111,70 @@ PL=39, La Liga=140, Bundesliga=78, Serie A=135, Ligue 1=61, Championship=40, CL=
 1. `/api/prefetch?secret=SYNC_SECRET&force=1` — re-runs morning prefetch for all near-term matches
 2. `/api/sync?secret=SYNC_SECRET&force=1` — bypasses 6h guard, rebuilds all sheets immediately
 
-## Current Status (last updated 2026-05-25)
+## Quota Usage
 
-**Done and deployed (latest commit 6ac0553 on master):**
-- Full pipeline hardening (retries, parallel fetches, team search fallbacks, failed-lookup caching)
-- Player dots bugs fixed: ECL/EL/CL now fetch personal history, `bestLast5` source selection fixed
-- Stripe + Clerk in production mode
-- ICO registration complete — ZC153221 (CHEAT SHEETS LTD)
-- `STRIPE_ANNUAL_PRICE_ID` confirmed set in Vercel production env vars
-- Starling business bank account approved
-- Netherlands, Portugal, Scotland, Turkey, Belgium leagues removed (unreliable data)
-- **2026-05-23**: Fixed team stats mirroring bug (Championship + non-ESPN leagues) — against stats now real opponent data
-- **2026-05-24**: Fixed prefetch key mismatch (fd.org "FC" suffix vs ESPN names) via norm-scan + mirror-save
-- **2026-05-24**: Fixed personal history dots returning 0 — added `season=2025` fallback in `fetchPlayerPersonalHistoryBatch`
-- **2026-05-24**: Fixed Sunderland/Burnley/Leeds in wrong league regex (moved eng.2 → eng.1)
-- **2026-05-24**: Added ESPN supplement match discovery in prefetch for when fd.org is down
-- **2026-05-24**: Batch on-demand personal history fetch at lineup time (prevents timeout)
-- **2026-05-24**: CDN caching for match API routes (force-dynamic + Cache-Control s-maxage headers)
-- **2026-05-25**: Fixed `hasLineups` only checking home team — now requires BOTH home+away lineups before building sheet (prevents sheets with empty away player tabs)
-- **2026-05-25**: Guard now requires `hasGoodPlayers` (both teams have defensive players) — prevents locking incomplete-player sheets post-kickoff
-- **2026-05-25**: ESPN player history fetched as fallback when prefetch `fixtureHistory` is empty (prevents all-gray-dot rows when 7am prefetch missed a team)
-- **2026-05-25**: ESPN supplement scan reduced: European/cups 30→7 days, domestic 14→3 days (saves ~12s per sync cycle)
-- **2026-05-25**: On-demand re-prefetch in sync when fixtureHistory empty — retries AF lookup before building sheet
-- **2026-05-25**: Prefetch skip now also checks fixtureHistory non-empty — empty-data entries are retried
-- **2026-05-25**: Added 11am UTC re-prefetch cron (noon BST) — belt-and-suspenders for 7am misses
-- **2026-05-25**: Fixture history depth 10→15 matches — richer afTeamStats averages
-- **2026-05-25**: Sign-in: "Email code to..." text now white (was black on dark bg)
-- **2026-05-25**: Sign-in: footer margin added — "Use another method" no longer overlaps Secured by Clerk
-- **2026-05-25**: Sign-in mobile: overflow-y-auto + justify-start so Clerk widget scrolls rather than clips
-- **2026-05-25**: Fixed Levenshtein bug in `resolveAfId` — `dp[j-1]=prev` was corrupting the DP array, making Step 6 (fuzzy surname matching) dead code. Now correctly returns 0 for identical strings; fuzzy match is live
+Full 20-match Premier League day: ~2,550 AF calls (with 15-game fixture history). That is about 3.4% of the 75,000/day limit. Even with on-demand re-prefetches and two cron runs, a heavy day stays well under 10% of quota. No risk of hitting the cap.
 
-**Note:** Sign-in on mobile shows blank when visiting a .vercel.app preview URL. Clerk (production mode) only allows cheatsheets.co.uk — must use cheatsheets.co.uk/sign-in on mobile.
+## Known Pre-existing Issues (not fixed — deliberate)
+
+- **`hasGoodGoals` guard never locks 1-0 results**: the check is `homeGoals > 0 AND awayGoals > 0`. In a 1-0 game, the losing team has `goalsFor = 0`, so the guard keeps re-running every 5 min post-match. Wastes a small amount of quota but causes no data errors. Could be fixed with `(homeGoals + awayGoals) > 0`.
+
+## Sign-in Page Notes
+
+- Sign-in on mobile shows blank when visiting a `.vercel.app` preview URL. Clerk (production mode) only allows `cheatsheets.co.uk` — must use `cheatsheets.co.uk/sign-in` on mobile.
+- Clerk appearance keys used: `alternativeMethodsBlockButton`, `alternativeMethodsBlockButtonText`, `alternativeMethodsBlockButtonArrow`, `formFieldAction`, `formFieldHintText`, `footer`, `identityPreviewText`, `identityPreviewEditButton`, `formResendCodeLink`, `otpCodeFieldInput`, `userPreviewMainIdentifier`, `userPreviewSecondaryIdentifier`.
+
+## Session Log
+
+### 2026-05-23
+- Fixed team stats mirroring bug (Championship + non-ESPN leagues) — against stats now show real opponent data
+
+### 2026-05-24
+- Fixed prefetch key mismatch: fd.org appends "FC" suffix but ESPN omits it — norm-scan + mirror-save resolves the gap
+- Fixed personal history dots returning 0 — added `season=2025` fallback in `fetchPlayerPersonalHistoryBatch`
+- Fixed Sunderland/Burnley/Leeds wrongly classified as Championship — moved regex to eng.1
+- Added ESPN supplement match discovery in prefetch as fallback when fd.org is down
+- Added batch on-demand personal history fetch at lineup time (prevents timeout on large squads)
+- Added CDN caching for match API routes (force-dynamic + Cache-Control s-maxage headers)
+
+### 2026-05-25 — Big Premier League Day (10 matches): What Broke and What Was Fixed
+
+**Problems observed:**
+- Newcastle players showing all-gray dots: 7am prefetch had fetched the team but `fixtureHistory` came back empty (AF returned no results). Sync used the empty cache and had no history to build dots from.
+- Sunderland vs Chelsea stuck on "LINEUPS PENDING" all day: `hasLineups` check only tested the home team's lineup length, so when the away lineup was missing, it still tried to build the sheet and locked as pending.
+- Some teams with entirely missing player sections: same root cause as above — sheets were being locked by the rebuild guard before both teams' players had been resolved.
+- Sign-in mobile: tapping Sign In showed a blank white/dark screen — Clerk widget was clipped by `overflow: hidden` and `justify-center` pushing it off-screen on small phones.
+- Sign-in "Email code to..." text was black on dark background (unreadable).
+- Sign-in "Use another method" link overlapping "Secured by Clerk" footer text.
+
+**Root causes and fixes:**
+
+| Problem | Root cause | Fix |
+|---------|-----------|-----|
+| Gray dots (Newcastle + others) | Empty `fixtureHistory` in prefetch cache — AF returned nothing, entry stored as empty, never retried | Three-layer fix: (1) prefetch skip condition now also checks `fixtureHistory` non-empty — empty entries are retried; (2) sync does on-demand re-prefetch mid-loop when it finds empty history; (3) ESPN player history fetched as final fallback |
+| "LINEUPS PENDING" stuck | `hasLineups` only checked home team lineup length | Changed to `homeLineupLen > 0 AND awayLineupLen > 0` |
+| Sheets locked with empty away players | Rebuild guard had no check for player completeness | Added `hasGoodPlayers` to guard — both teams must have at least one defensive player before sheet locks |
+| Single player name mismatch breaking whole team | One failed resolution caused fallback to bad data for other players | Rewrote resolution to be per-player: each player independently goes through all 7 steps + word-scan fallback; one failure does not affect others |
+| Sync timing out on large match days | ESPN supplement scan was 30 days for European, 14 days for domestic — scanning far too many events | Reduced to 7 days (European/cups) and 3 days (domestic). Saves ~12s per cycle |
+| Missed matches on re-prefetch days | 7am cron is the only run — if it misses a team, no retry until next day | Added 11am UTC second prefetch cron |
+| Thinner dot history | Only 10 fixture history games per team | Increased to 15 — richer `afTeamStats` averages and more data for `bestLast5` |
+| Sign-in mobile blank screen | `justify-center` + no overflow handling clipped Clerk widget below viewport | Changed outer div to `overflow-y-auto`; right panel to `justify-start lg:justify-center` with `pt-16 pb-12` |
+| Black text on dark bg in sign-in | `alternativeMethodsBlockButtonText` not set in Clerk appearance | Added `text-gray-100` to that element key |
+| Footer overlap in sign-in | `footer` element had no top margin | Added `mt-6` to `footer` element key |
+
+**Bug found during audit (Levenshtein — committed 6ac0553):**
+
+The `levenshtein()` function in `lib/prefetch.ts` had two lines corrupting the one-row DP array:
+- `dp[j-1] = prev` inside the inner loop overwrote the just-computed `dp[i][j-1]` with stale `dp[i-1][j-1]`
+- `dp[b.length] = prev` at the end of the outer loop overwrote the correctly computed final cell
+
+Effect: `levenshtein("abc", "abc")` returned 3 instead of 0. Step 6 of `resolveAfId` (fuzzy surname matching within 2 edits) never matched any player — it was completely dead code. Fixed by removing both corrupt lines and saving `prev = dp[0]` + `dp[0] = i` before the inner loop.
+
+**Also introduced JSX syntax error (build failed, fixed same session):**
+
+Placed a `{/* comment */}` as a standalone node before the root `<div>` in the sign-in page return. JSX treats comments as nodes, so the return had two root children and the TypeScript compiler threw `Expected ',', got 'className'`. Deployment `3q5n5ovfq` failed. Fixed by removing the comment. Redeployed as `96fed41`.
+
+**Current deployed commit:** `4597b0d` on master
 
 **Remaining:**
 - Test full sign-up → payment flow with a real card
