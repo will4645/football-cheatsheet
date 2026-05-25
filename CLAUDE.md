@@ -93,7 +93,7 @@ PL=39, La Liga=140, Bundesliga=78, Serie A=135, Ligue 1=61, Championship=40, CL=
 
 ## Current Status (last updated 2026-05-25)
 
-**Done and deployed (latest commit 96fed41 on master):**
+**Done and deployed (latest commit 6ac0553 on master):**
 - Full pipeline hardening (retries, parallel fetches, team search fallbacks, failed-lookup caching)
 - Player dots bugs fixed: ECL/EL/CL now fetch personal history, `bestLast5` source selection fixed
 - Stripe + Clerk in production mode
@@ -119,6 +119,7 @@ PL=39, La Liga=140, Bundesliga=78, Serie A=135, Ligue 1=61, Championship=40, CL=
 - **2026-05-25**: Sign-in: "Email code to..." text now white (was black on dark bg)
 - **2026-05-25**: Sign-in: footer margin added — "Use another method" no longer overlaps Secured by Clerk
 - **2026-05-25**: Sign-in mobile: overflow-y-auto + justify-start so Clerk widget scrolls rather than clips
+- **2026-05-25**: Fixed Levenshtein bug in `resolveAfId` — `dp[j-1]=prev` was corrupting the DP array, making Step 6 (fuzzy surname matching) dead code. Now correctly returns 0 for identical strings; fuzzy match is live
 
 **Note:** Sign-in on mobile shows blank when visiting a .vercel.app preview URL. Clerk (production mode) only allows cheatsheets.co.uk — must use cheatsheets.co.uk/sign-in on mobile.
 
