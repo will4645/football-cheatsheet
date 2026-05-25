@@ -91,9 +91,9 @@ PL=39, La Liga=140, Bundesliga=78, Serie A=135, Ligue 1=61, Championship=40, CL=
 1. `/api/prefetch?secret=SYNC_SECRET&force=1` — re-runs morning prefetch for all near-term matches
 2. `/api/sync?secret=SYNC_SECRET&force=1` — bypasses 6h guard, rebuilds all sheets immediately
 
-## Current Status (last updated 2026-05-24)
+## Current Status (last updated 2026-05-25)
 
-**Done and deployed (latest commit 3dd42be on master):**
+**Done and deployed (latest commit 0f43b0c on master):**
 - Full pipeline hardening (retries, parallel fetches, team search fallbacks, failed-lookup caching)
 - Player dots bugs fixed: ECL/EL/CL now fetch personal history, `bestLast5` source selection fixed
 - Stripe + Clerk in production mode
@@ -108,6 +108,10 @@ PL=39, La Liga=140, Bundesliga=78, Serie A=135, Ligue 1=61, Championship=40, CL=
 - **2026-05-24**: Added ESPN supplement match discovery in prefetch for when fd.org is down
 - **2026-05-24**: Batch on-demand personal history fetch at lineup time (prevents timeout)
 - **2026-05-24**: CDN caching for match API routes (force-dynamic + Cache-Control s-maxage headers)
+- **2026-05-25**: Fixed `hasLineups` only checking home team — now requires BOTH home+away lineups before building sheet (prevents sheets with empty away player tabs)
+- **2026-05-25**: Guard now requires `hasGoodPlayers` (both teams have defensive players) — prevents locking incomplete-player sheets post-kickoff
+- **2026-05-25**: ESPN player history fetched as fallback when prefetch `fixtureHistory` is empty (prevents all-gray-dot rows when 7am prefetch missed a team)
+- **2026-05-25**: ESPN supplement scan reduced: European/cups 30→7 days, domestic 14→3 days (saves ~12s per sync cycle)
 
 **Remaining:**
 - Test full sign-up → payment flow with a real card
