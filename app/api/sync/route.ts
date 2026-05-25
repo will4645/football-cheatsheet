@@ -1570,11 +1570,36 @@ async function runSync(forceRebuild = false) {
           const needFetch: number[] = []; // AF IDs with empty personal history in prefetch
 
           // Step 1: resolve AF IDs and collect which players need on-demand fetching.
-          // resolveAfId steps 1-3 are pure in-memory; only step 4 (lookupAfPlayerId) hits AF.
+          // resolveAfId (7 steps) is pure in-memory for steps 1-5; steps 6-7 hit AF only when needed.
+          // When all 7 steps fail, try to salvage the player by searching fixtureHistory directly
+          // using the same fuzzy lookups that buildPlayers uses for afHistory — that way they at
+          // least get an AF ID from their fixture-level history so needFetch can fetch their personal
+          // history rather than silently leaving them with no history at all.
           for (const p of starters) {
             const name: string = p.name || '';
             if (!name) continue;
-            const afId = await resolveAfId(name, team, afApiKey, log);
+            let afId = await resolveAfId(name, team, afApiKey, log);
+
+            // All 7 steps failed — last-resort: scan fixtureHistory for any player whose
+            // name shares a word ≥5 chars with the lineup name (same logic as buildPlayers lookupAF).
+            // If found, extract the AF player ID from playerIds using that key, then add to needFetch.
+            if (afId == null) {
+              const normN = normPrefetch(name);
+              const nParts = normN.split(' ').filter((w: string) => w.length >= 5);
+              if (nParts.length > 0) {
+                for (const word of nParts) {
+                  const matchKey = Object.keys(team.fixtureHistory).find(k =>
+                    k.split(' ').some((kw: string) => kw === word)
+                  );
+                  if (matchKey && team.playerIds[matchKey] != null) {
+                    afId = team.playerIds[matchKey];
+                    log(`[repair:fallback] "${name}" → ID ${afId} via fixtureHistory word "${word}"`);
+                    break;
+                  }
+                }
+              }
+            }
+
             if (afId == null) continue;
             nameToAfId.set(name, afId);
             const history: PlayerGameStat[] = team.personalHistories[String(afId)] ?? [];

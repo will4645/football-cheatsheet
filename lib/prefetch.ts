@@ -265,9 +265,26 @@ export async function prefetchMatch(
   }
 }
 
-// ── 4-step auto-repair name resolution ────────────────────────────────────
+// ── 7-step auto-repair name resolution ────────────────────────────────────
 // Resolves a lineup player name to an AF player ID using the prefetched squad map.
-// Steps 1-3 are free (in-memory). Step 4 makes 1-2 AF calls only if needed.
+// Steps 1-5 are free (in-memory). Steps 6-7 make 1-2 AF calls each only if needed.
+
+/** Simple Levenshtein distance — capped at 3 for performance */
+function levenshtein(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 3) return 99;
+  const dp: number[] = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i-1] === b[j-1] ? dp[j-1] : 1 + Math.min(dp[j-1], dp[j], prev);
+      dp[j-1] = prev;
+      prev = tmp;
+    }
+    dp[b.length] = prev;
+  }
+  return dp[b.length];
+}
 
 export async function resolveAfId(
   lineupName: string,
@@ -282,9 +299,9 @@ export async function resolveAfId(
   // Step 1: exact normalised match
   if (playerIds[n] != null) return playerIds[n];
 
-  // Step 2: surname-only (last word, ≥ 4 chars)
-  const surname = parts[parts.length - 1];
-  if (surname && surname.length >= 4) {
+  // Step 2: surname-only scan (last word, ≥ 4 chars)
+  const surname = parts[parts.length - 1] ?? '';
+  if (surname.length >= 4) {
     const entry = Object.entries(playerIds).find(([k]) => {
       const kp = k.split(' ');
       return kp[kp.length - 1] === surname;
@@ -295,28 +312,63 @@ export async function resolveAfId(
     }
   }
 
-  // Step 3: longest distinctive word (≥ 5 chars)
+  // Step 3: longest distinctive word (≥ 5 chars) as any-word match
   const longWord = [...parts].filter(w => w.length >= 5).sort((a, b) => b.length - a.length)[0];
   if (longWord) {
     const entry = Object.entries(playerIds).find(([k]) =>
       k.split(' ').some(kw => kw === longWord),
     );
     if (entry) {
-      log(`[repair:3] "${lineupName}" → "${entry[0]}" via "${longWord}"`);
+      log(`[repair:3] "${lineupName}" → "${entry[0]}" via word "${longWord}"`);
       return entry[1];
     }
   }
 
-  // Step 4: AF direct search (up to 2 calls: current season then previous)
+  // Step 4: AF direct search by full name (up to 2 AF calls)
   if (afTeamId && apiKey) {
     const found = await lookupAfPlayerId(lineupName, afTeamId, apiKey);
     if (found) {
-      log(`[repair:4] "${lineupName}" → AF ID ${found} via search`);
+      log(`[repair:4] "${lineupName}" → AF ID ${found} via full-name search`);
       return found;
     }
   }
 
-  log(`[repair:fail] "${lineupName}" — no match found, player will use defaults`);
+  // ── Steps 5-7: targeted retries for the specific player that slipped through ──
+
+  // Step 5: direct surname key lookup (≥ 3 chars).
+  // fetchApiFootballTeamHistory pre-indexes surname-only shortcut keys for multi-word AF names,
+  // so playerIds["burn"] or playerIds["son"] exist even when Step 2's scan missed them.
+  if (surname.length >= 3 && playerIds[surname] != null) {
+    log(`[repair:5] "${lineupName}" → ID ${playerIds[surname]} via short-surname key`);
+    return playerIds[surname];
+  }
+
+  // Step 6: fuzzy edit-distance ≤ 2 on normalised surname (catches single-char typos / encoding diffs)
+  // Only try surnames ≥ 5 chars to avoid accidental short-name collisions (e.g. "son" ≈ "tan").
+  if (surname.length >= 5) {
+    for (const [k, id] of Object.entries(playerIds)) {
+      const kSurname = k.split(' ').pop() ?? '';
+      if (kSurname.length >= 5 && kSurname[0] === surname[0] && levenshtein(kSurname, surname) <= 2) {
+        log(`[repair:6] "${lineupName}" → "${k}" (ID ${id}) via fuzzy surname ("${surname}"≈"${kSurname}" d=${levenshtein(kSurname, surname)})`);
+        return id;
+      }
+    }
+  }
+
+  // Step 7: AF surname-only search — when Step 4's full-name search returned nothing.
+  // Useful for: players whose AF display name differs from ESPN/fd.org (common for South American players
+  // known by nickname). Only uses strict word-level matching (no players[0] fallback).
+  if (afTeamId && apiKey && surname.length >= 4) {
+    try {
+      const found = await lookupAfPlayerId(surname, afTeamId, apiKey);
+      if (found) {
+        log(`[repair:7] "${lineupName}" → AF ID ${found} via surname-only AF search`);
+        return found;
+      }
+    } catch {}
+  }
+
+  log(`[repair:fail] "${lineupName}" — all 7 steps exhausted, will use team-history fallback`);
   return null;
 }
 
