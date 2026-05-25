@@ -51,7 +51,6 @@ const clerkAppearance = {
 
 export default function SignInPage() {
   return (
-    {/* overflow-y-auto so Clerk widget can scroll on small phones without being clipped */}
     <div className="min-h-screen overflow-y-auto flex" style={{ background: '#080c14' }}>
 
       {/* Left — live demo preview (desktop only) */}
