@@ -1055,18 +1055,19 @@ async function runSync(forceRebuild = false) {
   }
 
   // ── ESPN supplement — primary source for CL/EL/ECL/FA Cup, fallback for fd.org leagues ──
-  // Major domestic leagues (eng.1 etc.) use a 14-day window; cups/European use 30 days.
+  // European/cup competitions scan 7 days (was 30 — saved ~10s/sync, more than enough lookahead).
+  // Domestic leagues scan 3 days (was 14 — fd.org covers today/tomorrow anyway; this is just backup).
   const ESPN_COMP_LEAGUES: Array<{ league: string; compName: string; days?: number }> = [
-    { league: 'uefa.champions',   compName: 'UEFA Champions League' },
-    { league: 'uefa.europa',      compName: 'UEFA Europa League' },
-    { league: 'uefa.europa.conf', compName: 'UEFA Europa Conference League' },
-    { league: 'eng.fa',           compName: 'FA Cup' },
+    { league: 'uefa.champions',   compName: 'UEFA Champions League',        days: 7 },
+    { league: 'uefa.europa',      compName: 'UEFA Europa League',           days: 7 },
+    { league: 'uefa.europa.conf', compName: 'UEFA Europa Conference League', days: 7 },
+    { league: 'eng.fa',           compName: 'FA Cup',                       days: 7 },
     // fd.org fallback — these are skipped when fd.org already supplied the same matches
-    { league: 'eng.1', compName: 'Premier League',  days: 14 },
-    { league: 'ger.1', compName: 'Bundesliga',       days: 14 },
-    { league: 'ita.1', compName: 'Serie A',           days: 14 },
-    { league: 'esp.1', compName: 'La Liga',           days: 14 },
-    { league: 'fra.1', compName: 'Ligue 1',           days: 14 },
+    { league: 'eng.1', compName: 'Premier League',  days: 3 },
+    { league: 'ger.1', compName: 'Bundesliga',       days: 3 },
+    { league: 'ita.1', compName: 'Serie A',           days: 3 },
+    { league: 'esp.1', compName: 'La Liga',           days: 3 },
+    { league: 'fra.1', compName: 'Ligue 1',           days: 3 },
   ];
   // Exclude liveMatches from seenIds so ESPN-sourced EL/ECL/CL matches get re-processed
   // every sync cycle (keeps referee, stats, etc. fresh throughout matchday)
@@ -1089,8 +1090,8 @@ async function runSync(forceRebuild = false) {
       const ds = `${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,'0')}${String(dt.getDate()).padStart(2,'0')}`;
       let board: any;
       try {
-        // Throttle only the first 2 days — far-future fixture discovery doesn't need it
-        if (d < 2) await new Promise(r => setTimeout(r, scanDays ? 150 : 300));
+        // Throttle the first 2 days per league to avoid hammering ESPN on busy matchdays
+        if (d < 2) await new Promise(r => setTimeout(r, 150));
         const res = await fetch(
           `https://site.api.espn.com/apis/site/v2/sports/soccer/${league}/scoreboard?dates=${ds}&_cb=${Date.now()}`,
           { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36', 'Accept': 'application/json' }, cache: 'no-store' }
@@ -1265,7 +1266,12 @@ async function runSync(forceRebuild = false) {
       // Also require corners > 0 — a reliable signal that team stats were actually populated
       const hasGoodStats = (existingSheet?.homeTeam?.stats?.cornersFor ?? 0) > 0 &&
                            (existingSheet?.awayTeam?.stats?.cornersFor ?? 0) > 0;
-      if (sheetAge < guardTtl && hasGoodRef && hasGoodGoals && hasGoodStats) {
+      // Also require both teams to have player data. A sheet built when only one team's
+      // lineups were confirmed (hasLineups bug era) would otherwise get locked for 2h
+      // post-kickoff with empty away players once goals started flowing.
+      const hasGoodPlayers = (existingSheet?.homeTeam?.players?.defensive?.length ?? 0) > 0 &&
+                             (existingSheet?.awayTeam?.players?.defensive?.length ?? 0) > 0;
+      if (sheetAge < guardTtl && hasGoodRef && hasGoodGoals && hasGoodStats && hasGoodPlayers) {
         log(`[sync] Skipping ${id} — sheet complete, built ${Math.round(sheetAge / 60000)}m ago`);
         if (!liveMatches.find((m: any) => m.id === id)) {
           liveMatches.push({
@@ -1284,7 +1290,12 @@ async function runSync(forceRebuild = false) {
     const fromEspn = !!(match as any)._fromEspn;
     const fromAf   = !!(match as any)._fromAf;
     let lineupData = (fromEspn || fromAf) ? null : await apiFetch(`/matches/${match.id}/lineups`, 2 * 60 * 1000);
-    let hasLineups = lineupData?.homeTeam?.lineup?.length > 0 || lineupData?.homeTeam?.startingEleven?.length > 0;
+    // Require BOTH teams to have lineups before building a sheet.
+    // Old code only checked homeTeam — if fd.org published home lineup early but not away,
+    // hasLineups was true and we'd build a sheet with empty awayTeam.players arrays.
+    const homeLineupLen = lineupData?.homeTeam?.lineup?.length || lineupData?.homeTeam?.startingEleven?.length || 0;
+    const awayLineupLen = lineupData?.awayTeam?.lineup?.length || lineupData?.awayTeam?.startingEleven?.length || 0;
+    let hasLineups = homeLineupLen > 0 && awayLineupLen > 0;
 
     // espnRefName is populated from the ESPN summary fetched inside getApiFootballLineups
     // (same request, no extra API call). Also covers the fromEspn direct-summary path below.
@@ -1384,8 +1395,17 @@ async function runSync(forceRebuild = false) {
     }
     if (prefetched) log(`[sync] Prefetch found for ${id} (fetched ${Math.round((Date.now() - prefetched.fetchedAt) / 60000)}m ago)`);
 
-    // Step 3: Fetch per-player ESPN history — skip when prefetch covers it
-    if (!prefetched && confirmedEspnMeta) {
+    // Step 3: Fetch per-player ESPN history — skip when prefetch covers it.
+    // But if the prefetch is present yet has EMPTY fixtureHistory for either team (7am run
+    // failed to find the team in AF), the personal-history maps will also be empty.
+    // In that case fall through and fetch ESPN history as a fallback so bestLast5 has
+    // at least the ESPN-sourced per-player game stats rather than returning null (gray dots).
+    const prefetchHomeEmpty = !!prefetched && Object.keys(prefetched.home.fixtureHistory || {}).length === 0;
+    const prefetchAwayEmpty = !!prefetched && Object.keys(prefetched.away.fixtureHistory || {}).length === 0;
+    if ((!prefetched || prefetchHomeEmpty || prefetchAwayEmpty) && confirmedEspnMeta) {
+      if (prefetchHomeEmpty || prefetchAwayEmpty) {
+        log(`[sync] Prefetch has empty fixtureHistory (home:${prefetchHomeEmpty} away:${prefetchAwayEmpty}) — fetching ESPN history as fallback`);
+      }
       log(`[sync] Fetching ESPN history — league:${confirmedEspnMeta.league} home:${confirmedEspnMeta.homeTeamId} away:${confirmedEspnMeta.awayTeamId}`);
       const [homeResult, awayResult] = await Promise.all([
         fetchTeamPlayerHistory(confirmedEspnMeta.homeTeamId, confirmedEspnMeta.league, homeName),
