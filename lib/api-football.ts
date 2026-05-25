@@ -708,11 +708,12 @@ export async function fetchApiFootballTeamHistory(
     const teamId: number = best?.team?.id;
     if (!teamId) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: `no id: ${searchName}` };
 
-    // Fetch 10 recent fixtures across all competitions so player history includes cup/European games
-    let fd = await afFetch(`/fixtures?team=${teamId}&last=10&season=2025`, apiKey);
+    // Fetch 15 recent fixtures (was 10) — larger window gives better per-game averages for
+    // afTeamStats and richer afHistory for bestLast5. Quota is no concern (73,500 calls/day spare).
+    let fd = await afFetch(`/fixtures?team=${teamId}&last=15&season=2025`, apiKey);
     let fixtures: any[] = fd?.response ?? [];
     if (!fixtures.length) {
-      fd = await afFetch(`/fixtures?team=${teamId}&last=10&season=2024`, apiKey);
+      fd = await afFetch(`/fixtures?team=${teamId}&last=15&season=2024`, apiKey);
       fixtures = fd?.response ?? [];
     }
     if (!fixtures.length) return { history: new Map(), playerIds: new Map(), afTeamId: teamId, afTeamStats: null, debug: `no fixtures: ${teamId}` };

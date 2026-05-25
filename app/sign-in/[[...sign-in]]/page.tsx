@@ -26,6 +26,8 @@ const clerkAppearance = {
     formButtonPrimary:     'bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl transition-colors',
     footerActionLink:      'text-green-400 hover:text-green-300',
     footerActionText:      'text-gray-500',
+    // Fix: add top margin so "Secured by Clerk" footer doesn't crowd "Use another method"
+    footer:                'mt-6',
     identityPreviewText:   'text-white',
     identityPreviewEditButton: 'text-green-400',
     formResendCodeLink:    'text-green-400',
@@ -33,14 +35,26 @@ const clerkAppearance = {
     alertText:             'text-gray-300',
     formFieldSuccessText:  'text-green-400',
     formFieldErrorText:    'text-red-400',
+    // Fix: alternative method buttons (e.g. "Email code to...") had black text on dark bg
+    alternativeMethodsBlockButton: 'border border-white/10 bg-white/5 hover:bg-white/10 rounded-xl transition-colors',
+    alternativeMethodsBlockButtonText: 'text-gray-100',
+    alternativeMethodsBlockButtonArrow: 'text-gray-400',
+    // Fix: internal form action links ("Use another method", back links)
+    formFieldAction:       'text-green-400 hover:text-green-300',
+    // Hint/helper text inside forms
+    formFieldHintText:     'text-gray-400',
+    // User preview (email shown after entering email step)
+    userPreviewMainIdentifier: 'text-white',
+    userPreviewSecondaryIdentifier: 'text-gray-400',
   },
 };
 
 export default function SignInPage() {
   return (
-    <div className="min-h-screen flex" style={{ background: '#080c14' }}>
+    {/* overflow-y-auto so Clerk widget can scroll on small phones without being clipped */}
+    <div className="min-h-screen overflow-y-auto flex" style={{ background: '#080c14' }}>
 
-      {/* Left — live demo preview */}
+      {/* Left — live demo preview (desktop only) */}
       <div className="hidden lg:flex flex-1 relative overflow-hidden">
         <iframe
           src="/preview"
@@ -56,8 +70,8 @@ export default function SignInPage() {
           style={{ background: 'linear-gradient(to bottom, #080c14 0%, transparent 8%, transparent 92%, #080c14 100%)' }} />
       </div>
 
-      {/* Right — login panel */}
-      <div className="w-full lg:w-[480px] shrink-0 flex flex-col justify-center items-center lg:items-start px-6 py-12"
+      {/* Right — login panel. On mobile: full-width, top-aligned with padding so it scrolls if needed */}
+      <div className="w-full lg:w-[480px] shrink-0 flex flex-col justify-start lg:justify-center items-center lg:items-start px-6 pt-16 pb-12"
         style={{ borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
 
         <div className="w-full max-w-[400px]">

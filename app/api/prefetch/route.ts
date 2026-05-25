@@ -150,11 +150,18 @@ export async function GET(req: NextRequest) {
 
       if (!force) {
         const existing = await kvGet<any>(`prefetch:${id}`);
-        // Skip if prefetched within the last 20 hours (component caches own freshness)
-        if (existing?.fetchedAt && Date.now() - existing.fetchedAt < 20 * 60 * 60 * 1000) {
+        // Skip only if prefetched within the last 20h AND both teams have real AF data.
+        // If either team's fixtureHistory is empty (7am lookup failed), re-run to retry —
+        // the noon cron and on-demand sync retry both depend on this not being skipped.
+        const homeOk = Object.keys(existing?.home?.fixtureHistory || {}).length > 0;
+        const awayOk = Object.keys(existing?.away?.fixtureHistory || {}).length > 0;
+        if (existing?.fetchedAt && homeOk && awayOk && Date.now() - existing.fetchedAt < 20 * 60 * 60 * 1000) {
           log(`[prefetch] skip (fresh): ${id}`);
           skipped++;
           continue;
+        }
+        if (existing?.fetchedAt && (!homeOk || !awayOk)) {
+          log(`[prefetch] re-running (empty data: home:${homeOk} away:${awayOk}): ${id}`);
         }
       }
 

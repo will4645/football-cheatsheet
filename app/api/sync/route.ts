@@ -1395,6 +1395,32 @@ async function runSync(forceRebuild = false) {
     }
     if (prefetched) log(`[sync] Prefetch found for ${id} (fetched ${Math.round((Date.now() - prefetched.fetchedAt) / 60000)}m ago)`);
 
+    // On-demand re-prefetch: if prefetch exists but either team's fixtureHistory is empty
+    // (the 7am cron failed to find the team in AF), retry now before building the sheet.
+    // We have 73,500 spare AF calls/day so a targeted retry is free. If it succeeds,
+    // reload and get real AF personal history instead of falling back to ESPN team history.
+    if (prefetched) {
+      const homeFixCount = Object.keys(prefetched.home.fixtureHistory || {}).length;
+      const awayFixCount = Object.keys(prefetched.away.fixtureHistory || {}).length;
+      if (homeFixCount === 0 || awayFixCount === 0) {
+        log(`[sync] Prefetch incomplete (home:${homeFixCount} away:${awayFixCount} fixtures) — retrying prefetch on-demand`);
+        try {
+          const afKeyForReprefetch = (process.env.API_SPORTS_KEY ?? '').trim();
+          if (afKeyForReprefetch) {
+            await prefetchMatch(id, homeName, awayName, match.utcDate ?? '', afKeyForReprefetch, log);
+            prefetched = await sbGet(`prefetch:${id}`) as PrefetchData | null;
+            if (prefetched) {
+              const newHome = Object.keys(prefetched.home.fixtureHistory || {}).length;
+              const newAway = Object.keys(prefetched.away.fixtureHistory || {}).length;
+              log(`[sync] Re-prefetch: home ${homeFixCount}→${newHome}, away ${awayFixCount}→${newAway} fixtures`);
+            }
+          }
+        } catch (reprefetchErr: any) {
+          log(`[sync] Re-prefetch error: ${reprefetchErr?.message}`);
+        }
+      }
+    }
+
     // Step 3: Fetch per-player ESPN history — skip when prefetch covers it.
     // But if the prefetch is present yet has EMPTY fixtureHistory for either team (7am run
     // failed to find the team in AF), the personal-history maps will also be empty.
