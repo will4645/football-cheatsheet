@@ -93,7 +93,7 @@ PL=39, La Liga=140, Bundesliga=78, Serie A=135, Ligue 1=61, Championship=40, CL=
 
 ## Current Status (last updated 2026-05-25)
 
-**Done and deployed (latest commit 0f43b0c on master):**
+**Done and deployed (latest commit 96fed41 on master):**
 - Full pipeline hardening (retries, parallel fetches, team search fallbacks, failed-lookup caching)
 - Player dots bugs fixed: ECL/EL/CL now fetch personal history, `bestLast5` source selection fixed
 - Stripe + Clerk in production mode
@@ -112,6 +112,15 @@ PL=39, La Liga=140, Bundesliga=78, Serie A=135, Ligue 1=61, Championship=40, CL=
 - **2026-05-25**: Guard now requires `hasGoodPlayers` (both teams have defensive players) — prevents locking incomplete-player sheets post-kickoff
 - **2026-05-25**: ESPN player history fetched as fallback when prefetch `fixtureHistory` is empty (prevents all-gray-dot rows when 7am prefetch missed a team)
 - **2026-05-25**: ESPN supplement scan reduced: European/cups 30→7 days, domestic 14→3 days (saves ~12s per sync cycle)
+- **2026-05-25**: On-demand re-prefetch in sync when fixtureHistory empty — retries AF lookup before building sheet
+- **2026-05-25**: Prefetch skip now also checks fixtureHistory non-empty — empty-data entries are retried
+- **2026-05-25**: Added 11am UTC re-prefetch cron (noon BST) — belt-and-suspenders for 7am misses
+- **2026-05-25**: Fixture history depth 10→15 matches — richer afTeamStats averages
+- **2026-05-25**: Sign-in: "Email code to..." text now white (was black on dark bg)
+- **2026-05-25**: Sign-in: footer margin added — "Use another method" no longer overlaps Secured by Clerk
+- **2026-05-25**: Sign-in mobile: overflow-y-auto + justify-start so Clerk widget scrolls rather than clips
+
+**Note:** Sign-in on mobile shows blank when visiting a .vercel.app preview URL. Clerk (production mode) only allows cheatsheets.co.uk — must use cheatsheets.co.uk/sign-in on mobile.
 
 **Remaining:**
 - Test full sign-up → payment flow with a real card
