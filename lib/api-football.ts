@@ -963,8 +963,8 @@ export async function fetchApiFootballSquadStats(
   teamName: string,
   apiKey: string,
   leagueHint?: number,
-): Promise<{ stats: Map<string, AfSquadPlayer>; debug: string }> {
-  if (!apiKey) return { stats: new Map(), debug: 'no key' };
+): Promise<{ stats: Map<string, AfSquadPlayer>; playerIds: Set<number>; debug: string }> {
+  if (!apiKey) return { stats: new Map(), playerIds: new Set(), debug: 'no key' };
   const result = new Map<string, AfSquadPlayer>();
   try {
     const searchName = cleanForSearch(teamName);
@@ -988,7 +988,7 @@ export async function fetchApiFootballSquadStats(
         if (teams.length) break;
       }
     }
-    if (!teams.length) return { stats: new Map(), debug: `no team: ${searchName}` };
+    if (!teams.length) return { stats: new Map(), playerIds: new Set(), debug: `no team: ${searchName}` };
 
     const tNorm = norm(teamName);
     const best = teams.find(t => {
@@ -996,7 +996,7 @@ export async function fetchApiFootballSquadStats(
       return n === tNorm || tNorm.split(' ').filter(w => w.length > 3).some(w => n.includes(w));
     }) ?? teams[0];
     const teamId: number = best?.team?.id;
-    if (!teamId) return { stats: new Map(), debug: `no id: ${searchName}` };
+    if (!teamId) return { stats: new Map(), playerIds: new Set(), debug: `no id: ${searchName}` };
 
     const fetchAllPages = async (season: number): Promise<any[]> => {
       const all: any[] = [];
@@ -1013,10 +1013,12 @@ export async function fetchApiFootballSquadStats(
     };
     let players = await fetchAllPages(2025);
     if (!players.length) players = await fetchAllPages(2024);
-    if (!players.length) return { stats: new Map(), debug: `no players: ${teamId}` };
+    if (!players.length) return { stats: new Map(), playerIds: new Set(), debug: `no players: ${teamId}` };
 
+    const squadPlayerIds = new Set<number>();
     for (const entry of players) {
       const player = entry.player;
+      if (player?.id) squadPlayerIds.add(player.id);
       const stats: any[] = entry.statistics ?? [];
       if (!stats.length) continue;
 
@@ -1061,9 +1063,9 @@ export async function fetchApiFootballSquadStats(
       if (last.length >= 3 && !result.has(last)) result.set(last, p);
     }
 
-    return { stats: result, debug: `squad ${teamId}(${best?.team?.name}): ${players.length} players, ${result.size} keys` };
+    return { stats: result, playerIds: squadPlayerIds, debug: `squad ${teamId}(${best?.team?.name}): ${players.length} players, ${result.size} keys` };
   } catch (e: any) {
-    return { stats: new Map(), debug: `squad err: ${e.message}` };
+    return { stats: new Map(), playerIds: new Set(), debug: `squad err: ${e.message}` };
   }
 }
 

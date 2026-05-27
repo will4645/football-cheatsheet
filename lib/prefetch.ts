@@ -36,6 +36,7 @@ interface CachedHist {
 interface CachedSquad {
   cachedAt: number;
   stats: Record<string, AfSquadPlayer>;
+  playerIds?: number[]; // AF player IDs from /players?team= — superset of fixture history IDs
 }
 interface CachedPlayers {
   cachedAt: number;
@@ -66,10 +67,10 @@ function fromHistCache(c: CachedHist): HistResult {
   };
 }
 function toSquadCache(r: SquadResult): CachedSquad {
-  return { cachedAt: Date.now(), stats: Object.fromEntries(r.stats) };
+  return { cachedAt: Date.now(), stats: Object.fromEntries(r.stats), playerIds: Array.from(r.playerIds ?? []) };
 }
 function fromSquadCache(c: CachedSquad): SquadResult {
-  return { stats: new Map(Object.entries(c.stats) as [string, AfSquadPlayer][]), debug: 'from-component-cache' };
+  return { stats: new Map(Object.entries(c.stats) as [string, AfSquadPlayer][]), playerIds: new Set(c.playerIds ?? []), debug: 'from-component-cache' };
 }
 
 // ── Stored data shapes ─────────────────────────────────────────────────────
@@ -169,8 +170,17 @@ export async function prefetchMatch(
     const PERSONAL_HISTORY_LEAGUES = new Set([39, 140, 78, 135, 61, 2, 3, 848]); // Top5 + CL/EL/ECL
     const shouldFetchPersonal = !leagueId || PERSONAL_HISTORY_LEAGUES.has(leagueId);
 
-    const homePlayerIds = Array.from(new Set(homeHistory.playerIds.values()));
-    const awayPlayerIds = Array.from(new Set(awayHistory.playerIds.values()));
+    // Merge fixture history IDs + full squad IDs so personal history covers the whole registered
+    // squad, not just players seen in the last 15 games. Squad IDs come from /players?team=X&season=Y
+    // which is already fetched above — we just extract the IDs we were previously discarding.
+    const homePlayerIds = Array.from(new Set([
+      ...Array.from(homeHistory.playerIds.values()),
+      ...Array.from(homeSquad.playerIds ?? []),
+    ]));
+    const awayPlayerIds = Array.from(new Set([
+      ...Array.from(awayHistory.playerIds.values()),
+      ...Array.from(awaySquad.playerIds ?? []),
+    ]));
     log(`[prefetch] personal histories: ${homePlayerIds.length} home, ${awayPlayerIds.length} away players${shouldFetchPersonal ? '' : ' (skipped — non-top-5 domestic league)'}`);
 
     const [cpHome, cpAway] = await Promise.all([
