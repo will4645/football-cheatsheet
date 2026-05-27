@@ -192,7 +192,7 @@ Placed a `{/* comment */}` as a standalone node before the root `<div>` in the s
 | `141b38c` | **potentialOpponent matching fixed.** Three bugs: (1) ESPN sends `GK`/`CDM`/`CAM`/`LCB`/`RCB`/`LWB`/`RWB` — none were MARKS keys, all fell through to formation-place fallback giving wrong opponents. Added `normalizePos()` function, applied in `playerDefaults`. (2) `opp.find()` found only 1 player per zone — strikers only showed 1 CB even when 2 exist. Changed to `opp.filter().slice()`. (3) Formation-place mirror was `12-fp` making LW (fp=11) point at GK (fp=1); fixed to `13-fp`. |
 | `latest` | **normalizePos: added `LF`→`LW` and `RF`→`RW`**, removed redundant `'F':'F'` entry. |
 
-**Current deployed commit:** `latest` on master
+**Current deployed commit:** `2f76193` on master
 
 **Known limitation (not fixed):**
 - Poisson odds undervalue stronger teams on neutral grounds — when AF has no market odds (common for one-off finals), Poisson uses raw goals-scored/conceded which doesn't account for league quality difference. Crystal Palace showed 38% win prob vs Opta's 50.4%.
