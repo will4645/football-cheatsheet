@@ -377,7 +377,7 @@ async function buildPlayers(
   function playerDefaults(p: any) {
     const name = p.name || p.person?.name || 'Unknown';
     const pos = (p.position || 'Midfielder').toLowerCase();
-    const abbr = (p.posAbbr || '').toUpperCase();
+    const abbr = normalizePos((p.posAbbr || '').toUpperCase()); // normalise to MARKS key set
     const isGK  = abbr === 'G' || pos.includes('keeper') || pos.includes('goalkeeper');
     const isAtt = !isGK && (pos.includes('forward') || pos.includes('attack') || pos.includes('winger') || pos.includes('offence'));
     const isMid = !isGK && pos.includes('mid');
@@ -453,51 +453,93 @@ async function buildPlayers(
   const awayStarters = awayLineup.lineup || awayLineup.startingEleven || [];
 
   // ── Positional opponent matching ─────────────────────────────────────────
-  // targets = opposing positions to look for, count = how many names to return
+  // Normalise ESPN position abbreviations onto the MARKS key set.
+  // ESPN sends 'GK', 'CDM', 'CAM', 'LCB', 'RCB', 'LWB', 'RWB', etc. which
+  // don't exist in MARKS — without this they all fall through to the
+  // formation-place fallback and return wrong opponents.
+  function normalizePos(raw: string): string {
+    const MAP: Record<string, string> = {
+      'GK':  'G',    // goalkeeper
+      'LWB': 'LB',   // wing back defends the same channel as a full back
+      'RWB': 'RB',
+      'LCB': 'CD-L', // left center back
+      'RCB': 'CD-R', // right center back
+      'SW':  'CB',   // sweeper
+      'CDM': 'DM',   // holding / defensive mid
+      'DMF': 'DM',
+      'CAM': 'AM',   // attacking mid
+      'AMF': 'AM',
+      'LCM': 'LM',   // left center mid — attacks/defends left channel
+      'RCM': 'RM',   // right center mid — attacks/defends right channel
+      'CMF': 'CM',
+      'CF':  'ST',   // center forward
+      'FW':  'F',
+      'D':   'CB',   // generic defender
+      'M':   'CM',   // generic midfielder
+      'F':   'F',    // generic forward (keep)
+    };
+    return MAP[raw] ?? raw;
+  }
+
+  // targets = opposing positions to look for, count = how many names to return.
+  // Left side attacks right side and vice versa — LW faces RB, RW faces LB, etc.
   const MARKS: Record<string, { targets: string[]; count: number }> = {
-    'G':    { targets: [],                         count: 0 },
-    'RB':   { targets: ['LW','AM-L','LM'],         count: 1 },
-    'LB':   { targets: ['RW','AM-R','RM'],         count: 1 },
-    'CB':   { targets: ['F','ST','SS'],            count: 1 },
-    'CD-R': { targets: ['F','ST','SS'],            count: 1 },
-    'CD-L': { targets: ['F','ST','SS'],            count: 1 },
-    'DM':   { targets: ['AM','CM','SS','F'],       count: 2 },
-    'CM':   { targets: ['CM','AM','DM'],           count: 2 },
-    'LM':   { targets: ['RB','RM'],                count: 1 },
-    'RM':   { targets: ['LB','LM'],                count: 1 },
-    'AM':   { targets: ['DM','CM'],                count: 2 },
-    'AM-L': { targets: ['RB','RM'],                count: 1 },
-    'AM-R': { targets: ['LB','LM'],                count: 1 },
-    'LW':   { targets: ['RB','RM'],                count: 1 },
-    'RW':   { targets: ['LB','LM'],                count: 1 },
-    'F':    { targets: ['CB','CD-R','CD-L'],       count: 2 },
-    'ST':   { targets: ['CB','CD-R','CD-L'],       count: 2 },
-    'SS':   { targets: ['DM','CM','CB'],           count: 2 },
+    'G':    { targets: [],                               count: 0 },
+    // Full backs / wing backs — mark the opposition wide attacker on their flank
+    'RB':   { targets: ['LW','AM-L','LM'],               count: 1 },
+    'LB':   { targets: ['RW','AM-R','RM'],               count: 1 },
+    // Centre backs — mark central strikers; CD-R/CD-L split when two CBs identified
+    'CB':   { targets: ['ST','F','SS'],                  count: 1 },
+    'CD-R': { targets: ['ST','F','SS','LW'],             count: 1 }, // right CB also watches left winger
+    'CD-L': { targets: ['ST','F','SS','RW'],             count: 1 }, // left CB also watches right winger
+    // Holding mid — screens the striker and attacking mid
+    'DM':   { targets: ['AM','SS','ST','CM','F'],        count: 2 },
+    // Central mid — mirrors opposite central mid
+    'CM':   { targets: ['CM','AM','DM'],                 count: 2 },
+    // Wide mids — face the opposite full back and wide mid
+    'LM':   { targets: ['RB','RM'],                      count: 1 },
+    'RM':   { targets: ['LB','LM'],                      count: 1 },
+    // Attacking mid — faces holding mid or CBs if no DM
+    'AM':   { targets: ['DM','CM','CB'],                 count: 2 },
+    'AM-L': { targets: ['RB','RM'],                      count: 1 },
+    'AM-R': { targets: ['LB','LM'],                      count: 1 },
+    // Wingers — face the full back on their attacking flank
+    'LW':   { targets: ['RB','RM'],                      count: 1 },
+    'RW':   { targets: ['LB','LM'],                      count: 1 },
+    // Forwards / strikers — face both centre backs
+    'F':    { targets: ['CB','CD-R','CD-L'],             count: 2 },
+    'ST':   { targets: ['CB','CD-R','CD-L'],             count: 2 },
+    'SS':   { targets: ['DM','CM','CB'],                 count: 2 },
   };
 
   function findOpponent(player: any, opposingPlayers: any[]): string {
-    const abbr = player.posAbbr;
+    const abbr = player.posAbbr; // already normalised via playerDefaults
     const mark = MARKS[abbr];
     if (mark?.count === 0) return '';
 
-    const opp = opposingPlayers.filter(p => !p.isGK); // never list GK as an opponent
+    const opp = opposingPlayers.filter(p => !p.isGK);
     const targets = mark?.targets ?? [];
     const needed  = mark?.count ?? 1;
     const found: string[] = [];
     const used = new Set<string>();
 
+    // Allow multiple players from the same zone (e.g. two 'CB' entries for a striker)
     for (const target of targets) {
       if (found.length >= needed) break;
-      const match = opp.find(p => p.posAbbr === target && !used.has(p.name));
-      if (match) { found.push(shortName(match.name)); used.add(match.name); }
+      const remaining = needed - found.length;
+      const matches = opp
+        .filter(p => p.posAbbr === target && !used.has(p.name))
+        .slice(0, remaining);
+      for (const m of matches) { found.push(shortName(m.name)); used.add(m.name); }
     }
 
+    // Fallback: mirror by formation place when position matching fails
     if (found.length < needed) {
       const fp = player.formationPlace;
-      if (fp) {
-        const targetFp = Math.max(1, Math.min(11, 12 - fp));
+      if (fp && fp > 1) { // skip GK (fp=1)
+        const targetFp = Math.max(2, Math.min(11, 13 - fp)); // mirror: 2↔11, 3↔10, etc.
         const sorted = [...opp]
-          .filter(p => !used.has(p.name))
+          .filter(p => !used.has(p.name) && p.formationPlace > 1)
           .sort((a, b) => Math.abs((a.formationPlace || 6) - targetFp) - Math.abs((b.formationPlace || 6) - targetFp));
         for (const p of sorted) {
           if (found.length >= needed) break;
