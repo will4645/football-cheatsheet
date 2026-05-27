@@ -178,3 +178,24 @@ Placed a `{/* comment */}` as a standalone node before the root `<div>` in the s
 
 **Remaining:**
 - Test full sign-up → payment flow with a real card
+
+### 2026-05-27 — ECL Final day (Crystal Palace vs Rayo Vallecano)
+
+**Root cause of delayed sheet:** 7am prefetch ran but `personalHistories` was `{}` for both teams (AF returned empty for the personal history batch). All 22 confirmed starters hit the on-demand batch at lineup time, adding ~15-30s to that sync cycle. fd.org was also down all day so match was only discoverable via ESPN supplement, meaning the 11am re-prefetch likely missed it too.
+
+**Fixes applied (4 commits, all deployed):**
+
+| Commit | Fix |
+|--------|-----|
+| `95b2fd0` | **Prefetch: full squad player IDs merged into personal history batch.** `fetchApiFootballSquadStats` now returns `playerIds: Set<number>` from the `/players?team=X&season=Y` call (already being made). `prefetchMatch` merges those IDs with fixture history IDs before `fetchPlayerPersonalHistoryBatch`. `CachedSquad` updated to persist `playerIds` across cache hits. Covers new signings, rotation players, and anyone not in last 15 fixtures. |
+| `e0cb06a` | **Referee TBC on neutral-venue finals fixed.** Ref lookup was using `guessDomesticLeagueId(homeName)` (returns PL=39 for Crystal Palace) to search `/fixtures?league=39`. ECL final not in PL → empty ref → TBC. Fixed: `afLeagueId = leagueId \|\| guessDomesticLeagueId(...)` so ECL final searches league=848 correctly. `prefetched.afLeagueId` not read by sync so no downstream impact. |
+| `141b38c` | **potentialOpponent matching fixed.** Three bugs: (1) ESPN sends `GK`/`CDM`/`CAM`/`LCB`/`RCB`/`LWB`/`RWB` — none were MARKS keys, all fell through to formation-place fallback giving wrong opponents. Added `normalizePos()` function, applied in `playerDefaults`. (2) `opp.find()` found only 1 player per zone — strikers only showed 1 CB even when 2 exist. Changed to `opp.filter().slice()`. (3) Formation-place mirror was `12-fp` making LW (fp=11) point at GK (fp=1); fixed to `13-fp`. |
+| `latest` | **normalizePos: added `LF`→`LW` and `RF`→`RW`**, removed redundant `'F':'F'` entry. |
+
+**Current deployed commit:** `latest` on master
+
+**Known limitation (not fixed):**
+- Poisson odds undervalue stronger teams on neutral grounds — when AF has no market odds (common for one-off finals), Poisson uses raw goals-scored/conceded which doesn't account for league quality difference. Crystal Palace showed 38% win prob vs Opta's 50.4%.
+
+**Remaining:**
+- Test full sign-up → payment flow with a real card

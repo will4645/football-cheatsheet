@@ -473,10 +473,11 @@ async function buildPlayers(
       'RCM': 'RM',   // right center mid — attacks/defends right channel
       'CMF': 'CM',
       'CF':  'ST',   // center forward
+      'LF':  'LW',   // left forward → left winger zone
+      'RF':  'RW',   // right forward → right winger zone
       'FW':  'F',
       'D':   'CB',   // generic defender
       'M':   'CM',   // generic midfielder
-      'F':   'F',    // generic forward (keep)
     };
     return MAP[raw] ?? raw;
   }
