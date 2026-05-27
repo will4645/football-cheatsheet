@@ -215,7 +215,10 @@ export async function prefetchMatch(
     log(`[prefetch] personal done: home=${homePersonal.size} away=${awayPersonal.size}`);
 
     // ── Step 3: odds + referee (cached per match) ─────────────────────────
-    const afLeagueId = guessDomesticLeagueId(homeName) || guessDomesticLeagueId(awayName);
+    // Prefer the actual match competition ID (e.g. 848 for ECL) over a guessed domestic league.
+    // Without this, Crystal Palace vs Rayo Vallecano in the ECL final would search league=39 (PL)
+    // and find no fixture, returning an empty ref string and showing TBC on the sheet.
+    const afLeagueId = leagueId || guessDomesticLeagueId(homeName) || guessDomesticLeagueId(awayName);
 
     const [coOdds, coRef] = await Promise.all([
       kvGet<CachedOdds>(`pc:odds:${matchId}`),
