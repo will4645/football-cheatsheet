@@ -1732,7 +1732,9 @@ async function runSync(forceRebuild = false) {
     let homePosition: number | undefined;
     let awayPosition: number | undefined;
     const espnLeagueSlug = confirmedEspnMeta?.league ?? guessDomesticLeague(homeName);
-    if (espnLeagueSlug && !espnLeagueSlug.startsWith('uefa.') && !espnLeagueSlug.startsWith('eng.fa')) {
+    const compNameStr = (typeof match.competition === 'string' ? match.competition : match.competition?.name) || '';
+    const isEuropeanComp = /champions league|europa league|conference league/i.test(compNameStr);
+    if (espnLeagueSlug && !espnLeagueSlug.startsWith('uefa.') && !espnLeagueSlug.startsWith('eng.fa') && !isEuropeanComp) {
       const standingsMap = await fetchEspnStandings(espnLeagueSlug);
       const normName = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
       homePosition = standingsMap.get(normName(homeName)) ?? undefined;
