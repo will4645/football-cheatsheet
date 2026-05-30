@@ -18,6 +18,12 @@ const formColor: Record<Form, string> = {
   poor: '#f87171',
 };
 
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+}
+
 function last5Color(data?: boolean[] | null): string {
   if (!Array.isArray(data)) return '#6b7280';
   const hits = data.filter(Boolean).length;
@@ -403,7 +409,9 @@ export default function MatchSheet({ data, backHref, backLabel }: { data?: Match
               </div>
               <div className="min-w-0">
                 <p className="text-sm lg:text-lg font-black text-white leading-tight truncate">{homeTeam.name}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wide hidden sm:block">Home</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide hidden sm:block">
+                  {homeTeam.leaguePosition ? `${ordinal(homeTeam.leaguePosition)} · Home` : 'Home'}
+                </p>
               </div>
             </div>
 
@@ -431,7 +439,9 @@ export default function MatchSheet({ data, backHref, backLabel }: { data?: Match
             <div className="flex items-center gap-2 lg:gap-4 justify-end">
               <div className="text-right min-w-0">
                 <p className="text-sm lg:text-lg font-black text-white leading-tight truncate">{awayTeam.name}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wide hidden sm:block">Away</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide hidden sm:block">
+                  {awayTeam.leaguePosition ? `${ordinal(awayTeam.leaguePosition)} · Away` : 'Away'}
+                </p>
               </div>
               <div className="w-10 h-10 lg:w-14 lg:h-14 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
                    style={{ background: awayTeam.primaryColor + '12', border: `1px solid ${awayTeam.primaryColor}40` }}>

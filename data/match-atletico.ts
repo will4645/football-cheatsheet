@@ -16,6 +16,7 @@ export const atleticoMatchData: {
     name: 'Atlético de Madrid',
     primaryColor: '#CE1126',
     badge: 'https://crests.football-data.org/78.svg',
+    leaguePosition: 3,
     stats: {
       goalsFor: 1.91, goalsAgainst: 1.27, over25Goals: 60,
       cornersFor: 4.18, cornersAgainst: 4.52, over95Corners: 40,
@@ -98,6 +99,7 @@ export const atleticoMatchData: {
   awayTeam: {
     name: 'Barcelona',
     primaryColor: '#004D98',
+    leaguePosition: 1,
     badge: 'https://crests.football-data.org/81.svg',
     stats: {
       goalsFor: 2.71, goalsAgainst: 1.17, over25Goals: 75,

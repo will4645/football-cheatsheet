@@ -600,6 +600,40 @@ export async function findEspnFirstLeg(
   return null;
 }
 
+// ── ESPN league standings (position lookup for domestic leagues) ──────────
+const STANDINGS_TTL = 6 * 60 * 60 * 1000; // 6h — changes only after matchdays
+
+export async function fetchEspnStandings(espnLeague: string): Promise<Map<string, number>> {
+  const cacheKey = `standings:${espnLeague}`;
+  const cached = await kvGet<{ cachedAt: number; data: Record<string, number> }>(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < STANDINGS_TTL) {
+    return new Map(Object.entries(cached.data));
+  }
+  const result = new Map<string, number>();
+  try {
+    const data = await espnFetch(
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/${espnLeague}/standings`
+    );
+    const entries: any[] =
+      data?.standings?.entries ??
+      data?.children?.[0]?.standings?.entries ??
+      [];
+    for (const entry of entries) {
+      const teamName: string = entry.team?.displayName ?? entry.team?.name ?? '';
+      if (!teamName) continue;
+      const rankStat = (entry.stats ?? []).find((s: any) => s.name === 'rank' || s.abbreviation === 'RK');
+      const position = rankStat ? Math.round(rankStat.value) : 0;
+      if (position > 0) result.set(norm(teamName), position);
+    }
+    if (result.size > 0) {
+      const obj: Record<string, number> = {};
+      result.forEach((v, k) => { obj[k] = v; });
+      await kvSet(cacheKey, { cachedAt: Date.now(), data: obj });
+    }
+  } catch {}
+  return result;
+}
+
 // ── API-Football fixture player stats (real last-5 game data) ────────────
 const AF_BASE = 'https://v3.football.api-sports.io';
 

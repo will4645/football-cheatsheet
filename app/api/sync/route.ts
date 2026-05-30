@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, guessDomesticLeague, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, PlayerGameStat } from '@/lib/api-football';
+import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, guessDomesticLeague, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, fetchEspnStandings, PlayerGameStat } from '@/lib/api-football';
 import type { TeamSeasonStats, EspnRosterPlayer, AfSquadPlayer, AfTeamFixtureStats, MatchOdds } from '@/lib/api-football';
 import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
 import type { ApiSportsPlayer } from '@/lib/api-sports';
@@ -1728,11 +1728,23 @@ async function runSync(forceRebuild = false) {
     const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, espnHistory, await ensureApiSportsIdx(), combinedRosterMap, homeAfResult.history, awayAfResult.history, homeSquadResult.stats, awaySquadResult.stats, perPlayerHistoryHome, perPlayerHistoryAway);
     log(`[buildPlayers] ${players.diag}`);
 
+    // ── League standings (domestic only, not European cups) ──────────────
+    let homePosition: number | undefined;
+    let awayPosition: number | undefined;
+    const espnLeagueSlug = confirmedEspnMeta?.league ?? guessDomesticLeague(homeName);
+    if (espnLeagueSlug && !espnLeagueSlug.startsWith('uefa.') && !espnLeagueSlug.startsWith('eng.fa')) {
+      const standingsMap = await fetchEspnStandings(espnLeagueSlug);
+      const normName = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+      homePosition = standingsMap.get(normName(homeName)) ?? undefined;
+      awayPosition = standingsMap.get(normName(awayName)) ?? undefined;
+      log(`[standings] ${homeName}=${homePosition ?? 'n/a'} ${awayName}=${awayPosition ?? 'n/a'} (${espnLeagueSlug})`);
+    }
+
     const matchData = {
       competition: (typeof match.competition === 'string' ? match.competition : match.competition?.name) || 'Football', stage,
       date: formatDate(match.utcDate), kickoff: formatKickoff(match.utcDate),
-      homeTeam: { name: homeName, primaryColor: getTeamColor(homeName), badge: homeBadge, stats: homeStats, players: players.home },
-      awayTeam: { name: awayName, primaryColor: getTeamColor(awayName), badge: awayBadge, stats: awayStats, players: players.away },
+      homeTeam: { name: homeName, primaryColor: getTeamColor(homeName), badge: homeBadge, stats: homeStats, players: players.home, leaguePosition: homePosition },
+      awayTeam: { name: awayName, primaryColor: getTeamColor(awayName), badge: awayBadge, stats: awayStats, players: players.away, leaguePosition: awayPosition },
       referee: {
         name: espnRefName || afOdds?.referee || afReferee || match.referees?.[0]?.name || 'TBC',
         matchAvg: {

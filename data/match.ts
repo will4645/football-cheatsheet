@@ -29,6 +29,7 @@ export interface GkPlayer {
 }
 export interface TeamData {
   name: string; primaryColor: string; badge: string;
+  leaguePosition?: number;
   stats: {
     goalsFor: number; goalsAgainst: number; over25Goals: number;
     cornersFor: number; cornersAgainst: number; over95Corners: number;
