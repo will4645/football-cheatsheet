@@ -9,6 +9,7 @@ import {
   fetchApiFootballSquadStats,
   fetchPlayerPersonalHistoryBatch,
   fetchApiFootballOdds,
+  fetchTheOddsApiOdds,
   fetchApiFootballReferee,
   fetchApiFootballRefereeByLeague,
   lookupAfPlayerId,
@@ -229,7 +230,14 @@ export async function prefetchMatch(
     const needRef  = !coRef  || now - coRef.cachedAt  >= REF_TTL;
 
     const [freshOdds, freshRef] = await Promise.all([
-      needOdds ? fetchApiFootballOdds(homeName, awayName, matchDate, apiKey, afLeagueId || undefined) : Promise.resolve(null),
+      needOdds ? fetchApiFootballOdds(homeName, awayName, matchDate, apiKey, afLeagueId || undefined)
+                   .then(r => {
+                     if (r && r.homeWin > 0) return r;
+                     return afLeagueId
+                       ? fetchTheOddsApiOdds(homeName, awayName, matchDate, afLeagueId).then(tod => tod ?? r)
+                       : r;
+                   })
+               : Promise.resolve(null),
       needRef
         ? (afLeagueId
             ? fetchApiFootballRefereeByLeague(afLeagueId, matchDate, homeName, awayName, apiKey)

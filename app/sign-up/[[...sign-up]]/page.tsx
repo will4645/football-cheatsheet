@@ -137,8 +137,9 @@ export default function SignUpPage() {
                 <button type="submit" disabled={loading}
                   className="w-full py-3 rounded-xl font-bold text-sm transition-all hover:brightness-110 disabled:opacity-60"
                   style={{ background: '#16a34a', color: '#fff' }}>
-                  {loading ? 'Creating account...' : 'Create account'}
+                  {loading ? 'Creating account...' : 'Create account & start free trial'}
                 </button>
+                <p className="text-[11px] text-gray-600 text-center">3-day free trial · No charge until day 4 · Cancel any time</p>
               </form>
             </>
           ) : (

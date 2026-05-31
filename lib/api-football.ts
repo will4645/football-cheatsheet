@@ -1431,6 +1431,111 @@ export async function fetchApiFootballOdds(
   }
 }
 
+// ── The Odds API fallback (CL/EL/ECL where AF has no bookmaker coverage) ────
+const AF_LEAGUE_TO_ODDS_SPORT: Record<number, string> = {
+  2:   'soccer_uefa_champions_league',
+  3:   'soccer_uefa_europa_league',
+  848: 'soccer_uefa_europa_conference_league',
+};
+
+export async function fetchTheOddsApiOdds(
+  homeName: string,
+  awayName: string,
+  matchDate: string,
+  afLeagueId: number,
+): Promise<MatchOdds | null> {
+  const apiKey = (process.env.THE_ODDS_API_KEY ?? '').trim();
+  const sport = AF_LEAGUE_TO_ODDS_SPORT[afLeagueId];
+  if (!apiKey || !sport) return null;
+  try {
+    const dateStr = matchDate.slice(0, 10);
+    const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${apiKey}&regions=uk&markets=h2h,btts,totals&oddsFormat=decimal&dateFormat=iso&commenceTimeFrom=${dateStr}T00:00:00Z&commenceTimeTo=${dateStr}T23:59:59Z`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const events: any[] = await res.json();
+
+    const event = events.find(e =>
+      teamMatch(e.home_team ?? '', homeName) && teamMatch(e.away_team ?? '', awayName)
+    );
+    if (!event) return null;
+
+    const h2hSamples: { home: number; draw: number; away: number }[] = [];
+    const bttsSamples: { yes: number; no: number }[] = [];
+    const ou25Samples: { over: number; under: number }[] = [];
+
+    for (const bm of (event.bookmakers ?? [])) {
+      for (const market of (bm.markets ?? [])) {
+        if (market.key === 'h2h') {
+          const homeOut = market.outcomes?.find((o: any) => norm(o.name) === norm(event.home_team));
+          const awayOut = market.outcomes?.find((o: any) => norm(o.name) === norm(event.away_team));
+          const drawOut = market.outcomes?.find((o: any) => o.name === 'Draw');
+          const home = homeOut?.price ?? 0;
+          const draw = drawOut?.price ?? 0;
+          const away = awayOut?.price ?? 0;
+          if (home > 1 && draw > 1 && away > 1) h2hSamples.push({ home, draw, away });
+        }
+        if (market.key === 'btts') {
+          const yes = market.outcomes?.find((o: any) => o.name === 'Yes')?.price ?? 0;
+          const no  = market.outcomes?.find((o: any) => o.name === 'No')?.price  ?? 0;
+          if (yes > 1 && no > 1) bttsSamples.push({ yes, no });
+        }
+        if (market.key === 'totals') {
+          const over  = market.outcomes?.find((o: any) => o.name === 'Over'  && o.point === 2.5)?.price ?? 0;
+          const under = market.outcomes?.find((o: any) => o.name === 'Under' && o.point === 2.5)?.price ?? 0;
+          if (over > 1 && under > 1) ou25Samples.push({ over, under });
+        }
+      }
+    }
+
+    if (!h2hSamples.length) return null;
+
+    const avg = {
+      home: h2hSamples.reduce((s, o) => s + 1 / o.home, 0) / h2hSamples.length,
+      draw: h2hSamples.reduce((s, o) => s + 1 / o.draw, 0) / h2hSamples.length,
+      away: h2hSamples.reduce((s, o) => s + 1 / o.away, 0) / h2hSamples.length,
+    };
+    const total = avg.home + avg.draw + avg.away;
+
+    const homeOdd = parseFloat((total / avg.home).toFixed(2));
+    const drawOdd = parseFloat((total / avg.draw).toFixed(2));
+    const awayOdd = parseFloat((total / avg.away).toFixed(2));
+
+    let btts = 50;
+    let bttsYesOdd: number | undefined;
+    let bttsNoOdd: number | undefined;
+    if (bttsSamples.length > 0) {
+      const yesP = bttsSamples.reduce((s, o) => s + 1 / o.yes, 0) / bttsSamples.length;
+      const noP  = bttsSamples.reduce((s, o) => s + 1 / o.no,  0) / bttsSamples.length;
+      const bt = yesP + noP;
+      btts = Math.round((yesP / bt) * 100);
+      bttsYesOdd = parseFloat((bt / yesP).toFixed(2));
+      bttsNoOdd  = parseFloat((bt / noP).toFixed(2));
+    }
+
+    let over25Odd: number | undefined;
+    let under25Odd: number | undefined;
+    if (ou25Samples.length > 0) {
+      const overP  = ou25Samples.reduce((s, o) => s + 1 / o.over,  0) / ou25Samples.length;
+      const underP = ou25Samples.reduce((s, o) => s + 1 / o.under, 0) / ou25Samples.length;
+      const ot = overP + underP;
+      over25Odd  = parseFloat((ot / overP).toFixed(2));
+      under25Odd = parseFloat((ot / underP).toFixed(2));
+    }
+
+    return {
+      homeWin: Math.round((avg.home / total) * 100),
+      draw:    Math.round((avg.draw / total) * 100),
+      awayWin: Math.round((avg.away / total) * 100),
+      btts,
+      homeOdd, drawOdd, awayOdd,
+      ...(bttsYesOdd !== undefined ? { bttsYesOdd, bttsNoOdd }  : {}),
+      ...(over25Odd  !== undefined ? { over25Odd,  under25Odd } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── AF fixture listing (match source for leagues not on fd.org free tier) ───
 export interface AfFixtureSummary {
   id: number;
@@ -1499,5 +1604,33 @@ export async function fetchAfConfirmedLineups(
     };
     if ((teams[0].startXI?.length ?? 0) < 11 || (teams[1].startXI?.length ?? 0) < 11) return null;
     return { homeTeam: transform(teams[0]), awayTeam: transform(teams[1]) };
+  } catch { return null; }
+}
+
+// Looks up an AF fixture ID by date + team names when we don't already have _afFixtureId stored.
+// Used by the ESPN-sourced lineup fallback so we can still fetch AF lineups for CL/EL matches.
+export async function lookupAfFixtureId(
+  homeName: string,
+  awayName: string,
+  matchDate: string,
+  apiKey: string,
+  leagueId?: number,
+): Promise<number | null> {
+  if (!apiKey) return null;
+  try {
+    const dateStr = matchDate.slice(0, 10);
+    const leagueParam = leagueId ? `&league=${leagueId}` : '';
+    const fd = await afFetch(`/fixtures?date=${dateStr}&season=2025${leagueParam}`, apiKey);
+    const fixtures: any[] = fd?.response ?? [];
+    const hNorm = norm(homeName);
+    const aNorm = norm(awayName);
+    const fixture = fixtures.find((f: any) => {
+      const fh = norm(f.teams?.home?.name ?? '');
+      const fa = norm(f.teams?.away?.name ?? '');
+      const homeMatch = fh === hNorm || hNorm.split(' ').filter((w: string) => w.length > 3).some((w: string) => fh.includes(w));
+      const awayMatch = fa === aNorm || aNorm.split(' ').filter((w: string) => w.length > 3).some((w: string) => fa.includes(w));
+      return homeMatch && awayMatch;
+    });
+    return fixture?.fixture?.id ?? null;
   } catch { return null; }
 }

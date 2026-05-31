@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, guessDomesticLeague, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, fetchEspnStandings, PlayerGameStat } from '@/lib/api-football';
+import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, guessDomesticLeague, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, lookupAfFixtureId, fetchEspnStandings, PlayerGameStat } from '@/lib/api-football';
 import type { TeamSeasonStats, EspnRosterPlayer, AfSquadPlayer, AfTeamFixtureStats, MatchOdds } from '@/lib/api-football';
 import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
 import type { ApiSportsPlayer } from '@/lib/api-sports';
@@ -1377,9 +1377,19 @@ async function runSync(forceRebuild = false) {
         log(`[sync] No ESPN meta from lineup fetch — espnMeta=${JSON.stringify(espnMeta)}`);
       }
 
-      // AF fallback: only for AF-sourced matches within 3h of kickoff
-      if (!hasLineups && fromAf && hoursAway < 3) {
-        const afFixId: number = (match as any)._afFixtureId;
+      // AF fallback: for AF-sourced or ESPN-sourced matches within 3h of kickoff
+      if (!hasLineups && (fromAf || fromEspn) && hoursAway < 3) {
+        let afFixId: number = (match as any)._afFixtureId ?? 0;
+        if (!afFixId && fromEspn && afSupKey) {
+          // ESPN-sourced matches don't have _afFixtureId stored — look it up dynamically
+          const espnToAfLeague: Record<string, number> = {
+            'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
+            'eng.1': 39, 'eng.2': 40, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135, 'fra.1': 61,
+          };
+          const afLid = espnToAfLeague[(match as any)._espnLeague ?? ''];
+          afFixId = (await lookupAfFixtureId(homeName, awayName, match.utcDate, afSupKey, afLid)) ?? 0;
+          if (afFixId) log(`[sync] Resolved AF fixture ID ${afFixId} for ESPN match ${homeName} vs ${awayName}`);
+        }
         if (afFixId && afSupKey) {
           const afLU = await fetchAfConfirmedLineups(afFixId, afSupKey);
           if (afLU) { lineupData = afLU; hasLineups = true; log(`[sync] AF lineups confirmed: ${homeName} vs ${awayName}`); }

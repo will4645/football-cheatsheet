@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { upsertSubscription, getSubscription } from '@/lib/subscription';
+import { sendWelcomeEmail } from '@/lib/email';
 import type Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
@@ -64,6 +65,19 @@ export async function POST(req: NextRequest) {
           (sub.metadata as any).clerkUserId = session.metadata.clerkUserId;
         }
         await handleSubscription(sub);
+
+        // Send welcome email — fire and forget, never block the webhook response
+        const email = session.customer_details?.email ?? (session as any).customer_email ?? '';
+        const name  = session.customer_details?.name ?? '';
+        const firstName = name.split(' ')[0] ?? '';
+        if (email) {
+          const trialEnd = sub.status === 'trialing' && (sub as any).trial_end
+            ? new Date((sub as any).trial_end * 1000)
+            : null;
+          sendWelcomeEmail(email, firstName, trialEnd).catch(err =>
+            console.error('Welcome email failed:', err?.message ?? err)
+          );
+        }
         break;
       }
       case 'customer.subscription.updated':
