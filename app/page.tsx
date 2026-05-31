@@ -179,7 +179,7 @@ export default async function LandingPage() {
               style={{ background: '#16a34a', color: '#fff' }}>
               Get Started
             </Link>
-            <p className="text-[10px] text-gray-700 text-center mt-2">3-day free trial · No charge until day 4</p>
+            <p className="text-[10px] text-gray-700 text-center mt-2">4-day free trial · No charge until day 5</p>
           </div>
 
           {/* Yearly */}
@@ -213,7 +213,7 @@ export default async function LandingPage() {
               style={{ background: '#16a34a', color: '#fff' }}>
               Get Started
             </Link>
-            <p className="text-[10px] text-gray-700 text-center mt-2">3-day free trial · No charge until day 4</p>
+            <p className="text-[10px] text-gray-700 text-center mt-2">4-day free trial · No charge until day 5</p>
           </div>
 
         </div>

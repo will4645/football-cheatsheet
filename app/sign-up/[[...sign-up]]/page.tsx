@@ -139,7 +139,7 @@ export default function SignUpPage() {
                   style={{ background: '#16a34a', color: '#fff' }}>
                   {loading ? 'Creating account...' : 'Create account & start free trial'}
                 </button>
-                <p className="text-[11px] text-gray-600 text-center">3-day free trial · No charge until day 4 · Cancel any time</p>
+                <p className="text-[11px] text-gray-600 text-center">4-day free trial · No charge until day 5 · Cancel any time</p>
               </form>
             </>
           ) : (

@@ -94,7 +94,7 @@ function PlanCard({
       )}
 
       <p className="text-xs text-gray-600 mb-1 text-center mt-2">
-        3-day free trial · Cancel any time
+        4-day free trial · Cancel any time
       </p>
       {billing === 'annual' && (
         <p className="text-[10px] text-center mb-5" style={{ color: 'rgba(255,255,255,0.25)' }}>
@@ -117,12 +117,12 @@ function PlanCard({
         className="w-full py-3 rounded-xl font-bold text-sm transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
         style={{ background: '#16a34a', color: '#fff' }}
       >
-        {loading ? 'Redirecting...' : 'Start 3-day free trial'}
+        {loading ? 'Redirecting...' : 'Start 4-day free trial'}
       </button>
 
       {error && <p className="text-red-400 text-xs text-center mt-3">{error}</p>}
 
-      <p className="text-[10px] text-gray-700 text-center mt-3">Secure payment via Stripe · No charge for 3 days</p>
+      <p className="text-[10px] text-gray-700 text-center mt-3">Secure payment via Stripe · No charge for 4 days</p>
       <p className="text-[10px] text-gray-700 text-center mt-2 leading-relaxed">
         By subscribing you agree to our{' '}
         <Link href="/terms" className="hover:text-gray-500 transition-colors">Terms of Service</Link>

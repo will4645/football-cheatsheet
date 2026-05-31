@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
         metadata: { clerkUserId: userId },
-        ...(trialEligible ? { trial_period_days: 3 } : {}),
+        ...(trialEligible ? { trial_period_days: 4 } : {}),
       },
       metadata: { clerkUserId: userId },
       success_url: `${origin}/dashboard?subscribed=1`,

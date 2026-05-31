@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { upsertSubscription, getSubscription } from '@/lib/subscription';
-import { sendWelcomeEmail } from '@/lib/email';
+import { sendWelcomeEmail, sendTrialEndingEmail } from '@/lib/email';
 import type Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
@@ -76,6 +76,25 @@ export async function POST(req: NextRequest) {
             : null;
           sendWelcomeEmail(email, firstName, trialEnd).catch(err =>
             console.error('Welcome email failed:', err?.message ?? err)
+          );
+        }
+        break;
+      }
+      case 'customer.subscription.trial_will_end': {
+        const eventSub = event.data.object as Stripe.Subscription;
+        const customerId = typeof eventSub.customer === 'string' ? eventSub.customer : (eventSub.customer as any).id;
+        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+        const email = customer.email ?? '';
+        const firstName = (customer.name ?? '').split(' ')[0] ?? '';
+        const trialEnd = (eventSub as any).trial_end;
+        const chargeDate = trialEnd ? new Date(trialEnd * 1000) : new Date();
+        // Determine amount from the subscription's price
+        const priceId = eventSub.items.data[0]?.price?.id ?? '';
+        const monthlyPriceId = process.env.STRIPE_PRICE_ID ?? '';
+        const amount = priceId === monthlyPriceId ? '£9.99' : '£79.99';
+        if (email) {
+          sendTrialEndingEmail(email, firstName, chargeDate, amount).catch(err =>
+            console.error('Trial ending email failed:', err?.message ?? err)
           );
         }
         break;
