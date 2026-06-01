@@ -1215,33 +1215,37 @@ export async function fetchPlayerPersonalHistoryBatch(
     } catch {}
   }
 
-  // Step 2: fetch all player stats for each unique fixture (no team filter = both teams in one call)
+  // Step 2: fetch all player stats in batches of 6 to avoid serial latency
   const fixturePlayerStats = new Map<number, Map<number, PlayerGameStat>>();
-  for (const fixtureId of Array.from(allFixtureIds)) {
-    try {
-      const pd = await afFetch(`/fixtures/players?fixture=${fixtureId}`, apiKey);
-      const teams: any[] = pd?.response ?? [];
-      const playerMap = new Map<number, PlayerGameStat>();
-      for (const team of teams) {
-        for (const p of (team.players ?? [])) {
-          const pid: number = p.player?.id;
-          if (!pid) continue;
-          const s = p.statistics?.[0];
-          if (!s) continue;
-          playerMap.set(pid, {
-            goals:       s.goals?.total     ?? 0,
-            assists:     s.goals?.assists   ?? 0,
-            shots:       s.shots?.total     ?? 0,
-            sot:         s.shots?.on        ?? 0,
-            fc:          s.fouls?.committed ?? 0,
-            fd:          s.fouls?.drawn     ?? 0,
-            yellowCards: s.cards?.yellow    ?? 0,
-            saves:       s.goals?.saves     ?? s.goalkeeper?.saves ?? 0,
-          });
+  const fixtureIdList = Array.from(allFixtureIds);
+  const BATCH = 6;
+  for (let i = 0; i < fixtureIdList.length; i += BATCH) {
+    await Promise.all(fixtureIdList.slice(i, i + BATCH).map(async fixtureId => {
+      try {
+        const pd = await afFetch(`/fixtures/players?fixture=${fixtureId}`, apiKey);
+        const teams: any[] = pd?.response ?? [];
+        const playerMap = new Map<number, PlayerGameStat>();
+        for (const team of teams) {
+          for (const p of (team.players ?? [])) {
+            const pid: number = p.player?.id;
+            if (!pid) continue;
+            const s = p.statistics?.[0];
+            if (!s) continue;
+            playerMap.set(pid, {
+              goals:       s.goals?.total     ?? 0,
+              assists:     s.goals?.assists   ?? 0,
+              shots:       s.shots?.total     ?? 0,
+              sot:         s.shots?.on        ?? 0,
+              fc:          s.fouls?.committed ?? 0,
+              fd:          s.fouls?.drawn     ?? 0,
+              yellowCards: s.cards?.yellow    ?? 0,
+              saves:       s.goals?.saves     ?? s.goalkeeper?.saves ?? 0,
+            });
+          }
         }
-      }
-      fixturePlayerStats.set(fixtureId, playerMap);
-    } catch {}
+        fixturePlayerStats.set(fixtureId, playerMap);
+      } catch {}
+    }));
   }
 
   // Step 3: build per-player history (newest first).
@@ -1316,6 +1320,51 @@ export interface MatchOdds {
   under25Odd?: number;
 }
 
+function computeOddsFromSamples(
+  h2hSamples: { home: number; draw: number; away: number }[],
+  bttsSamples: { yes: number; no: number }[],
+  ou25Samples: { over: number; under: number }[],
+): Omit<MatchOdds, 'referee'> | null {
+  if (!h2hSamples.length) return null;
+  const avg = {
+    home: h2hSamples.reduce((s, o) => s + 1 / o.home, 0) / h2hSamples.length,
+    draw: h2hSamples.reduce((s, o) => s + 1 / o.draw, 0) / h2hSamples.length,
+    away: h2hSamples.reduce((s, o) => s + 1 / o.away, 0) / h2hSamples.length,
+  };
+  const total = avg.home + avg.draw + avg.away;
+  const homeOdd = parseFloat((total / avg.home).toFixed(2));
+  const drawOdd = parseFloat((total / avg.draw).toFixed(2));
+  const awayOdd = parseFloat((total / avg.away).toFixed(2));
+  let btts: number | null = null;
+  let bttsYesOdd: number | undefined;
+  let bttsNoOdd: number | undefined;
+  if (bttsSamples.length > 0) {
+    const yesP = bttsSamples.reduce((s, o) => s + 1 / o.yes, 0) / bttsSamples.length;
+    const noP  = bttsSamples.reduce((s, o) => s + 1 / o.no,  0) / bttsSamples.length;
+    const bt = yesP + noP;
+    btts = Math.round((yesP / bt) * 100);
+    bttsYesOdd = parseFloat((bt / yesP).toFixed(2));
+    bttsNoOdd  = parseFloat((bt / noP).toFixed(2));
+  }
+  let over25Odd: number | undefined;
+  let under25Odd: number | undefined;
+  if (ou25Samples.length > 0) {
+    const overP  = ou25Samples.reduce((s, o) => s + 1 / o.over,  0) / ou25Samples.length;
+    const underP = ou25Samples.reduce((s, o) => s + 1 / o.under, 0) / ou25Samples.length;
+    const ot = overP + underP;
+    over25Odd  = parseFloat((ot / overP).toFixed(2));
+    under25Odd = parseFloat((ot / underP).toFixed(2));
+  }
+  return {
+    homeWin: Math.round((avg.home / total) * 100),
+    draw:    Math.round((avg.draw / total) * 100),
+    awayWin: Math.round((avg.away / total) * 100),
+    btts, homeOdd, drawOdd, awayOdd,
+    ...(bttsYesOdd !== undefined ? { bttsYesOdd, bttsNoOdd }  : {}),
+    ...(over25Odd  !== undefined ? { over25Odd,  under25Odd } : {}),
+  };
+}
+
 export async function fetchApiFootballOdds(
   homeName: string,
   awayName: string,
@@ -1339,8 +1388,8 @@ export async function fetchApiFootballOdds(
     const fixture = fixtures.find(f => {
       const fh = norm(f.teams?.home?.name ?? '');
       const fa = norm(f.teams?.away?.name ?? '');
-      const homeMatch = fh === hNorm || hNorm.split(' ').filter(w => w.length > 3).some(w => fh.includes(w));
-      const awayMatch = fa === aNorm || aNorm.split(' ').filter(w => w.length > 3).some(w => fa.includes(w));
+      const homeMatch = fh === hNorm || hNorm.split(' ').filter(w => w.length > 4).some(w => fh.includes(w));
+      const awayMatch = fa === aNorm || aNorm.split(' ').filter(w => w.length > 4).some(w => fa.includes(w));
       return homeMatch && awayMatch;
     });
     if (!fixture) return null;
@@ -1383,53 +1432,9 @@ export async function fetchApiFootballOdds(
       }
     }
 
-    if (!h2hSamples.length) return null;
-
-    // Average implied probabilities across bookmakers then normalise to remove overround
-    const avg = {
-      home: h2hSamples.reduce((s, o) => s + 1 / o.home, 0) / h2hSamples.length,
-      draw: h2hSamples.reduce((s, o) => s + 1 / o.draw, 0) / h2hSamples.length,
-      away: h2hSamples.reduce((s, o) => s + 1 / o.away, 0) / h2hSamples.length,
-    };
-    const total = avg.home + avg.draw + avg.away;
-
-    // Fair decimal odds (overround stripped)
-    const homeOdd    = parseFloat((total / avg.home).toFixed(2));
-    const drawOdd    = parseFloat((total / avg.draw).toFixed(2));
-    const awayOdd    = parseFloat((total / avg.away).toFixed(2));
-
-    let btts: number | null = null;
-    let bttsYesOdd: number | undefined;
-    let bttsNoOdd: number | undefined;
-    if (bttsSamples.length > 0) {
-      const yesP = bttsSamples.reduce((s, o) => s + 1 / o.yes, 0) / bttsSamples.length;
-      const noP  = bttsSamples.reduce((s, o) => s + 1 / o.no,  0) / bttsSamples.length;
-      const bttsTotal = yesP + noP;
-      btts = Math.round((yesP / bttsTotal) * 100);
-      bttsYesOdd = parseFloat((bttsTotal / yesP).toFixed(2));
-      bttsNoOdd  = parseFloat((bttsTotal / noP).toFixed(2));
-    }
-
-    let over25Odd: number | undefined;
-    let under25Odd: number | undefined;
-    if (ou25Samples.length > 0) {
-      const overP  = ou25Samples.reduce((s, o) => s + 1 / o.over,  0) / ou25Samples.length;
-      const underP = ou25Samples.reduce((s, o) => s + 1 / o.under, 0) / ou25Samples.length;
-      const ouTotal = overP + underP;
-      over25Odd  = parseFloat((ouTotal / overP).toFixed(2));
-      under25Odd = parseFloat((ouTotal / underP).toFixed(2));
-    }
-
-    return {
-      homeWin: Math.round((avg.home / total) * 100),
-      draw:    Math.round((avg.draw / total) * 100),
-      awayWin: Math.round((avg.away / total) * 100),
-      btts,
-      homeOdd, drawOdd, awayOdd,
-      ...(bttsYesOdd  !== undefined ? { bttsYesOdd, bttsNoOdd }   : {}),
-      ...(over25Odd   !== undefined ? { over25Odd, under25Odd }   : {}),
-      ...(referee ? { referee } : {}),
-    };
+    const computed = computeOddsFromSamples(h2hSamples, bttsSamples, ou25Samples);
+    if (!computed) return null;
+    return { ...computed, ...(referee ? { referee } : {}) };
   } catch {
     return null;
   }
@@ -1491,50 +1496,7 @@ export async function fetchTheOddsApiOdds(
       }
     }
 
-    if (!h2hSamples.length) return null;
-
-    const avg = {
-      home: h2hSamples.reduce((s, o) => s + 1 / o.home, 0) / h2hSamples.length,
-      draw: h2hSamples.reduce((s, o) => s + 1 / o.draw, 0) / h2hSamples.length,
-      away: h2hSamples.reduce((s, o) => s + 1 / o.away, 0) / h2hSamples.length,
-    };
-    const total = avg.home + avg.draw + avg.away;
-
-    const homeOdd = parseFloat((total / avg.home).toFixed(2));
-    const drawOdd = parseFloat((total / avg.draw).toFixed(2));
-    const awayOdd = parseFloat((total / avg.away).toFixed(2));
-
-    let btts: number | null = null;
-    let bttsYesOdd: number | undefined;
-    let bttsNoOdd: number | undefined;
-    if (bttsSamples.length > 0) {
-      const yesP = bttsSamples.reduce((s, o) => s + 1 / o.yes, 0) / bttsSamples.length;
-      const noP  = bttsSamples.reduce((s, o) => s + 1 / o.no,  0) / bttsSamples.length;
-      const bt = yesP + noP;
-      btts = Math.round((yesP / bt) * 100);
-      bttsYesOdd = parseFloat((bt / yesP).toFixed(2));
-      bttsNoOdd  = parseFloat((bt / noP).toFixed(2));
-    }
-
-    let over25Odd: number | undefined;
-    let under25Odd: number | undefined;
-    if (ou25Samples.length > 0) {
-      const overP  = ou25Samples.reduce((s, o) => s + 1 / o.over,  0) / ou25Samples.length;
-      const underP = ou25Samples.reduce((s, o) => s + 1 / o.under, 0) / ou25Samples.length;
-      const ot = overP + underP;
-      over25Odd  = parseFloat((ot / overP).toFixed(2));
-      under25Odd = parseFloat((ot / underP).toFixed(2));
-    }
-
-    return {
-      homeWin: Math.round((avg.home / total) * 100),
-      draw:    Math.round((avg.draw / total) * 100),
-      awayWin: Math.round((avg.away / total) * 100),
-      btts,
-      homeOdd, drawOdd, awayOdd,
-      ...(bttsYesOdd !== undefined ? { bttsYesOdd, bttsNoOdd }  : {}),
-      ...(over25Odd  !== undefined ? { over25Odd,  under25Odd } : {}),
-    };
+    return computeOddsFromSamples(h2hSamples, bttsSamples, ou25Samples);
   } catch {
     return null;
   }
@@ -1633,8 +1595,8 @@ export async function lookupAfFixtureId(
     const fixture = fixtures.find((f: any) => {
       const fh = norm(f.teams?.home?.name ?? '');
       const fa = norm(f.teams?.away?.name ?? '');
-      const homeMatch = fh === hNorm || hNorm.split(' ').filter((w: string) => w.length > 3).some((w: string) => fh.includes(w));
-      const awayMatch = fa === aNorm || aNorm.split(' ').filter((w: string) => w.length > 3).some((w: string) => fa.includes(w));
+      const homeMatch = fh === hNorm || hNorm.split(' ').filter((w: string) => w.length > 4).some((w: string) => fh.includes(w));
+      const awayMatch = fa === aNorm || aNorm.split(' ').filter((w: string) => w.length > 4).some((w: string) => fa.includes(w));
       return homeMatch && awayMatch;
     });
     return fixture?.fixture?.id ?? null;

@@ -7,11 +7,11 @@ export const dynamic = 'force-dynamic';
 
 async function emailHadPriorSubscription(email: string): Promise<boolean> {
   const customers = await stripe.customers.list({ email, limit: 10 });
-  for (const customer of customers.data) {
-    const subs = await stripe.subscriptions.list({ customer: customer.id, limit: 1, status: 'all' });
-    if (subs.data.length > 0) return true;
-  }
-  return false;
+  if (!customers.data.length) return false;
+  const results = await Promise.all(
+    customers.data.map(c => stripe.subscriptions.list({ customer: c.id, limit: 1, status: 'all' }))
+  );
+  return results.some(r => r.data.length > 0);
 }
 
 export async function POST(req: NextRequest) {
@@ -50,6 +50,9 @@ export async function POST(req: NextRequest) {
           console.error('Trial eligibility check failed (Stripe error):', err?.message ?? err);
           trialEligible = false; // deny trial on error — safer than granting it
         }
+      } else {
+        // Clerk returned null or no email address — can't verify, deny trial
+        trialEligible = false;
       }
     }
 
