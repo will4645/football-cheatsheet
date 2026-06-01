@@ -69,6 +69,12 @@ function norm(name: string) {
     .toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+// Returns the API-Football season year for a given date (Aug\u2013Jul window, e.g. Aug 2026 \u2192 2026)
+export function inferSeason(date: Date | string): number {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.getUTCMonth() >= 7 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+}
+
 function teamMatch(a: string, b: string) {
   const na = norm(a); const nb = norm(b);
   if (na === nb) return true;
@@ -746,10 +752,11 @@ export async function fetchApiFootballTeamHistory(
 
     // Fetch 15 recent fixtures (was 10) — larger window gives better per-game averages for
     // afTeamStats and richer afHistory for bestLast5. Quota is no concern (73,500 calls/day spare).
-    let fd = await afFetch(`/fixtures?team=${teamId}&last=15&season=2025`, apiKey);
+    const curSeason = inferSeason(new Date());
+    let fd = await afFetch(`/fixtures?team=${teamId}&last=15&season=${curSeason}`, apiKey);
     let fixtures: any[] = fd?.response ?? [];
     if (!fixtures.length) {
-      fd = await afFetch(`/fixtures?team=${teamId}&last=15&season=2024`, apiKey);
+      fd = await afFetch(`/fixtures?team=${teamId}&last=15&season=${curSeason - 1}`, apiKey);
       fixtures = fd?.response ?? [];
     }
     if (!fixtures.length) return { history: new Map(), playerIds: new Map(), afTeamId: teamId, afTeamStats: null, debug: `no fixtures: ${teamId}` };
@@ -1112,7 +1119,7 @@ export async function fetchApiFootballRefereeByLeague(
   if (!apiKey) return '';
   try {
     const dateStr = matchDate.slice(0, 10);
-    const fd = await afFetch(`/fixtures?league=${leagueId}&date=${dateStr}&season=2025`, apiKey);
+    const fd = await afFetch(`/fixtures?league=${leagueId}&date=${dateStr}&season=${inferSeason(dateStr)}`, apiKey);
     const fixtures: any[] = fd?.response ?? [];
     if (!fixtures.length) return '';
     const hNorm = norm(homeName);
@@ -1120,8 +1127,8 @@ export async function fetchApiFootballRefereeByLeague(
     const hit = fixtures.find(f => {
       const fh = norm(f.teams?.home?.name ?? '');
       const fa = norm(f.teams?.away?.name ?? '');
-      const homeMatch = fh === hNorm || hNorm.split(' ').filter(w => w.length > 3).some(w => fh.includes(w));
-      const awayMatch = fa === aNorm || aNorm.split(' ').filter(w => w.length > 3).some(w => fa.includes(w));
+      const homeMatch = fh === hNorm || hNorm.split(' ').filter(w => w.length > 4).some(w => fh.includes(w));
+      const awayMatch = fa === aNorm || aNorm.split(' ').filter(w => w.length > 4).some(w => fa.includes(w));
       return homeMatch || awayMatch;
     });
     const raw: string = hit?.fixture?.referee ?? '';
@@ -1200,7 +1207,7 @@ export async function fetchPlayerPersonalHistoryBatch(
       // then fall back to current season if the response is empty.
       let fd = await afFetch(`/fixtures?player=${playerId}&last=${fetchCount}`, apiKey);
       if (!fd?.response?.length) {
-        fd = await afFetch(`/fixtures?player=${playerId}&season=2025&last=${fetchCount}`, apiKey);
+        fd = await afFetch(`/fixtures?player=${playerId}&season=${inferSeason(new Date())}&last=${fetchCount}`, apiKey);
       }
       const fixtures: any[] = fd?.response ?? [];
       if (fixtures.length > 0) {
@@ -1244,7 +1251,9 @@ export async function fetchPlayerPersonalHistoryBatch(
           }
         }
         fixturePlayerStats.set(fixtureId, playerMap);
-      } catch {}
+      } catch (e: any) {
+        console.error(`[players] fixture ${fixtureId} stats fetch failed:`, e?.message ?? e);
+      }
     }));
   }
 
@@ -1281,7 +1290,8 @@ export async function lookupAfPlayerId(
     const parts = norm(playerName).split(' ').filter(w => w.length >= 3).slice(0, 2);
     const searchName = parts.join(' ');
     if (!searchName) return null;
-    for (const season of [2025, 2024]) {
+    const nowSeason = inferSeason(new Date());
+    for (const season of [nowSeason, nowSeason - 1]) {
       const pd = await afFetch(`/players?search=${encodeURIComponent(searchName)}&team=${afTeamId}&season=${season}`, apiKey);
       const players: any[] = pd?.response ?? [];
       if (!players.length) continue;
@@ -1378,8 +1388,7 @@ export async function fetchApiFootballOdds(
     const guessedLeague = leagueId ?? guessDomesticLeagueId(homeName) ?? guessDomesticLeagueId(awayName);
     const leagueParam = guessedLeague ? `&league=${guessedLeague}` : '';
 
-    const d = new Date(dateStr);
-    const season = d.getUTCMonth() >= 7 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+    const season = inferSeason(dateStr);
     const fd = await afFetch(`/fixtures?date=${dateStr}&season=${season}${leagueParam}`, apiKey);
     const fixtures: any[] = fd?.response ?? [];
 
@@ -1585,10 +1594,8 @@ export async function lookupAfFixtureId(
   if (!apiKey) return null;
   try {
     const dateStr = matchDate.slice(0, 10);
-    const d2 = new Date(dateStr);
-    const season = d2.getUTCMonth() >= 7 ? d2.getUTCFullYear() : d2.getUTCFullYear() - 1;
     const leagueParam = leagueId ? `&league=${leagueId}` : '';
-    const fd = await afFetch(`/fixtures?date=${dateStr}&season=${season}${leagueParam}`, apiKey);
+    const fd = await afFetch(`/fixtures?date=${dateStr}&season=${inferSeason(dateStr)}${leagueParam}`, apiKey);
     const fixtures: any[] = fd?.response ?? [];
     const hNorm = norm(homeName);
     const aNorm = norm(awayName);

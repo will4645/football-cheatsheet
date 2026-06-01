@@ -9,11 +9,14 @@ function getClient() {
 
 export async function getSubscription(clerkUserId: string) {
   const supabase = getClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('subscriptions')
     .select('status, current_period_end, stripe_customer_id, stripe_subscription_id')
     .eq('clerk_user_id', clerkUserId)
     .single();
+  if (error && error.code !== 'PGRST116') {
+    console.error('getSubscription error:', error.message);
+  }
   return data ?? null;
 }
 
@@ -37,7 +40,7 @@ export async function upsertSubscription(params: {
   currentPeriodEnd: Date;
 }) {
   const supabase = getClient();
-  await supabase.from('subscriptions').upsert({
+  const { error } = await supabase.from('subscriptions').upsert({
     clerk_user_id: params.clerkUserId,
     stripe_customer_id: params.stripeCustomerId,
     stripe_subscription_id: params.stripeSubscriptionId,
@@ -45,4 +48,5 @@ export async function upsertSubscription(params: {
     current_period_end: params.currentPeriodEnd.toISOString(),
     updated_at: new Date().toISOString(),
   }, { onConflict: 'clerk_user_id' });
+  if (error) throw new Error(`upsertSubscription failed: ${error.message}`);
 }

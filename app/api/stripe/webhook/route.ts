@@ -121,9 +121,13 @@ export async function POST(req: NextRequest) {
             (sub.metadata?.clerkUserId as string | undefined) ??
             (typeof sub.customer === 'string' ? await getClerkUserIdFromCustomer(sub.customer) : null);
           if (clerkUserId) {
+            // Patch metadata so handleSubscription doesn't make a second DB lookup
+            if (!sub.metadata?.clerkUserId) (sub.metadata as any).clerkUserId = clerkUserId;
             const stored = await getSubscription(clerkUserId);
-            if (stored?.stripe_subscription_id && stored.stripe_subscription_id !== sub.id) {
-              break; // newer subscription exists — don't overwrite
+            // Guard: if stored row exists with a different subscription ID (including null),
+            // skip — either a newer sub exists or the row is in an unknown state
+            if (stored && stored.stripe_subscription_id !== sub.id) {
+              break;
             }
           }
         }

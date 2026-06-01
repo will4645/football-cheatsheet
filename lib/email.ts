@@ -75,7 +75,7 @@ export async function sendWelcomeEmail(to: string, firstName: string, trialEnd: 
   await transporter.sendMail({
     from: '"Cheat Sheets" <support@cheatsheets.co.uk>',
     to,
-    subject: 'Welcome to Cheat Sheets: your trial has started',
+    subject: trialEnd ? 'Welcome to Cheat Sheets: your trial has started' : 'Welcome to Cheat Sheets',
     html: `
 <!DOCTYPE html>
 <html>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, lookupAfFixtureId, fetchEspnStandings, PlayerGameStat } from '@/lib/api-football';
+import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, lookupAfFixtureId, fetchEspnStandings, inferSeason, PlayerGameStat } from '@/lib/api-football';
 import type { TeamSeasonStats, EspnRosterPlayer, AfSquadPlayer, AfTeamFixtureStats, MatchOdds } from '@/lib/api-football';
 import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
 import type { ApiSportsPlayer } from '@/lib/api-sports';
@@ -1214,7 +1214,7 @@ async function runSync(forceRebuild = false) {
     } else {
       const batches = await Promise.all(
         AF_SUPPLEMENT_LEAGUES.map((lg, i) =>
-          fetchAfFixturesByDateRange(lg.leagueId, fmt(twoDaysAgo), fmt(in21d), 2025, afSupKey)
+          fetchAfFixturesByDateRange(lg.leagueId, fmt(twoDaysAgo), fmt(in21d), inferSeason(new Date()), afSupKey)
             .then(fixes => fixes.map(f => ({ fix: f, lg, lgIdx: i })))
             .catch(() => [] as Array<{ fix: any; lg: typeof AF_SUPPLEMENT_LEAGUES[0]; lgIdx: number }>)
         )

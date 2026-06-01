@@ -6,7 +6,7 @@ import { getSubscription } from '@/lib/subscription';
 export const dynamic = 'force-dynamic';
 
 async function emailHadPriorSubscription(email: string): Promise<boolean> {
-  const customers = await stripe.customers.list({ email, limit: 10 });
+  const customers = await stripe.customers.list({ email, limit: 100 });
   if (!customers.data.length) return false;
   const results = await Promise.all(
     customers.data.map(c => stripe.subscriptions.list({ customer: c.id, limit: 1, status: 'all' }))
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       ? (process.env.STRIPE_ANNUAL_PRICE_ID ?? process.env.STRIPE_PRICE_ID!)
       : process.env.STRIPE_PRICE_ID!;
 
-    const origin = req.headers.get('origin') ?? 'https://cheatsheets.co.uk';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://cheatsheets.co.uk';
 
     const [existing, user] = await Promise.all([
       getSubscription(userId),
@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
           trialEligible = false; // deny trial on error — safer than granting it
         }
       } else {
-        // Clerk returned null or no email address — can't verify, deny trial
+        // Clerk returned null or no email — can't run Stripe dedup check, deny trial conservatively
+        console.warn('Trial eligibility: no email from Clerk for userId', userId, '— denying trial');
         trialEligible = false;
       }
     }
@@ -65,8 +66,8 @@ export async function POST(req: NextRequest) {
         ...(trialEligible ? { trial_period_days: 4 } : {}),
       },
       metadata: { clerkUserId: userId },
-      success_url: `${origin}/dashboard?subscribed=1`,
-      cancel_url: `${origin}/pricing`,
+      success_url: `${appUrl}/dashboard?subscribed=1`,
+      cancel_url: `${appUrl}/pricing`,
       allow_promotion_codes: true,
     });
 
