@@ -11,7 +11,7 @@ export async function getSubscription(clerkUserId: string) {
   const supabase = getClient();
   const { data } = await supabase
     .from('subscriptions')
-    .select('status, current_period_end, stripe_customer_id')
+    .select('status, current_period_end, stripe_customer_id, stripe_subscription_id')
     .eq('clerk_user_id', clerkUserId)
     .single();
   return data ?? null;

@@ -83,12 +83,21 @@ export async function POST(req: NextRequest) {
       case 'customer.subscription.trial_will_end': {
         const eventSub = event.data.object as Stripe.Subscription;
         const customerId = typeof eventSub.customer === 'string' ? eventSub.customer : (eventSub.customer as any).id;
-        const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
-        const email = customer.email ?? '';
-        const firstName = (customer.name ?? '').split(' ')[0] ?? '';
-        const trialEnd = (eventSub as any).trial_end;
-        const chargeDate = trialEnd ? new Date(trialEnd * 1000) : new Date();
-        // Determine amount from the subscription's price
+        let email = '';
+        let firstName = '';
+        try {
+          const customer = await stripe.customers.retrieve(customerId);
+          if (!('deleted' in customer) || !customer.deleted) {
+            email = (customer as Stripe.Customer).email ?? '';
+            firstName = ((customer as Stripe.Customer).name ?? '').split(' ')[0] ?? '';
+          }
+        } catch (err: any) {
+          console.error('trial_will_end: could not retrieve customer', customerId, err?.message ?? err);
+          break;
+        }
+        const trialEnd: number = (eventSub as any).trial_end ?? 0;
+        if (!trialEnd) break; // no valid trial end — skip rather than show wrong date
+        const chargeDate = new Date(trialEnd * 1000);
         const priceId = eventSub.items.data[0]?.price?.id ?? '';
         const monthlyPriceId = process.env.STRIPE_PRICE_ID ?? '';
         const amount = priceId === monthlyPriceId ? '£9.99' : '£79.99';
@@ -103,6 +112,22 @@ export async function POST(req: NextRequest) {
       case 'customer.subscription.deleted': {
         const eventSub = event.data.object as Stripe.Subscription;
         const sub = await retrieveWithExpand(eventSub.id);
+
+        // Guard: don't let a deleted-sub event overwrite a newer active subscription.
+        // upsertSubscription conflicts on clerk_user_id (one row per user), so if the user
+        // already re-subscribed and has a different active sub, skip this upsert.
+        if (event.type === 'customer.subscription.deleted') {
+          const clerkUserId =
+            (sub.metadata?.clerkUserId as string | undefined) ??
+            (typeof sub.customer === 'string' ? await getClerkUserIdFromCustomer(sub.customer) : null);
+          if (clerkUserId) {
+            const stored = await getSubscription(clerkUserId);
+            if (stored?.stripe_subscription_id && stored.stripe_subscription_id !== sub.id) {
+              break; // newer subscription exists — don't overwrite
+            }
+          }
+        }
+
         await handleSubscription(sub);
         break;
       }

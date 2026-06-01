@@ -43,7 +43,14 @@ export async function POST(req: NextRequest) {
     // Option 2: same email already used a trial on Stripe → no trial
     if (trialEligible) {
       const email = user?.emailAddresses[0]?.emailAddress ?? '';
-      if (email) trialEligible = !(await emailHadPriorSubscription(email));
+      if (email) {
+        try {
+          trialEligible = !(await emailHadPriorSubscription(email));
+        } catch (err: any) {
+          console.error('Trial eligibility check failed (Stripe error):', err?.message ?? err);
+          trialEligible = false; // deny trial on error — safer than granting it
+        }
+      }
     }
 
     const session = await stripe.checkout.sessions.create({

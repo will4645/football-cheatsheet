@@ -630,7 +630,9 @@ export async function fetchEspnStandings(espnLeague: string): Promise<Map<string
       result.forEach((v, k) => { obj[k] = v; });
       await kvSet(cacheKey, { cachedAt: Date.now(), data: obj });
     }
-  } catch {}
+  } catch (e: any) {
+    console.error(`[standings] fetch failed for ${espnLeague}:`, e?.message ?? e);
+  }
   return result;
 }
 
@@ -1302,7 +1304,7 @@ export interface MatchOdds {
   homeWin: number;
   draw: number;
   awayWin: number;
-  btts: number;
+  btts: number | null;
   referee?: string;
   // Fair decimal odds (overround removed), present when bookmaker data is available
   homeOdd?: number;
@@ -1327,7 +1329,9 @@ export async function fetchApiFootballOdds(
     const guessedLeague = leagueId ?? guessDomesticLeagueId(homeName) ?? guessDomesticLeagueId(awayName);
     const leagueParam = guessedLeague ? `&league=${guessedLeague}` : '';
 
-    const fd = await afFetch(`/fixtures?date=${dateStr}&season=2025${leagueParam}`, apiKey);
+    const d = new Date(dateStr);
+    const season = d.getUTCMonth() >= 7 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+    const fd = await afFetch(`/fixtures?date=${dateStr}&season=${season}${leagueParam}`, apiKey);
     const fixtures: any[] = fd?.response ?? [];
 
     const hNorm = norm(homeName);
@@ -1351,7 +1355,7 @@ export async function fetchApiFootballOdds(
     const bookmakers: any[] = od?.response?.[0]?.bookmakers ?? [];
     if (!bookmakers.length) {
       // No odds available but we found the fixture — return referee only if present
-      return referee ? { homeWin: 0, draw: 0, awayWin: 0, btts: 50, referee } : null;
+      return referee ? { homeWin: 0, draw: 0, awayWin: 0, btts: null, referee } : null;
     }
 
     const h2hSamples: { home: number; draw: number; away: number }[] = [];
@@ -1394,7 +1398,7 @@ export async function fetchApiFootballOdds(
     const drawOdd    = parseFloat((total / avg.draw).toFixed(2));
     const awayOdd    = parseFloat((total / avg.away).toFixed(2));
 
-    let btts = 50;
+    let btts: number | null = null;
     let bttsYesOdd: number | undefined;
     let bttsNoOdd: number | undefined;
     if (bttsSamples.length > 0) {
@@ -1500,7 +1504,7 @@ export async function fetchTheOddsApiOdds(
     const drawOdd = parseFloat((total / avg.draw).toFixed(2));
     const awayOdd = parseFloat((total / avg.away).toFixed(2));
 
-    let btts = 50;
+    let btts: number | null = null;
     let bttsYesOdd: number | undefined;
     let bttsNoOdd: number | undefined;
     if (bttsSamples.length > 0) {
@@ -1619,8 +1623,10 @@ export async function lookupAfFixtureId(
   if (!apiKey) return null;
   try {
     const dateStr = matchDate.slice(0, 10);
+    const d2 = new Date(dateStr);
+    const season = d2.getUTCMonth() >= 7 ? d2.getUTCFullYear() : d2.getUTCFullYear() - 1;
     const leagueParam = leagueId ? `&league=${leagueId}` : '';
-    const fd = await afFetch(`/fixtures?date=${dateStr}&season=2025${leagueParam}`, apiKey);
+    const fd = await afFetch(`/fixtures?date=${dateStr}&season=${season}${leagueParam}`, apiKey);
     const fixtures: any[] = fd?.response ?? [];
     const hNorm = norm(homeName);
     const aNorm = norm(awayName);

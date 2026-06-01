@@ -14,7 +14,7 @@ export async function sendTrialEndingEmail(to: string, firstName: string, charge
   await transporter.sendMail({
     from: '"Cheat Sheets" <support@cheatsheets.co.uk>',
     to,
-    subject: 'Your Cheat Sheets trial ends tomorrow',
+    subject: 'Your Cheat Sheets trial is ending',
     html: `
 <!DOCTYPE html>
 <html>
@@ -30,7 +30,7 @@ export async function sendTrialEndingEmail(to: string, firstName: string, charge
         </td></tr>
 
         <tr><td style="padding-bottom:20px">
-          <h1 style="margin:0;font-size:24px;font-weight:900;color:#ffffff">Your trial ends tomorrow${firstName ? `, ${firstName}` : ''}.</h1>
+          <h1 style="margin:0;font-size:24px;font-weight:900;color:#ffffff">Your trial ends on ${chargeDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}${firstName ? `, ${firstName}` : ''}.</h1>
         </td></tr>
 
         <tr><td style="padding-bottom:24px">
@@ -69,7 +69,7 @@ export async function sendTrialEndingEmail(to: string, firstName: string, charge
 
 export async function sendWelcomeEmail(to: string, firstName: string, trialEnd: Date | null) {
   const trialLine = trialEnd
-    ? `Your 3-day free trial runs until <strong>${trialEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>. No charge until then.`
+    ? `Your 4-day free trial runs until <strong>${trialEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>. No charge until then.`
     : 'Your subscription is now active.';
 
   await transporter.sendMail({

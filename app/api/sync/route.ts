@@ -1771,10 +1771,9 @@ async function runSync(forceRebuild = false) {
         const poissonBtts = Math.round((1 - Math.exp(-lH)) * (1 - Math.exp(-lA)) * 100);
         const over25 = toScale(poissonAtLeast(lH + lA, 3));
         // Use bookmaker odds when available; for BTTS, use Poisson if no BTTS market found
-        // (the default of exactly 50 signals no market was found, not a real bookmaker value)
         const toOdd = (pct: number) => +( 100 / Math.max(1, pct) ).toFixed(2);
         if (afOdds && afOdds.homeWin > 0) {
-          const resolvedBtts = afOdds.btts !== 50 ? afOdds.btts : poissonBtts;
+          const resolvedBtts = afOdds.btts !== null ? afOdds.btts : poissonBtts;
           // Derive over25 % from bookmaker odd when available, otherwise keep Poisson
           const resolvedOver25 = afOdds.over25Odd
             ? Math.round(100 / afOdds.over25Odd)
