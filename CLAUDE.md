@@ -11,7 +11,7 @@ Football betting cheatsheets with Clerk auth, Stripe subscriptions, Supabase dat
 
 - Framework: Next.js 14.2 (App Router), TypeScript
 - Auth: Clerk (production instance ins_3DzqRHW8qTzrMATI6eoGcWVOmmW)
-- Payments: Stripe live mode (acct_1TZCpm2Ly6cgjatR) — £9.99/mo or £79.99/yr, 7-day free trial
+- Payments: Stripe live mode (acct_1TZCpm2Ly6cgjatR) — £9.99/mo or £79.99/yr, 4-day free trial
 - Database: Supabase (project znvgalucggakvaphfgri) — `match_cache` table, key/value JSONB
 - Hosting: Vercel Pro (project football-cheatsheet, team cheatsheets)
 - Data: api-sports.io (£29/mo, 75,000 req/day) for AF player stats; ESPN internal API (free) for lineups
@@ -199,3 +199,49 @@ Placed a `{/* comment */}` as a standalone node before the root `<div>` in the s
 
 **Remaining:**
 - Test full sign-up → payment flow with a real card
+
+### 2026-06-01 — Full codebase code review + 25 bug fixes (3 rounds)
+
+Multi-pass automated review found and fixed 25 issues across 5 sessions. Deployed as commits `e692e16`, `0b4f1cf`, `f6edfdb`, `cf790b2`.
+
+**Round 1 — Correctness bugs (commit e692e16)**
+
+| Fix | Detail |
+|-----|--------|
+| Webhook race condition | `subscription.deleted` now checks stored `stripe_subscription_id` before upserting — prevents a late-arriving delete event overwriting a re-subscription and locking out a paying user |
+| Infinite webhook retry | `stripe.customers.retrieve` in `trial_will_end` wrapped in try/catch; deleted customer returns 200 instead of 500 + Stripe retry loop |
+| Checkout crash on Stripe error | `emailHadPriorSubscription` wrapped in try/catch; errors deny trial instead of crashing the checkout session with 500 |
+| btts sentinel collision | `MatchOdds.btts` changed from `number` to `number \| null`; `let btts = 50` sentinel replaced with `null` in both odds functions; sync check updated to `!== null`. Symmetric 50% bookmaker odds were previously being silently replaced by Poisson model |
+| Email copy | "3-day free trial" → "4-day", "ends tomorrow" subject/heading → actual charge date (Stripe fires `trial_will_end` 3 days before end by default, not 1) |
+| Standings errors invisible | `fetchEspnStandings` catch now logs errors instead of `catch {}` |
+| Season hardcode (partial) | `season=2025` replaced with dynamic `inferSeason()` in `fetchApiFootballOdds` and `lookupAfFixtureId` |
+| `stripe_subscription_id` | Added to `getSubscription` select (needed by webhook guard) |
+
+**Round 2 — Remaining review findings (commits 0b4f1cf + f6edfdb)**
+
+| Fix | Detail |
+|-----|--------|
+| Wrong standings from league guess | `guessDomesticLeague` fallback removed from standings block — position only shown when ESPN meta confirmed the league slug |
+| Checkout latency | `emailHadPriorSubscription` parallelised with `Promise.all` (was serial for loop, up to 10 sequential Stripe calls) |
+| Clerk null user bypass | `currentUser()` returning null now denies trial conservatively instead of silently skipping the Stripe dedup check |
+| Sync latency | Player stats fixture fetches batched 6 at a time with `Promise.all` (was serial, ~10s per live match) |
+| Odds duplication | `computeOddsFromSamples` helper extracted, removing ~60 lines duplicated between `fetchApiFootballOdds` and `fetchTheOddsApiOdds` |
+| Partial word match false positives | Word length threshold raised `> 3` → `> 4` in `fetchApiFootballOdds` and `lookupAfFixtureId` — "city", "real", "ajax" (4 chars) no longer cross-match wrong fixtures |
+| Orphaned import | `guessDomesticLeague` removed from sync route import after standings change made it unused |
+
+**Round 3 — Second scan found new issues (commit cf790b2)**
+
+| Fix | Detail |
+|-----|--------|
+| Silent subscription loss | `upsertSubscription` now throws on Supabase error — webhooks return 500 and Stripe retries instead of silently losing the subscription write and returning 200 |
+| DB error masks as "no subscription" | `getSubscription` logs non-PGRST116 errors instead of silently returning null (a DB outage previously set `trialEligible = true` for any user) |
+| Open redirect | `success_url`/`cancel_url` now use `NEXT_PUBLIC_APP_URL` env var instead of the attacker-controlled `Origin` header — previously an authenticated user could craft a Stripe checkout session that redirected victims to an arbitrary domain |
+| Pagination cap | `emailHadPriorSubscription` limit raised 10 → 100; `has_more` ignored before, missing prior subscriptions |
+| Phone/OAuth users | Trial denial for no-email users now emits `console.warn` with userId for observability |
+| Welcome email subject | Conditional: "your trial has started" only when `trialEnd` is non-null; direct subscribers no longer get the wrong subject |
+| null `stripe_subscription_id` guard bypass | Guard condition changed to `stored && stored.stripe_subscription_id !== sub.id` — protects rows where column is null (old rows pre-migration) |
+| Double DB lookup | `clerkUserId` patched onto `sub.metadata` before calling `handleSubscription` in delete path — eliminates second `getClerkUserIdFromCustomer` Supabase call |
+| Season hardcodes (remaining 5) | `inferSeason(date)` helper exported from `api-football.ts`; replaces all remaining `season=2025` hardcodes in `fetchApiFootballTeamHistory`, `fetchApiFootballRefereeByLeague`, `fetchPlayerPersonalHistoryBatch`, `lookupAfPlayerId`, and `fetchAfFixturesByDateRange`. Also fixes word match threshold in `fetchApiFootballRefereeByLeague` (was missed in round 2) |
+| Batch error visibility | Fixture stats batch `catch {}` now logs the error and fixture ID |
+
+**Current deployed commit:** `cf790b2` on master
