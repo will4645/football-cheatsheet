@@ -22,8 +22,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const billing: 'monthly' | 'annual' = body.billing === 'annual' ? 'annual' : 'monthly';
 
+    if (billing === 'annual' && !process.env.STRIPE_ANNUAL_PRICE_ID) {
+      console.error('[checkout] STRIPE_ANNUAL_PRICE_ID is not set — cannot fulfil annual checkout');
+      return NextResponse.json({ error: 'Annual plan is not available' }, { status: 500 });
+    }
     const priceId = billing === 'annual'
-      ? (process.env.STRIPE_ANNUAL_PRICE_ID ?? process.env.STRIPE_PRICE_ID!)
+      ? process.env.STRIPE_ANNUAL_PRICE_ID!
       : process.env.STRIPE_PRICE_ID!;
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://cheatsheets.co.uk';

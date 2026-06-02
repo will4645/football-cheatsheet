@@ -43,9 +43,10 @@ export async function GET(req: NextRequest) {
 
   const force = req.nextUrl.searchParams.get('force') === '1';
 
-  // fd.org competition code → AF domestic league ID (cups omitted — guessDomesticLeagueId handles those)
+  // fd.org competition code → AF league ID
   const FD_CODE_TO_AF_LEAGUE: Record<string, number> = {
     PL: 39, PD: 140, BL1: 78, SA: 135, FL1: 61,
+    CL: 2, EL: 3, ECL: 848,
   };
 
   try {

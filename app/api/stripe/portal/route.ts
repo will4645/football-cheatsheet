@@ -16,10 +16,14 @@ export async function POST(req: NextRequest) {
 
   const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? 'https://cheatsheets.co.uk';
 
-  const session = await stripe.billingPortal.sessions.create({
-    customer: sub.stripe_customer_id,
-    return_url: `${origin}/dashboard`,
-  });
-
-  return NextResponse.json({ url: session.url });
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: sub.stripe_customer_id,
+      return_url: `${origin}/dashboard`,
+    });
+    return NextResponse.json({ url: session.url });
+  } catch (e: any) {
+    console.error('[portal] Stripe error:', e.message);
+    return NextResponse.json({ error: 'Failed to open billing portal' }, { status: 500 });
+  }
 }

@@ -35,7 +35,8 @@ function supabase() {
 export async function kvGet<T>(key: string): Promise<T | null> {
   if (USE_SUPABASE) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase() as any).from('match_cache').select('value').eq('key', key).single();
+    const { data, error } = await (supabase() as any).from('match_cache').select('value').eq('key', key).single();
+    if (error && error.code !== 'PGRST116') console.error(`[kvGet] Supabase error (${key}):`, error.message);
     return (data?.value as T) ?? null;
   }
   const file = localPath(key);

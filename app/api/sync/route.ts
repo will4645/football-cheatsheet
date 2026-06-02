@@ -279,28 +279,30 @@ function buildTeamStats(
   // For "against" stats: af.cornersAgainst etc. are now real defensive averages computed from
   // opponent fixture stats — use these first. Fall back to ESPN season stats, then opponent AF,
   // then opponent ESPN. Do NOT use own AF "for" as a proxy for "against".
-  const cornersFor      = af?.cornersFor        || e?.cornersFor      || o?.cornersAgainst    || 5.0;
-  const cornersAgainst  = af?.cornersAgainst    || e?.cornersAgainst  || oaf?.cornersFor      || o?.cornersFor        || 5.0;
-  const shotsFor        = af?.shotsFor          || e?.shotsFor        || o?.shotsAgainst      || 13.0;
-  const shotsAgainst    = af?.shotsAgainst      || e?.shotsAgainst    || oaf?.shotsFor        || o?.shotsFor          || 11.0;
-  const sotFor          = af?.sotFor            || e?.sotFor          || o?.sotAgainst        || 4.5;
-  const sotAgainst      = af?.sotAgainst        || e?.sotAgainst      || oaf?.sotFor          || o?.sotFor            || 3.8;
-  const foulsCommitted  = af?.foulsFor          || e?.foulsCommitted  || o?.foulsWon          || 11.0;
-  const foulsWon        = af?.foulsAgainst      || e?.foulsWon        || oaf?.foulsFor        || o?.foulsCommitted    || 11.0;
-  const cardsFor        = af?.yellowCardsFor    || e?.cardsFor        || o?.cardsAgainst      || 1.8;
-  const cardsAgainst    = af?.yellowCardsAgainst|| e?.cardsAgainst    || oaf?.yellowCardsFor  || o?.cardsFor          || 1.8;
+  // ?? is used for AF/oaf fields (0 is a real observed value).
+  // || is used for ESPN fields (e?, o?) where 0 means "field not populated".
+  const cornersFor      = af?.cornersFor         ?? (e?.cornersFor      || o?.cornersAgainst                      || 5.0);
+  const cornersAgainst  = af?.cornersAgainst     ?? (e?.cornersAgainst  || (oaf?.cornersFor     ?? (o?.cornersFor  || 5.0)));
+  const shotsFor        = af?.shotsFor           ?? (e?.shotsFor        || o?.shotsAgainst                        || 13.0);
+  const shotsAgainst    = af?.shotsAgainst       ?? (e?.shotsAgainst    || (oaf?.shotsFor        ?? (o?.shotsFor   || 11.0)));
+  const sotFor          = af?.sotFor             ?? (e?.sotFor          || o?.sotAgainst                          || 4.5);
+  const sotAgainst      = af?.sotAgainst         ?? (e?.sotAgainst      || (oaf?.sotFor          ?? (o?.sotFor     || 3.8)));
+  const foulsCommitted  = af?.foulsFor           ?? (e?.foulsCommitted  || o?.foulsWon                            || 11.0);
+  const foulsWon        = af?.foulsAgainst       ?? (e?.foulsWon        || (oaf?.foulsFor        ?? (o?.foulsCommitted || 11.0)));
+  const cardsFor        = af?.yellowCardsFor     ?? (e?.cardsFor        || o?.cardsAgainst                        || 1.8);
+  const cardsAgainst    = af?.yellowCardsAgainst ?? (e?.cardsAgainst    || (oaf?.yellowCardsFor  ?? (o?.cardsFor   || 1.8)));
   // Tackles: aggregated from per-player AF stats — no fixture-level "against" available
-  const tacklesFor      = af?.tacklesFor        || e?.tacklesFor      || o?.tacklesAgainst    || 18.0;
-  const tacklesAgainst  = oaf?.tacklesFor       || e?.tacklesAgainst  || o?.tacklesFor        || 18.0;
-  const offsidesFor     = af?.offsidesFor       || e?.offsidesFor     || o?.offsidesAgainst   || 2.0;
-  const offsidesAgainst = af?.offsidesAgainst   || e?.offsidesAgainst || oaf?.offsidesFor     || o?.offsidesFor       || 2.0;
+  const tacklesFor      = af?.tacklesFor         ?? (e?.tacklesFor      || o?.tacklesAgainst                      || 18.0);
+  const tacklesAgainst  = oaf?.tacklesFor        ?? (e?.tacklesAgainst  || o?.tacklesFor                          || 18.0);
+  const offsidesFor     = af?.offsidesFor        ?? (e?.offsidesFor     || o?.offsidesAgainst                     || 2.0);
+  const offsidesAgainst = af?.offsidesAgainst    ?? (e?.offsidesAgainst || (oaf?.offsidesFor     ?? (o?.offsidesFor || 2.0)));
   // Free kicks for = fouls this team WON = opponent's committed fouls
-  const freeKicksFor    = e?.freeKicksFor       || af?.foulsAgainst   || oaf?.foulsFor        || o?.freeKicksAgainst  || foulsWon    || 10.0;
+  const freeKicksFor    = e?.freeKicksFor        || (af?.foulsAgainst   ?? (oaf?.foulsFor        ?? (o?.freeKicksAgainst || foulsWon || 10.0)));
   // Free kicks against = fouls this team committed = own fouls
-  const freeKicksAgainst= e?.freeKicksAgainst   || af?.foulsFor       || o?.freeKicksFor      || foulsCommitted || 10.0;
+  const freeKicksAgainst= e?.freeKicksAgainst   || (af?.foulsFor       ?? (o?.freeKicksFor      || foulsCommitted  || 10.0));
   // Saves
-  const savesFor     = af?.savesFor     || e?.savesFor    || (sotAgainst > avgAgainst ? +(sotAgainst - avgAgainst).toFixed(2) : 0) || oaf?.savesFor || 3.8;
-  const savesAgainst = af?.savesAgainst || oaf?.savesFor  || e?.savesAgainst || (sotFor > avgFor ? +(sotFor - avgFor).toFixed(2) : 0) || 3.5;
+  const savesFor        = af?.savesFor           ?? (e?.savesFor        || (sotAgainst > avgAgainst ? +(sotAgainst - avgAgainst).toFixed(2) : 0) || (oaf?.savesFor ?? 3.8));
+  const savesAgainst    = af?.savesAgainst       ?? (oaf?.savesFor      ?? (e?.savesAgainst      || (sotFor > avgFor ? +(sotFor - avgFor).toFixed(2) : 0) || 3.5));
   return {
     goalsFor: +avgFor.toFixed(2), goalsAgainst: +avgAgainst.toFixed(2),
     over25Goals:    overProb(avgFor + avgAgainst, 2.5),
@@ -968,14 +970,18 @@ const FINISHED_STATUSES = new Set(['FINISHED', 'AWARDED', 'CANCELLED']);
 
 const _apiCache = new Map<string, { data: any; exp: number }>();
 
-async function apiFetch(path: string, ttlMs = 5 * 60 * 1000) {
+async function apiFetch(path: string, ttlMs = 5 * 60 * 1000, _retries = 2): Promise<any> {
   const cached = _apiCache.get(path);
   if (cached && Date.now() < cached.exp) return cached.data;
   await new Promise(r => setTimeout(r, 300));
   const res = await fetch(`${BASE_URL}${path}`, {
     headers: { 'X-Auth-Token': process.env.FOOTBALL_DATA_KEY! },
   });
-  if (res.status === 429) { await new Promise(r => setTimeout(r, 60000)); return apiFetch(path, ttlMs); }
+  if (res.status === 429) {
+    if (_retries <= 0) { console.warn(`[sync] 429 rate limit exceeded for ${path} — giving up`); return null; }
+    await new Promise(r => setTimeout(r, 60000));
+    return apiFetch(path, ttlMs, _retries - 1);
+  }
   if (!res.ok) { console.warn(`[sync] ${res.status} for ${path}`); return null; }
   const data = await res.json();
   _apiCache.set(path, { data, exp: Date.now() + ttlMs });
@@ -1033,7 +1039,8 @@ async function runSync(forceRebuild = false) {
   });
   for (const m of stale) {
     const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${m.id}`);
-    liveMatches.splice(liveMatches.findIndex((x: any) => x.id === m.id), 1);
+    const staleIdx = liveMatches.findIndex((x: any) => x.id === m.id);
+    if (staleIdx !== -1) liveMatches.splice(staleIdx, 1);
     log(`[sync] Removed stale: ${m.id}`);
   }
 
@@ -1083,6 +1090,10 @@ async function runSync(forceRebuild = false) {
   // The dedicated 7am cron owns refreshes; this is just a safety net for late discoveries.
   {
     const afKeyForPrefetch = (process.env.API_SPORTS_KEY ?? '').trim();
+    const FD_CODE_TO_AF_LEAGUE: Record<string, number> = {
+      PL: 39, PD: 140, BL1: 78, SA: 135, FL1: 61,
+      CL: 2, EL: 3, ECL: 848,
+    };
     if (afKeyForPrefetch) {
       for (const m of nearTermMatches) {
         if (!m.homeTeam?.name || !m.awayTeam?.name) continue;
@@ -1092,7 +1103,8 @@ async function runSync(forceRebuild = false) {
         const existing = await sbGet(`prefetch:${mId}`) as { fetchedAt?: number } | null;
         if (existing?.fetchedAt) continue; // any existing prefetch is good enough
         log(`[sync] Auto-prefetch: ${mId}`);
-        await prefetchMatch(mId, m.homeTeam.name, m.awayTeam.name, m.utcDate ?? '', afKeyForPrefetch, log);
+        const afLeagueId = FD_CODE_TO_AF_LEAGUE[m.competition?.code ?? ''];
+        await prefetchMatch(mId, m.homeTeam.name, m.awayTeam.name, m.utcDate ?? '', afKeyForPrefetch, log, afLeagueId);
       }
     }
   }

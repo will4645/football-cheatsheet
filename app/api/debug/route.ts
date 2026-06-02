@@ -43,9 +43,6 @@ export async function GET(req: NextRequest) {
     serverNow,
     stripe: {
       hasKey: !!stripeKey,
-      prefix: stripeKey.slice(0, 12),
-      suffix: stripeKey.slice(-4),
-      length: stripeKey.length,
     },
     writeTest: {
       wrote: testTs,

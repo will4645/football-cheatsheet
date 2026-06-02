@@ -24,9 +24,10 @@ const ESPN_LEAGUES = [
 // Maps team name patterns to their domestic ESPN league slug
 const DOMESTIC_LEAGUE_HINTS: [RegExp, string][] = [
   // Championship teams first — prevents them matching the eng.1 pattern below
-  // NOTE: sunderland, burnley, leeds removed — they were promoted to the PL for 2025-26
-  [/luton|sheffield united|coventry|middlesbrough|norwich|swansea|cardiff|millwall|hull|derby|watford|stoke|qpr|queens park|preston|blackburn|bristol city|plymouth|oxford|portsmouth|sheff wed|sheffield wednesday|wba|west brom|barnsley|birmingham|rotherham|peterborough|reading|wigan|ipswich town/i, 'eng.2'],
-  [/arsenal|chelsea|liverpool|manchester|tottenham|brighton|aston villa|west ham|newcastle|brentford|fulham|everton|wolves|wolverhampton|crystal palace|bournemouth|nottingham|ipswich|leicester|southampton|sunderland|burnley|leeds/i, 'eng.1'],
+  // NOTE: sunderland, burnley, leeds kept in eng.1 — promoted to PL for 2025-26
+  // NOTE: ipswich, leicester, southampton moved here — relegated from PL for 2025-26
+  [/luton|sheffield united|coventry|middlesbrough|norwich|swansea|cardiff|millwall|hull|derby|watford|stoke|qpr|queens park|preston|blackburn|bristol city|plymouth|oxford|portsmouth|sheff wed|sheffield wednesday|wba|west brom|barnsley|birmingham|rotherham|peterborough|reading|wigan|ipswich|leicester|southampton/i, 'eng.2'],
+  [/arsenal|chelsea|liverpool|manchester|tottenham|brighton|aston villa|west ham|newcastle|brentford|fulham|everton|wolves|wolverhampton|crystal palace|bournemouth|nottingham|sunderland|burnley|leeds/i, 'eng.1'],
   [/atlético|atletico|real madrid|barcelona|sevilla|villarreal|betis|osasuna|girona|athletic bilbao|athletic club|valencia|celta|getafe|mallorca|levante|espanol|espanyol|oviedo|alaves|álaves|rayo vallecano|rayo|leganes|leganés|valladolid|granada|almeria|almería/i, 'esp.1'],
   [/psg|paris saint|paris fc|lyon|marseille|monaco|lille|nice|lens|rennes|nantes|strasbourg|toulouse|auxerre|brest|metz|lorient|angers|havre|le havre|reims|montpellier|troyes|clermont|ajaccio|guingamp/i, 'fra.1'],
   [/bayern|dortmund|leverkusen|leipzig|frankfurt|freiburg|union berlin|wolfsburg|stuttgart|gladbach|monchengladbach|hoffenheim|augsburg|hamburger|hamburgsv|hamburg sv|köln|koln|st pauli|pauli|heidenheim|mainz|werder|bremen|bochum|schalke|paderborn|sandhausen|dusseldorf|düsseldorf/i, 'ger.1'],

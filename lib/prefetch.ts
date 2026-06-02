@@ -197,12 +197,12 @@ export async function prefetchMatch(
       needAwayPlayers ? fetchPlayerPersonalHistoryBatch(awayPlayerIds, apiKey) : Promise.resolve(null),
     ]);
 
-    if (freshHomePlayers && freshHomePlayers.size) {
+    if (freshHomePlayers) {
       const h: Record<string, PlayerGameStat[]> = {};
       freshHomePlayers.forEach((v, k) => { h[String(k)] = v; });
       await kvSet(`pc:players:${hk}`, { cachedAt: Date.now(), histories: h } as CachedPlayers);
     }
-    if (freshAwayPlayers && freshAwayPlayers.size) {
+    if (freshAwayPlayers) {
       const h: Record<string, PlayerGameStat[]> = {};
       freshAwayPlayers.forEach((v, k) => { h[String(k)] = v; });
       await kvSet(`pc:players:${ak}`, { cachedAt: Date.now(), histories: h } as CachedPlayers);

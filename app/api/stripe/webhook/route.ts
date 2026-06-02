@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const lineEnd = invoice?.lines?.data?.[0]?.period?.end;
     const rawEnd = lineEnd ?? (sub as any).current_period_end;
     const currentPeriodEnd =
-      typeof rawEnd === 'number' ? new Date(rawEnd * 1000) :
+      typeof rawEnd === 'number' && rawEnd > 0 ? new Date(rawEnd * 1000) :
       rawEnd ? new Date(rawEnd) :
       new Date(Date.now() + 30 * 86400000);
 
@@ -113,22 +113,19 @@ export async function POST(req: NextRequest) {
         const eventSub = event.data.object as Stripe.Subscription;
         const sub = await retrieveWithExpand(eventSub.id);
 
-        // Guard: don't let a deleted-sub event overwrite a newer active subscription.
-        // upsertSubscription conflicts on clerk_user_id (one row per user), so if the user
-        // already re-subscribed and has a different active sub, skip this upsert.
-        if (event.type === 'customer.subscription.deleted') {
-          const clerkUserId =
-            (sub.metadata?.clerkUserId as string | undefined) ??
-            (typeof sub.customer === 'string' ? await getClerkUserIdFromCustomer(sub.customer) : null);
-          if (clerkUserId) {
-            // Patch metadata so handleSubscription doesn't make a second DB lookup
-            if (!sub.metadata?.clerkUserId) (sub.metadata as any).clerkUserId = clerkUserId;
-            const stored = await getSubscription(clerkUserId);
-            // Guard: if stored row exists with a different subscription ID (including null),
-            // skip — either a newer sub exists or the row is in an unknown state
-            if (stored && stored.stripe_subscription_id !== sub.id) {
-              break;
-            }
+        // Guard: don't overwrite a newer active subscription with a stale/replayed event.
+        // Applies to both updated and deleted events — an out-of-order event for an old
+        // subscription must not clobber the user's current active row.
+        // Only skip when a *different known* subscription ID is stored. A null stored ID
+        // means this is the first write for the user, so let it proceed.
+        const clerkUserIdForGuard =
+          (sub.metadata?.clerkUserId as string | undefined) ??
+          (typeof sub.customer === 'string' ? await getClerkUserIdFromCustomer(sub.customer) : null);
+        if (clerkUserIdForGuard) {
+          if (!sub.metadata?.clerkUserId) (sub.metadata as any).clerkUserId = clerkUserIdForGuard;
+          const stored = await getSubscription(clerkUserIdForGuard);
+          if (stored && stored.stripe_subscription_id && stored.stripe_subscription_id !== sub.id) {
+            break;
           }
         }
 
