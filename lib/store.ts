@@ -84,9 +84,9 @@ export async function kvKeys(prefix: string): Promise<string[]> {
 }
 
 // ── Typed helpers ──────────────────────────────────────────────────────────
-export async function getMatches()                { return kvGet<unknown[]>('matches')  ?? []; }
+export async function getMatches()                { return (await kvGet<unknown[]>('matches'))  ?? []; }
 export async function setMatches(v: unknown[])    { return kvSet('matches', v); }
-export async function getUpcoming()               { return kvGet<unknown[]>('upcoming') ?? []; }
+export async function getUpcoming()               { return (await kvGet<unknown[]>('upcoming')) ?? []; }
 export async function setUpcoming(v: unknown[])   { return kvSet('upcoming', v); }
 export async function getMatch(id: string)        { return kvGet<unknown>(`match:${id}`); }
 export async function setMatch(id: string, v: unknown) { return kvSet(`match:${id}`, v); }

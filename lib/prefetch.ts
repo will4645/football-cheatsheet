@@ -245,7 +245,7 @@ export async function prefetchMatch(
         : Promise.resolve(null),
     ]);
 
-    if (needOdds) await kvSet(`pc:odds:${matchId}`, { cachedAt: Date.now(), odds: freshOdds } as CachedOdds);
+    if (needOdds && freshOdds !== null) await kvSet(`pc:odds:${matchId}`, { cachedAt: Date.now(), odds: freshOdds } as CachedOdds);
     if (needRef && freshRef !== null) await kvSet(`pc:ref:${matchId}`, { cachedAt: Date.now(), referee: freshRef } as CachedRef);
 
     const odds     = needOdds ? freshOdds     : (coOdds?.odds ?? null);
@@ -288,7 +288,7 @@ export async function prefetchMatch(
 
 // ── 7-step auto-repair name resolution ────────────────────────────────────
 // Resolves a lineup player name to an AF player ID using the prefetched squad map.
-// Steps 1-5 are free (in-memory). Steps 6-7 make 1-2 AF calls each only if needed.
+// Steps 1-4 are free (in-memory). Steps 5-7 make 1-2 AF calls each only if needed.
 
 /** Simple Levenshtein distance — capped at 3 for performance */
 function levenshtein(a: string, b: string): number {
@@ -344,23 +344,23 @@ export async function resolveAfId(
     }
   }
 
-  // Step 4: AF direct search by full name (up to 2 AF calls)
-  if (afTeamId && apiKey) {
-    const found = await lookupAfPlayerId(lineupName, afTeamId, apiKey);
-    if (found) {
-      log(`[repair:4] "${lineupName}" → AF ID ${found} via full-name search`);
-      return found;
-    }
-  }
-
-  // ── Steps 5-7: targeted retries for the specific player that slipped through ──
-
-  // Step 5: direct surname key lookup (≥ 3 chars).
+  // Step 4: direct surname key lookup (≥ 3 chars) — free in-memory, checked before AF API calls.
   // fetchApiFootballTeamHistory pre-indexes surname-only shortcut keys for multi-word AF names,
   // so playerIds["burn"] or playerIds["son"] exist even when Step 2's scan missed them.
   if (surname.length >= 3 && playerIds[surname] != null) {
-    log(`[repair:5] "${lineupName}" → ID ${playerIds[surname]} via short-surname key`);
+    log(`[repair:4] "${lineupName}" → ID ${playerIds[surname]} via short-surname key`);
     return playerIds[surname];
+  }
+
+  // ── Steps 5-7: targeted retries using AF API calls ──
+
+  // Step 5: AF direct search by full name (up to 2 AF calls)
+  if (afTeamId && apiKey) {
+    const found = await lookupAfPlayerId(lineupName, afTeamId, apiKey);
+    if (found) {
+      log(`[repair:5] "${lineupName}" → AF ID ${found} via full-name search`);
+      return found;
+    }
   }
 
   // Step 6: fuzzy edit-distance ≤ 2 on normalised surname (catches single-char typos / encoding diffs)
@@ -375,7 +375,7 @@ export async function resolveAfId(
     }
   }
 
-  // Step 7: AF surname-only search — when Step 4's full-name search returned nothing.
+  // Step 7: AF surname-only search — when Step 5's full-name search returned nothing.
   // Useful for: players whose AF display name differs from ESPN/fd.org (common for South American players
   // known by nickname). Only uses strict word-level matching (no players[0] fallback).
   if (afTeamId && apiKey && surname.length >= 4) {

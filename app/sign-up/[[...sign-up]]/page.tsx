@@ -31,7 +31,7 @@ export default function SignUpPage() {
     setLoading(true);
     try {
       const created = await signUp.create({ firstName, lastName, emailAddress: email, password });
-      if (created.verifications.emailAddress.status !== 'unverified') {
+      if (created.verifications.emailAddress.status === 'unverified') {
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
       }
       setStage('verify');

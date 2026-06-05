@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
           }
         } catch (err: any) {
           console.error('trial_will_end: could not retrieve customer', customerId, err?.message ?? err);
-          break;
+          throw err;
         }
         const trialEnd: number = (eventSub as any).trial_end ?? 0;
         if (!trialEnd) break; // no valid trial end — skip rather than show wrong date

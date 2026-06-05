@@ -311,7 +311,7 @@ function buildTeamStats(
     shotsFor:       +shotsFor.toFixed(2),        shotsAgainst:      +shotsAgainst.toFixed(2),
     over195Shots:   overProb(shotsFor + shotsAgainst, 19.5),
     sotFor:         +sotFor.toFixed(2),          sotAgainst:        +sotAgainst.toFixed(2),
-    over95SoT:      overProb(sotFor + sotAgainst, 6.5),
+    over95SoT:      overProb(sotFor + sotAgainst, 9.5),
     foulsCommitted: +foulsCommitted.toFixed(2),  foulsWon:          +foulsWon.toFixed(2),
     over155Fouls:   overProb(foulsCommitted + foulsWon, 15.5),
     cardsFor:       +cardsFor.toFixed(2),        cardsAgainst:      +cardsAgainst.toFixed(2),
@@ -819,17 +819,13 @@ async function buildPlayers(
           form: p.form,
         };
       }),
-      goalscoring: top10(players, 'gaPerGame').map(p => {
-        const goalRate   = p.gaPerGame * (p.goals   / Math.max(p.goals + p.assists, 1));
-        const assistRate = p.gaPerGame * (p.assists / Math.max(p.goals + p.assists, 1));
-        return {
-          name: p.name, mins: p.mins, goals: p.goals, assists: p.assists,
-          gaPerGame: +p.gaPerGame.toFixed(2),
-          last5Goals:   bestLast5(p.name, p.espnId, 'goals', 1),
-          last5Assists: bestLast5(p.name, p.espnId, 'assists', 1),
-          form: p.form,
-        };
-      }),
+      goalscoring: top10(players, 'gaPerGame').map(p => ({
+        name: p.name, mins: p.mins, goals: p.goals, assists: p.assists,
+        gaPerGame: +p.gaPerGame.toFixed(2),
+        last5Goals:   bestLast5(p.name, p.espnId, 'goals', 1),
+        last5Assists: bestLast5(p.name, p.espnId, 'assists', 1),
+        form: p.form,
+      })),
       cards: [...players]
         .filter(p => !p.isGK)
         .sort((a, b) => {
@@ -1768,7 +1764,7 @@ async function runSync(forceRebuild = false) {
       homeTeam: { name: homeName, primaryColor: getTeamColor(homeName), badge: homeBadge, stats: homeStats, players: players.home, leaguePosition: homePosition },
       awayTeam: { name: awayName, primaryColor: getTeamColor(awayName), badge: awayBadge, stats: awayStats, players: players.away, leaguePosition: awayPosition },
       referee: {
-        name: espnRefName || afOdds?.referee || afReferee || match.referees?.[0]?.name || 'TBC',
+        name: espnRefName || afReferee || afOdds?.referee || match.referees?.[0]?.name || 'TBC',
         matchAvg: {
           fouls: +(homeStats.foulsCommitted + awayStats.foulsCommitted).toFixed(1),
           cards:  +(homeStats.cardsFor      + awayStats.cardsFor).toFixed(1),

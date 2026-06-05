@@ -37,19 +37,23 @@ export async function POST(req: NextRequest) {
       currentUser(),
     ]);
 
+    const userEmail = user?.emailAddresses[0]?.emailAddress ?? '';
+
+    // Pre-fill customer email for new subscribers so the Stripe customer is always tied
+    // to the Clerk email — prevents bypassing the trial-dedup check by typing a different
+    // email in the Stripe Checkout form.
     const customerParams = existing?.stripe_customer_id
       ? { customer: existing.stripe_customer_id }
-      : {};
+      : userEmail ? { customer_email: userEmail } : {};
 
     // Option 1: any prior subscription row in our DB (any status) → no trial
     let trialEligible = !existing;
 
     // Option 2: same email already used a trial on Stripe → no trial
     if (trialEligible) {
-      const email = user?.emailAddresses[0]?.emailAddress ?? '';
-      if (email) {
+      if (userEmail) {
         try {
-          trialEligible = !(await emailHadPriorSubscription(email));
+          trialEligible = !(await emailHadPriorSubscription(userEmail));
         } catch (err: any) {
           console.error('Trial eligibility check failed (Stripe error):', err?.message ?? err);
           trialEligible = false; // deny trial on error — safer than granting it

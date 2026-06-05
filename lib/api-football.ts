@@ -1055,8 +1055,9 @@ export async function fetchApiFootballSquadStats(
       }
       return all;
     };
-    let players = await fetchAllPages(2025);
-    if (!players.length) players = await fetchAllPages(2024);
+    const currentSeason = inferSeason(new Date());
+    let players = await fetchAllPages(currentSeason);
+    if (!players.length) players = await fetchAllPages(currentSeason - 1);
     if (!players.length) return { stats: new Map(), playerIds: new Set(), debug: `no players: ${teamId}` };
 
     const squadPlayerIds = new Set<number>();
@@ -1130,7 +1131,7 @@ export async function fetchApiFootballRefereeByLeague(
       const fa = norm(f.teams?.away?.name ?? '');
       const homeMatch = fh === hNorm || hNorm.split(' ').filter(w => w.length > 4).some(w => fh.includes(w));
       const awayMatch = fa === aNorm || aNorm.split(' ').filter(w => w.length > 4).some(w => fa.includes(w));
-      return homeMatch || awayMatch;
+      return homeMatch && awayMatch;
     });
     const raw: string = hit?.fixture?.referee ?? '';
     return raw.split(',')[0].trim();
@@ -1220,7 +1221,9 @@ export async function fetchPlayerPersonalHistoryBatch(
         playerFixtureMap.set(playerId, entries);
         entries.forEach(e => allFixtureIds.add(e.id));
       }
-    } catch {}
+    } catch (e: any) {
+      console.error(`[personal-history] player ${playerId} fixture fetch failed:`, e?.message ?? e);
+    }
   }
 
   // Step 2: fetch all player stats in batches of 6 to avoid serial latency

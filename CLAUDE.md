@@ -88,13 +88,13 @@ Each player shows 5 dots per stat: fouls committed, fouls won, shots on target, 
 
 ## resolveAfId — 7-Step Name Resolution (lib/prefetch.ts)
 
-Runs when a lineup player name doesn't match any prefetch cache key. Steps 1-5 are free (in-memory). Steps 6-7 cost 1-2 AF calls each, only fire when needed.
+Runs when a lineup player name doesn't match any prefetch cache key. Steps 1-4 are free (in-memory). Steps 5-7 cost 1-2 AF calls each, only fire when needed.
 
 1. **Exact match** — lowercase both sides
 2. **Surname match** — last word of lineup name matches last word of any cache key
 3. **Long word match** — any word ≥6 chars in lineup name found in any cache key
-4. **AF live lookup** — `lookupAfPlayerId(fullName, afTeamId)` — AF search scoped to the team
-5. **Short surname** — surname ≥3 chars, direct key lookup (catches "Ji" style short surnames)
+4. **Short surname** — surname ≥3 chars, direct key lookup (catches "Ji" style short surnames)
+5. **AF live lookup** — `lookupAfPlayerId(fullName, afTeamId)` — AF search scoped to the team
 6. **Fuzzy surname** — Levenshtein edit distance ≤2 on surnames ≥5 chars, same first letter (catches typos/accent differences)
 7. **AF surname search** — `lookupAfPlayerId(surname, afTeamId)` — retry with surname only
 
