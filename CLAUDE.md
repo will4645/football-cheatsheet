@@ -245,3 +245,26 @@ Multi-pass automated review found and fixed 25 issues across 5 sessions. Deploye
 | Batch error visibility | Fixture stats batch `catch {}` now logs the error and fixture ID |
 
 **Current deployed commit:** `cf790b2` on master
+
+### 2026-06-05 — Multi-agent codebase scan + 12 bug fixes
+
+Second full multi-agent review (5 finder angles + verification + sweep pass). Found and fixed 12 issues. Deployed as commit `807dfb3`.
+
+| Fix | Detail |
+|-----|--------|
+| sign-up verification trigger | `prepareEmailAddressVerification` was guarded by `!== 'unverified'` (inverted) — condition changed to `=== 'unverified'` so the code sends the email code at the right time |
+| `getMatches`/`getUpcoming` null fallback | `kvGet` not awaited before `?? []` in `lib/store.ts` — `?? []` was applied to the Promise object (always truthy), callers received `null` instead of `[]` when key missing |
+| Referee fixture match | `fetchApiFootballRefereeByLeague` used `homeMatch \|\| awayMatch` — would return any fixture involving either team on the date, not the specific match. Changed to `&&` |
+| `over95SoT` threshold | `overProb(sotFor + sotAgainst, 6.5)` — threshold was 6.5 not 9.5, making over-9.5-SoT probability ~2x inflated on every sheet |
+| Null odds poisoning cache | `pc:odds:` kvSet fired unconditionally when `needOdds` was true, even when `freshOdds` was null — overwrote valid cached odds with null for the full TTL. Added `&& freshOdds !== null` guard, matching the existing referee pattern |
+| `fetchApiFootballSquadStats` season hardcode | Used `fetchAllPages(2025)` with `2024` fallback — from August 2026 would silently return last season's squad stats. Now uses `inferSeason(new Date())` |
+| Checkout `customer_email` | New subscribers had no `customer_email` pre-filled — user could type a different email in Stripe Checkout to bypass the trial-dedup check. `userEmail` extracted to outer scope and passed as `customer_email` when no existing Stripe customer |
+| Webhook `break` on customer retrieve failure | `break` inside `catch` inside `switch/case` exits the case — transient `stripe.customers.retrieve` error returned 200 to Stripe (no retry), permanently losing the `trial_will_end` email. Changed to `throw err` so the outer catch returns 500 and Stripe retries |
+| Referee priority order | `espnRefName \|\| afOdds?.referee \|\| afReferee` — stale prefetch odds data (up to 44h old) was ranked above freshly-fetched `afReferee`. Reordered to `espnRefName \|\| afReferee \|\| afOdds?.referee` |
+| `fetchPlayerPersonalHistoryBatch` bare catch | Per-player fixture ID fetch had `catch {}` — AF 429s or network errors silently dropped the player's history with no log. Added `console.error` |
+| Dead `goalRate`/`assistRate` computation | Two variables computed in the goalscoring player map but never included in the returned object. Removed |
+| `resolveAfId` step order | Free in-memory short-surname key lookup (Step 5) was sequenced after the AF API full-name search (Step 4) — wasted quota and a wrong AF match could shadow the correct in-memory answer. Swapped to Step 4 = in-memory, Step 5 = AF API |
+
+**Also fixed:** RUNBOOK.md trial period updated from "7 days" to "4 days" (documentation only, not committed — RUNBOOK is gitignored).
+
+**Current deployed commit:** `807dfb3` on master
