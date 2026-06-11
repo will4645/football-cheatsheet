@@ -13,6 +13,7 @@ const ESPN_LEAGUES = [
   'uefa.champions',      // Champions League
   'uefa.europa',         // Europa League
   'uefa.europa.conf',    // Conference League
+  'fifa.world',          // World Cup
   'eng.fa',              // FA Cup
   'eng.2',               // Championship
   'esp.1',               // La Liga
@@ -20,6 +21,23 @@ const ESPN_LEAGUES = [
   'ita.1',               // Serie A
   'fra.1',               // Ligue 1
 ];
+
+export const INTERNATIONAL_LEAGUE_IDS = new Set([
+  1,   // FIFA World Cup
+  4,   // UEFA European Championship
+  5,   // UEFA Nations League
+  6,   // AFC Asian Cup
+  7,   // Africa Cup of Nations
+  8,   // CONMEBOL Copa America
+  9,   // CONCACAF Gold Cup
+  10,  // International Friendlies
+  29,  // UEFA Euro Qualifiers
+  31,  // CONMEBOL WC Qualifiers
+  32,  // CONCACAF WC Qualifiers
+  33,  // AFC WC Qualifiers
+  34,  // CAF WC Qualifiers
+  35,  // OFC WC Qualifiers
+]);
 
 // Maps team name patterns to their domestic ESPN league slug
 const DOMESTIC_LEAGUE_HINTS: [RegExp, string][] = [
@@ -70,9 +88,12 @@ function norm(name: string) {
     .toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-// Returns the API-Football season year for a given date (Aug\u2013Jul window, e.g. Aug 2026 \u2192 2026)
-export function inferSeason(date: Date | string): number {
+// Returns the API-Football season year for a given date.
+// Default uses the Aug-Jul domestic window (e.g. Aug 2026 returns 2026, June 2026 returns 2025).
+// Pass useCalendarYear=true for international tournaments stored by calendar year (e.g. World Cup 2026).
+export function inferSeason(date: Date | string, useCalendarYear = false): number {
   const d = typeof date === 'string' ? new Date(date) : date;
+  if (useCalendarYear) return d.getUTCFullYear();
   return d.getUTCMonth() >= 7 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
 }
 
@@ -753,7 +774,7 @@ export async function fetchApiFootballTeamHistory(
 
     // Fetch 15 recent fixtures (was 10) — larger window gives better per-game averages for
     // afTeamStats and richer afHistory for bestLast5. Quota is no concern (73,500 calls/day spare).
-    const curSeason = inferSeason(new Date());
+    const curSeason = inferSeason(new Date(), leagueHint === 1);
     let fd = await afFetch(`/fixtures?team=${teamId}&last=15&season=${curSeason}`, apiKey);
     let fixtures: any[] = fd?.response ?? [];
     if (!fixtures.length) {
@@ -1055,7 +1076,7 @@ export async function fetchApiFootballSquadStats(
       }
       return all;
     };
-    const currentSeason = inferSeason(new Date());
+    const currentSeason = inferSeason(new Date(), leagueHint === 1);
     let players = await fetchAllPages(currentSeason);
     if (!players.length) players = await fetchAllPages(currentSeason - 1);
     if (!players.length) return { stats: new Map(), playerIds: new Set(), debug: `no players: ${teamId}` };
@@ -1121,7 +1142,7 @@ export async function fetchApiFootballRefereeByLeague(
   if (!apiKey) return '';
   try {
     const dateStr = matchDate.slice(0, 10);
-    const fd = await afFetch(`/fixtures?league=${leagueId}&date=${dateStr}&season=${inferSeason(dateStr)}`, apiKey);
+    const fd = await afFetch(`/fixtures?league=${leagueId}&date=${dateStr}&season=${inferSeason(dateStr, leagueId === 1)}`, apiKey);
     const fixtures: any[] = fd?.response ?? [];
     if (!fixtures.length) return '';
     const hNorm = norm(homeName);
@@ -1192,12 +1213,15 @@ export async function fetchPlayerPersonalHistoryBatch(
   playerAfIds: number[],
   apiKey: string,
   last = 5,
+  internationalOnly = false,
 ): Promise<Map<number, PlayerGameStat[]>> {
   const result = new Map<number, PlayerGameStat[]>();
   if (!apiKey || !playerAfIds.length) return result;
 
-  // Fetch more fixtures than needed so gaps from missing stats don't shrink the window
-  const fetchCount = Math.max(last * 2, 10);
+  // Fetch more fixtures than needed so gaps from missing stats don't shrink the window.
+  // International-only mode needs a larger buffer: players often have long club runs between
+  // qualifiers, so a small window collapses to zero after filtering.
+  const fetchCount = internationalOnly ? Math.max(last * 6, 30) : Math.max(last * 2, 10);
 
   // Step 1: get each player's recent fixture IDs (all competitions incl. internationals)
   const playerFixtureMap = new Map<number, Array<{ id: number; date: string }>>();
@@ -1209,13 +1233,14 @@ export async function fetchPlayerPersonalHistoryBatch(
       // then fall back to current season if the response is empty.
       let fd = await afFetch(`/fixtures?player=${playerId}&last=${fetchCount}`, apiKey);
       if (!fd?.response?.length) {
-        fd = await afFetch(`/fixtures?player=${playerId}&season=${inferSeason(new Date())}&last=${fetchCount}`, apiKey);
+        fd = await afFetch(`/fixtures?player=${playerId}&season=${inferSeason(new Date(), internationalOnly)}&last=${fetchCount}`, apiKey);
       }
       const fixtures: any[] = fd?.response ?? [];
       if (fixtures.length > 0) {
         const FINISHED = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO']);
         const entries = fixtures
           .filter((f: any) => FINISHED.has(f.fixture?.status?.short ?? ''))
+          .filter((f: any) => !internationalOnly || INTERNATIONAL_LEAGUE_IDS.has(f.league?.id))
           .map((f: any) => ({ id: f.fixture?.id as number, date: f.fixture?.date ?? '' }))
           .filter(e => e.id);
         playerFixtureMap.set(playerId, entries);
@@ -1392,7 +1417,7 @@ export async function fetchApiFootballOdds(
     const guessedLeague = leagueId ?? guessDomesticLeagueId(homeName) ?? guessDomesticLeagueId(awayName);
     const leagueParam = guessedLeague ? `&league=${guessedLeague}` : '';
 
-    const season = inferSeason(dateStr);
+    const season = inferSeason(dateStr, leagueId === 1);
     const fd = await afFetch(`/fixtures?date=${dateStr}&season=${season}${leagueParam}`, apiKey);
     const fixtures: any[] = fd?.response ?? [];
 
@@ -1455,6 +1480,7 @@ export async function fetchApiFootballOdds(
 
 // ── The Odds API fallback (CL/EL/ECL where AF has no bookmaker coverage) ────
 const AF_LEAGUE_TO_ODDS_SPORT: Record<number, string> = {
+  1:   'soccer_fifa_world_cup',
   2:   'soccer_uefa_champions_league',
   3:   'soccer_uefa_europa_league',
   848: 'soccer_uefa_europa_conference_league',

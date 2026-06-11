@@ -168,7 +168,7 @@ export async function prefetchMatch(
     // /fixtures/players endpoint doesn't return fouls/shots — personal history adds noise there.
     // Always fetch for top-5 leagues + European cups (CL/EL/ECL): cup games are critical
     // for the true last-5-all-comps window and their per-player stats endpoint is reliable.
-    const PERSONAL_HISTORY_LEAGUES = new Set([39, 140, 78, 135, 61, 2, 3, 848]); // Top5 + CL/EL/ECL
+    const PERSONAL_HISTORY_LEAGUES = new Set([39, 140, 78, 135, 61, 2, 3, 848, 1]); // Top5 + CL/EL/ECL + World Cup
     const shouldFetchPersonal = !leagueId || PERSONAL_HISTORY_LEAGUES.has(leagueId);
 
     // Merge fixture history IDs + full squad IDs so personal history covers the whole registered
@@ -192,9 +192,10 @@ export async function prefetchMatch(
     const needHomePlayers = shouldFetchPersonal && (!cpHome || now - cpHome.cachedAt >= PLAYERS_TTL);
     const needAwayPlayers = shouldFetchPersonal && (!cpAway || now - cpAway.cachedAt >= PLAYERS_TTL);
 
+    const isWorldCup = leagueId === 1;
     const [freshHomePlayers, freshAwayPlayers] = await Promise.all([
-      needHomePlayers ? fetchPlayerPersonalHistoryBatch(homePlayerIds, apiKey) : Promise.resolve(null),
-      needAwayPlayers ? fetchPlayerPersonalHistoryBatch(awayPlayerIds, apiKey) : Promise.resolve(null),
+      needHomePlayers ? fetchPlayerPersonalHistoryBatch(homePlayerIds, apiKey, 5, isWorldCup) : Promise.resolve(null),
+      needAwayPlayers ? fetchPlayerPersonalHistoryBatch(awayPlayerIds, apiKey, 5, isWorldCup) : Promise.resolve(null),
     ]);
 
     if (freshHomePlayers) {

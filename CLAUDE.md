@@ -267,4 +267,38 @@ Second full multi-agent review (5 finder angles + verification + sweep pass). Fo
 
 **Also fixed:** RUNBOOK.md trial period updated from "7 days" to "4 days" (documentation only, not committed — RUNBOOK is gitignored).
 
+### 2026-06-11 — World Cup 2026 added
+
+FIFA World Cup 2026 (AF league ID 1, ESPN slug `fifa.world`) added as a supported competition. Player dots show last 5 international games rather than club form.
+
+**Files changed:**
+
+| File | Change |
+|------|--------|
+| `lib/competitions.ts` | Added `world-cup` entry (AF(1), color #C0392B, apiNames: FIFA World Cup/World Cup) |
+| `lib/api-football.ts` | Added `fifa.world` to ESPN_LEAGUES; added exported `INTERNATIONAL_LEAGUE_IDS` set (14 international AF league IDs); added `internationalOnly = false` 4th param to `fetchPlayerPersonalHistoryBatch` — when true, filters player fixture list to only international competitions |
+| `lib/prefetch.ts` | Added league 1 to `PERSONAL_HISTORY_LEAGUES`; added `isWorldCup = leagueId === 1` flag and passes it as `internationalOnly` to both `fetchPlayerPersonalHistoryBatch` calls |
+| `app/api/prefetch/route.ts` | Added `{ slug: 'fifa.world', afLeagueId: 1 }` to ESPN_PREFETCH_LEAGUES so WC matches are discovered each morning |
+| `app/api/sync/route.ts` | Added `'fifa.world': 1` to `espnLeagueToAfId`; on-demand personal history fallback now passes `afLeagueId === 1` as `internationalOnly` |
+
+**Design decision:** For World Cup matches, `INTERNATIONAL_LEAGUE_IDS` covers 14 competitions (WC, Euros, Nations League, Copa America, AFCON, Gold Cup, Friendlies, and all regional qualifiers). This ensures the "last 5 international games" window has meaningful data from the start of the tournament (players have qualifiers + Nations League form, not just 0-1 WC games).
+
+**Known ESPN note:** ESPN reports Czech Republic as "Czechia". API-Football may use "Czech Republic" — name resolution steps in `resolveAfId` should handle the mismatch via surname matching.
+
+### 2026-06-11 (follow-up) — 7 bugs fixed after hostile multi-agent review
+
+A second-pass review found 7 bugs in the initial World Cup implementation. All fixed.
+
+| Bug | Severity | Fix |
+|-----|----------|-----|
+| `fifa.world` absent from `ESPN_COMP_LEAGUES` in sync route | CRITICAL | Added as first entry with `days: 7` — without this WC matches were never discovered by sync and no sheets were ever built |
+| `inferSeason` returns 2025 for June 2026 | CRITICAL | Added `useCalendarYear = false` param; callers pass `true` when `leagueId === 1` — fixes odds, team history, referee, and personal history season queries |
+| `fetchCount=10` collapses to 0 after `internationalOnly` filter | HIGH | Changed to `internationalOnly ? Math.max(last * 6, 30) : Math.max(last * 2, 10)` — fetches 30 fixtures so long club runs between qualifiers don't empty the window |
+| `fetchTheOddsApiOdds` had no WC entry in `AF_LEAGUE_TO_ODDS_SPORT` | MEDIUM | Added `1: 'soccer_fifa_world_cup'` |
+| Local `espnToAfLeague` map in AF lineup fallback missing `fifa.world` | MEDIUM | Added `'fifa.world': 1` |
+| Standings guard did not exclude `fifa.world` | MEDIUM | Added `&& !espnLeagueSlug.startsWith('fifa.')` to prevent group-stage positions showing as league table positions |
+| `fifa.world` was last in `ESPN_LEAGUES` (slow lineup lookup) | LOW | Moved to position 4 (after `uefa.europa.conf`) — saves ~2.4s per WC sync cycle |
+
+**`inferSeason` callers updated:** `fetchApiFootballTeamHistory`, `fetchApiFootballSquadStats`, `fetchApiFootballOdds`, `fetchApiFootballRefereeByLeague`, `fetchPlayerPersonalHistoryBatch`. Callers in `lookupAfPlayerId` and `lookupAfFixtureId` left unchanged (domestic/club context).
+
 **Current deployed commit:** `807dfb3` on master

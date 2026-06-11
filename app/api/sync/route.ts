@@ -1109,6 +1109,7 @@ async function runSync(forceRebuild = false) {
   // European/cup competitions scan 7 days (was 30 — saved ~10s/sync, more than enough lookahead).
   // Domestic leagues scan 3 days (was 14 — fd.org covers today/tomorrow anyway; this is just backup).
   const ESPN_COMP_LEAGUES: Array<{ league: string; compName: string; days?: number }> = [
+    { league: 'fifa.world',        compName: 'FIFA World Cup',               days: 7 },
     { league: 'uefa.champions',   compName: 'UEFA Champions League',        days: 7 },
     { league: 'uefa.europa',      compName: 'UEFA Europa League',           days: 7 },
     { league: 'uefa.europa.conf', compName: 'UEFA Europa Conference League', days: 7 },
@@ -1391,6 +1392,7 @@ async function runSync(forceRebuild = false) {
         if (!afFixId && fromEspn && afSupKey) {
           // ESPN-sourced matches don't have _afFixtureId stored — look it up dynamically
           const espnToAfLeague: Record<string, number> = {
+            'fifa.world': 1,
             'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
             'eng.1': 39, 'eng.2': 40, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135, 'fra.1': 61,
           };
@@ -1549,6 +1551,7 @@ async function runSync(forceRebuild = false) {
       // Domestic leagues — ensures correct AF team search when match comes from ESPN path
       'eng.1': 39, 'eng.2': 40, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135,
       'fra.1': 61,
+      'fifa.world': 1,
     };
     const afLeagueId = fromEspn
       ? (espnLeagueToAfId[(match as any)._espnLeague ?? ''] ?? 0)
@@ -1676,7 +1679,7 @@ async function runSync(forceRebuild = false) {
           // (the expensive part) are deduplicated across the whole batch.
           if (needFetch.length > 0) {
             log(`[per-player] on-demand batch: ${needFetch.length} players`);
-            const batch = await fetchPlayerPersonalHistoryBatch(needFetch, afApiKey);
+            const batch = await fetchPlayerPersonalHistoryBatch(needFetch, afApiKey, 5, afLeagueId === 1);
             for (const [name, afId] of Array.from(nameToAfId)) {
               if (result.has(normPrefetch(name))) continue; // already had cached history
               const fetched = batch.get(afId);
@@ -1750,7 +1753,7 @@ async function runSync(forceRebuild = false) {
     let homePosition: number | undefined;
     let awayPosition: number | undefined;
     const espnLeagueSlug = confirmedEspnMeta?.league;
-    if (espnLeagueSlug && !espnLeagueSlug.startsWith('uefa.') && !espnLeagueSlug.startsWith('eng.fa')) {
+    if (espnLeagueSlug && !espnLeagueSlug.startsWith('uefa.') && !espnLeagueSlug.startsWith('eng.fa') && !espnLeagueSlug.startsWith('fifa.')) {
       const standingsMap = await fetchEspnStandings(espnLeagueSlug);
       const normName = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
       homePosition = standingsMap.get(normName(homeName)) ?? undefined;

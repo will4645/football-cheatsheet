@@ -93,6 +93,7 @@ export async function GET(req: NextRequest) {
       { slug: 'ger.1', afLeagueId: 78 },
       { slug: 'ita.1', afLeagueId: 135 },
       { slug: 'fra.1', afLeagueId: 61 },
+      { slug: 'fifa.world', afLeagueId: 1 },
     ];
     const nearTermIds = new Set(nearTerm.map(m => matchSlug(m.homeTeam.name, m.awayTeam.name)));
     for (const { slug, afLeagueId } of ESPN_PREFETCH_LEAGUES) {
