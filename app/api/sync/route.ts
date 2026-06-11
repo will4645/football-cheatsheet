@@ -1384,21 +1384,31 @@ async function runSync(forceRebuild = false) {
         log(`[sync] No ESPN meta from lineup fetch — espnMeta=${JSON.stringify(espnMeta)}`);
       }
 
-      // AF fallback: for AF-sourced or ESPN-sourced matches within 3h of kickoff
-      if (!hasLineups && (fromAf || fromEspn) && hoursAway < 3) {
+      // AF fallback: try for any match within 3h of kickoff when ESPN has no lineups
+      if (!hasLineups && hoursAway < 3 && afSupKey) {
         let afFixId: number = (match as any)._afFixtureId ?? 0;
-        if (!afFixId && fromEspn && afSupKey) {
-          // ESPN-sourced matches don't have _afFixtureId stored — look it up dynamically
-          const espnToAfLeague: Record<string, number> = {
-            'fifa.world': 1,
-            'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
-            'eng.1': 39, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135, 'fra.1': 61,
-          };
-          const afLid = espnToAfLeague[(match as any)._espnLeague ?? ''];
+        if (!afFixId) {
+          let afLid: number | undefined;
+          if (fromEspn) {
+            const espnToAfLeague: Record<string, number> = {
+              'fifa.world': 1,
+              'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
+              'eng.1': 39, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135, 'fra.1': 61,
+            };
+            afLid = espnToAfLeague[(match as any)._espnLeague ?? ''];
+          } else {
+            // fd.org match — map competition name to AF league ID
+            const compToAfId: Record<string, number> = {
+              'Premier League': 39, 'UEFA Champions League': 2, 'UEFA Europa League': 3,
+              'UEFA Europa Conference League': 848, 'Bundesliga': 78, 'Serie A': 135,
+              'Ligue 1': 61, 'Primera Division': 140, 'La Liga': 140, 'FA Cup': 45, 'FIFA World Cup': 1,
+            };
+            afLid = compToAfId[match.competition?.name ?? ''];
+          }
           afFixId = (await lookupAfFixtureId(homeName, awayName, match.utcDate, afSupKey, afLid)) ?? 0;
-          if (afFixId) log(`[sync] Resolved AF fixture ID ${afFixId} for ESPN match ${homeName} vs ${awayName}`);
+          if (afFixId) log(`[sync] Resolved AF fixture ID ${afFixId} for ${homeName} vs ${awayName}`);
         }
-        if (afFixId && afSupKey) {
+        if (afFixId) {
           const afLU = await fetchAfConfirmedLineups(afFixId, afSupKey);
           if (afLU) { lineupData = afLU; hasLineups = true; log(`[sync] AF lineups confirmed: ${homeName} vs ${awayName}`); }
         }
