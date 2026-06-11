@@ -347,3 +347,8 @@ teams were purged so nothing serves stale empty data.
 **Ops note:** failed/empty team data gets cached in `pc:hist:*`/`pc:squad:*` component
 caches — after fixing a resolution bug, DELETE those rows (plus the `prefetch:*` blob)
 or the re-run serves the cached empties.
+
+Also gitignored `.env.tmp`/`.env*.tmp` (commit `0847d95`) — they were untracked but not
+actually ignored, contradicting the rule above.
+
+**Current deployed commit:** `0847d95` on master
