@@ -691,6 +691,20 @@ async function afFetch(path: string, apiKey: string, _retries = 2): Promise<any>
 
 const NATIONAL_TEAM_CANON_VALUES = new Set(Object.values(NATIONAL_TEAM_CANON));
 
+// Pick the best team from an AF /teams search response. Exact normalized matches win
+// before word-overlap: AF returns "Canada W" (women's team) before "Canada" in search
+// results, and word-overlap alone picked whichever came first (observed WC opening day).
+// On exact ties, prefer the national team.
+function pickBestTeam(teams: any[], teamName: string): any {
+  const tNorm = norm(teamName);
+  const exact = teams.filter(t => norm(t.team?.name ?? '') === tNorm);
+  if (exact.length) return exact.find(t => t.team?.national) ?? exact[0];
+  return teams.find(t => {
+    const n = norm(t.team?.name ?? '');
+    return tNorm.split(' ').filter(w => w.length > 3).some(w => n.includes(w));
+  }) ?? teams[0];
+}
+
 function cleanForSearch(name: string): string {
   // National teams: search AF by its own name for the team ("USA" not "United States").
   // norm() already canonicalises, so any name that norms to a canon value gets searched
@@ -779,11 +793,7 @@ export async function fetchApiFootballTeamHistory(
     }
     if (!teams.length) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: `no team: ${searchName}` };
 
-    const tNorm = norm(teamName);
-    const best = teams.find(t => {
-      const n = norm(t.team?.name ?? '');
-      return n === tNorm || tNorm.split(' ').filter(w => w.length > 3).some(w => n.includes(w));
-    }) ?? teams[0];
+    const best = pickBestTeam(teams, teamName);
     const teamId: number = best?.team?.id;
     if (!teamId) return { history: new Map(), playerIds: new Map(), afTeamId: 0, afTeamStats: null, debug: `no id: ${searchName}` };
 
@@ -1077,11 +1087,7 @@ export async function fetchApiFootballSquadStats(
     }
     if (!teams.length) return { stats: new Map(), playerIds: new Set(), debug: `no team: ${searchName}` };
 
-    const tNorm = norm(teamName);
-    const best = teams.find(t => {
-      const n = norm(t.team?.name ?? '');
-      return n === tNorm || tNorm.split(' ').filter(w => w.length > 3).some(w => n.includes(w));
-    }) ?? teams[0];
+    const best = pickBestTeam(teams, teamName);
     const teamId: number = best?.team?.id;
     if (!teamId) return { stats: new Map(), playerIds: new Set(), debug: `no id: ${searchName}` };
 
@@ -1226,11 +1232,7 @@ export async function fetchApiFootballReferee(teamName: string, apiKey: string, 
       }
     }
     if (!teams.length) return '';
-    const tNorm = norm(teamName);
-    const best = teams.find(t => {
-      const n = norm(t.team?.name ?? '');
-      return n === tNorm || tNorm.split(' ').filter(w => w.length > 3).some(w => n.includes(w));
-    }) ?? teams[0];
+    const best = pickBestTeam(teams, teamName);
     const teamId: number = best?.team?.id;
     if (!teamId) return '';
     const dateStr = matchDate
