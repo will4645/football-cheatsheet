@@ -77,10 +77,22 @@ const HEADERS = {
   'Accept': 'application/json',
 };
 
+// ESPN and API-Football disagree on a few national team names (ESPN "United States"
+// vs AF "USA", ESPN "Czechia" vs AF "Czech Republic", ESPN "T\u00fcrkiye" vs AF "Turkey").
+// Word-overlap matching can't bridge these, so canonicalise AFTER normalisation:
+// both sides of every comparison pass through norm(), so they converge on the same
+// string regardless of which form each source uses.
+const NATIONAL_TEAM_CANON: Record<string, string> = {
+  'united states': 'usa',
+  'czechia': 'czech republic',
+  'turkiye': 'turkey',
+};
+
 function norm(name: string) {
-  return (name || '')
+  const out = (name || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  return NATIONAL_TEAM_CANON[out] ?? out;
 }
 
 // Returns the API-Football season year for a given date.
@@ -677,7 +689,14 @@ async function afFetch(path: string, apiKey: string, _retries = 2): Promise<any>
   return res.json();
 }
 
+const NATIONAL_TEAM_CANON_VALUES = new Set(Object.values(NATIONAL_TEAM_CANON));
+
 function cleanForSearch(name: string): string {
+  // National teams: search AF by its own name for the team ("USA" not "United States").
+  // norm() already canonicalises, so any name that norms to a canon value gets searched
+  // by that canonical form directly.
+  const n = norm(name);
+  if (NATIONAL_TEAM_CANON_VALUES.has(n)) return n;
   return name
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     // Strip common club prefixes/suffixes from all major European football countries

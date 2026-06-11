@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, lookupAfFixtureId, fetchEspnStandings, inferSeason, transformRoster, PlayerGameStat } from '@/lib/api-football';
+import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchTheOddsApiOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, lookupAfFixtureId, fetchEspnStandings, inferSeason, transformRoster, PlayerGameStat } from '@/lib/api-football';
 import type { TeamSeasonStats, EspnRosterPlayer, AfSquadPlayer, AfTeamFixtureStats, MatchOdds } from '@/lib/api-football';
 import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
 import type { ApiSportsPlayer } from '@/lib/api-sports';
@@ -1081,30 +1081,6 @@ async function runSync(forceRebuild = false) {
 
   log(`[sync] Phase 1 done — ${pendingList.length} far-pending, ${nearTermMatches.length} near-term to process`);
 
-  // ── Auto-prefetch: ensure every near-term match has AF data in Supabase ───
-  // Only runs for matches within 4h of kickoff that have NO existing prefetch at all.
-  // The dedicated 7am cron owns refreshes; this is just a safety net for late discoveries.
-  {
-    const afKeyForPrefetch = (process.env.API_SPORTS_KEY ?? '').trim();
-    const FD_CODE_TO_AF_LEAGUE: Record<string, number> = {
-      PL: 39, PD: 140, BL1: 78, SA: 135, FL1: 61,
-      CL: 2, EL: 3, ECL: 848,
-    };
-    if (afKeyForPrefetch) {
-      for (const m of nearTermMatches) {
-        if (!m.homeTeam?.name || !m.awayTeam?.name) continue;
-        const koHours = (new Date(m.utcDate ?? 0).getTime() - Date.now()) / 3_600_000;
-        if (koHours > 4) continue; // only prefetch within 4h of kickoff
-        const mId = matchId(m.homeTeam.name, m.awayTeam.name);
-        const existing = await sbGet(`prefetch:${mId}`) as { fetchedAt?: number } | null;
-        if (existing?.fetchedAt) continue; // any existing prefetch is good enough
-        log(`[sync] Auto-prefetch: ${mId}`);
-        const afLeagueId = FD_CODE_TO_AF_LEAGUE[m.competition?.code ?? ''];
-        await prefetchMatch(mId, m.homeTeam.name, m.awayTeam.name, m.utcDate ?? '', afKeyForPrefetch, log, afLeagueId);
-      }
-    }
-  }
-
   // ── ESPN supplement — primary source for CL/EL/ECL/FA Cup, fallback for fd.org leagues ──
   // European/cup competitions scan 7 days (was 30 — saved ~10s/sync, more than enough lookahead).
   // Domestic leagues scan 3 days (was 14 — fd.org covers today/tomorrow anyway; this is just backup).
@@ -1269,6 +1245,41 @@ async function runSync(forceRebuild = false) {
     }
   }
   log(`[sync] AF supplement: +${afAdded} extra-league matches`);
+
+  // ── Auto-prefetch: ensure every near-term match has AF data in Supabase ───
+  // Runs AFTER all match discovery (fd.org + ESPN + AF supplements) so ESPN-only
+  // matches (World Cup, CL/EL/ECL, FA Cup) are covered too — previously this ran
+  // before the supplements and silently skipped every ESPN-discovered match.
+  // Only fires for matches within 4h of kickoff that have NO existing prefetch.
+  // The dedicated 7am/11am crons own refreshes; this is a safety net for late discoveries.
+  {
+    const afKeyForPrefetch = (process.env.API_SPORTS_KEY ?? '').trim();
+    const FD_CODE_TO_AF_LEAGUE: Record<string, number> = {
+      PL: 39, PD: 140, BL1: 78, SA: 135, FL1: 61,
+      CL: 2, EL: 3, ECL: 848,
+    };
+    const ESPN_SLUG_TO_AF_LEAGUE: Record<string, number> = {
+      'fifa.world': 1, 'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
+      'eng.1': 39, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135, 'fra.1': 61, 'eng.fa': 45,
+    };
+    if (afKeyForPrefetch) {
+      for (const m of nearTermMatches) {
+        if (!m.homeTeam?.name || !m.awayTeam?.name) continue;
+        const koHours = (new Date(m.utcDate ?? 0).getTime() - Date.now()) / 3_600_000;
+        if (koHours > 4) continue; // only prefetch within 4h of kickoff
+        const mId = matchId(m.homeTeam.name, m.awayTeam.name);
+        const existing = await sbGet(`prefetch:${mId}`) as { fetchedAt?: number } | null;
+        if (existing?.fetchedAt) continue; // any existing prefetch is good enough
+        log(`[sync] Auto-prefetch: ${mId}`);
+        const afLeagueId = (m as any)._fromEspn
+          ? ESPN_SLUG_TO_AF_LEAGUE[(m as any)._espnLeague ?? '']
+          : (m as any)._fromAf
+            ? (m as any)._afLeagueId
+            : FD_CODE_TO_AF_LEAGUE[m.competition?.code ?? ''];
+        await prefetchMatch(mId, m.homeTeam.name, m.awayTeam.name, m.utcDate ?? '', afKeyForPrefetch, log, afLeagueId);
+      }
+    }
+  }
 
   // Write upcoming now — far-future matches are ready; near-term will be added below
   await sbSet('upcoming', pendingList, log);
@@ -1627,12 +1638,23 @@ async function runSync(forceRebuild = false) {
           if (afLeagueId) return fetchApiFootballRefereeByLeague(afLeagueId, match.utcDate ?? '', homeName, awayName, afApiKey);
           return fetchApiFootballReferee(homeName, afApiKey, match.utcDate);
         })(),
-        afApiKey ? fetchApiFootballOdds(homeName, awayName, match.utcDate ?? '', afApiKey, afLeagueId || undefined) : Promise.resolve(null as MatchOdds | null),
+        afApiKey
+          ? fetchApiFootballOdds(homeName, awayName, match.utcDate ?? '', afApiKey, afLeagueId || undefined)
+              .then(r => {
+                // Mirror the prefetch fallback: AF has no bookmaker coverage for some
+                // competitions (WC/CL/EL/ECL) — try The Odds API before giving up
+                if (r && r.homeWin > 0) return r;
+                return afLeagueId
+                  ? fetchTheOddsApiOdds(homeName, awayName, match.utcDate ?? '', afLeagueId).then(tod => tod ?? r)
+                  : r;
+              })
+          : Promise.resolve(null as MatchOdds | null),
       ]);
       log(`[af-history] home: ${homeAfResult.debug}`);
       log(`[af-history] away: ${awayAfResult.debug}`);
       log(`[af-squad] home: ${homeSquadResult.debug}`);
       log(`[af-squad] away: ${awaySquadResult.debug}`);
+      log(`[af-live] referee: ${afReferee || '(none)'} | odds: ${afOdds ? 'found' : '(none)'}`);
     }
 
     // When prefetch exists, the ESPN block above was skipped so __homeStats/__awayStats are unset.
