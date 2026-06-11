@@ -316,6 +316,7 @@ morning crons ran before the WC code deployed. That exposed three gaps, all fixe
 | **Odds API fallback in live path** (commit `8366815`) | `fetchTheOddsApiOdds` was only wired into prefetch. Sync's non-prefetch branch now chains the same fallback when AF returns no bookmaker odds (was `odds: null` on the Mexico sheet) |
 | **National team name canon** (commit `8366815`) | ESPN "United States"/"Czechia"/"Türkiye" vs AF "USA"/"Czech Republic"/"Turkey" never word-matched. `NATIONAL_TEAM_CANON` map applied inside `norm()` (both comparison sides converge) and `cleanForSearch()` (AF team search uses canonical name). Covers USA (Jun 13) and Czechia (Jun 12 02:00) |
 | Observability (commit `8366815`) | `[af-live] referee: X \| odds: Y` log line in the live path — empty lookups were previously silent |
+| **ESPN status mapping** (commit `907ccec`) | ESPN supplement matches carried raw ESPN status names (`STATUS_IN_PROGRESS` etc.) that LIVE_STATUSES never matched, so ESPN-sourced matches were never "live" — the rebuild guard froze their sheets for 2h mid-game (observed live on the Mexico sheet). Now mapped to fd.org vocabulary (`IN_PLAY`/`PAUSED`/`FINISHED`/`SCHEDULED`) at the supplement boundary |
 
 **Verified during review:** player dots work for WC (international history flowing: Erik
 Lira `last5Fouls [T,T,T,F,T]`), auth gate redirects correctly, Stripe has 1 active sub,
