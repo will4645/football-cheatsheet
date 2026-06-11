@@ -114,7 +114,7 @@ async function espnFetch(url: string, _retries = 2): Promise<any> {
   return res.json();
 }
 
-function transformRoster(roster: any[]): { lineup: any[]; startingEleven: any[] } {
+export function transformRoster(roster: any[]): { lineup: any[]; startingEleven: any[] } {
   const starters = roster
     .filter(p => p.starter)
     .map(p => ({
@@ -464,6 +464,7 @@ export async function getApiFootballLineups(
   homeTeamName: string,
   awayTeamName: string,
   utcDate: string,
+  espnLeagueHint?: string,
 ): Promise<{
   lineups: { homeTeam: any; awayTeam: any } | null;
   debug: string;
@@ -473,8 +474,8 @@ export async function getApiFootballLineups(
   try {
     const date = utcDate.slice(0, 10).replace(/-/g, '');
 
-    // Prioritise the likely league so we find the event on the first try
-    const leagueHint = guessDomesticLeague(homeTeamName) || guessDomesticLeague(awayTeamName);
+    // Prioritise the known/likely league so we find the event on the first try
+    const leagueHint = espnLeagueHint || guessDomesticLeague(homeTeamName) || guessDomesticLeague(awayTeamName);
     const leagues = leagueHint ? [leagueHint, ...ESPN_LEAGUES.filter(l => l !== leagueHint)] : ESPN_LEAGUES;
 
     for (const league of leagues) {

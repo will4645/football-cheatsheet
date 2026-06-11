@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, lookupAfFixtureId, fetchEspnStandings, inferSeason, PlayerGameStat } from '@/lib/api-football';
+import { getApiFootballLineups, getEspnTeamIds, fetchTeamPlayerHistory, findEspnFirstLeg, fetchEspnRosterStats, fetchApiFootballTeamHistory, fetchApiFootballSquadStats, fetchApiFootballReferee, fetchApiFootballRefereeByLeague, fetchApiFootballOdds, fetchPlayerPersonalHistoryBatch, lookupAfPlayerId, fetchAfFixturesByDateRange, fetchAfConfirmedLineups, lookupAfFixtureId, fetchEspnStandings, inferSeason, transformRoster, PlayerGameStat } from '@/lib/api-football';
 import type { TeamSeasonStats, EspnRosterPlayer, AfSquadPlayer, AfTeamFixtureStats, MatchOdds } from '@/lib/api-football';
 import { fetchApiSportsIndex, buildApiSportsNameIndex, lookupApiSports } from '@/lib/api-sports';
 import type { ApiSportsPlayer } from '@/lib/api-sports';
@@ -1347,9 +1347,12 @@ async function runSync(forceRebuild = false) {
     const awayLineupLen = lineupData?.awayTeam?.lineup?.length || lineupData?.awayTeam?.startingEleven?.length || 0;
     let hasLineups = homeLineupLen > 0 && awayLineupLen > 0;
 
-    // espnRefName is populated from the ESPN summary fetched inside getApiFootballLineups
-    // (same request, no extra API call). Also covers the fromEspn direct-summary path below.
+    // For ESPN-sourced matches we already know the event ID and league — fetch the summary
+    // directly (no scoreboard scan needed) to get the ref and, if lineups are ready, the
+    // rosters too. This saves up to 5 extra ESPN calls that getApiFootballLineups would
+    // otherwise make scanning through all leagues.
     let espnRefName = '';
+    let confirmedEspnMeta: { league: string; homeTeamId: string; awayTeamId: string } | null = null;
     if (fromEspn && match.id) {
       try {
         const espnLeague = (match as any)._espnLeague ?? 'uefa.europa';
@@ -1360,6 +1363,24 @@ async function runSync(forceRebuild = false) {
         if (sumRes.ok) {
           const sumData = await sumRes.json();
           espnRefName = sumData?.gameInfo?.officials?.[0]?.displayName ?? '';
+          // Also try to extract rosters from this summary — avoids a second summary fetch
+          if (!hasLineups) {
+            const rosters: any[] = sumData?.rosters ?? [];
+            const homeR = rosters.find((r: any) => r.homeAway === 'home');
+            const awayR = rosters.find((r: any) => r.homeAway === 'away');
+            if (homeR && awayR) {
+              const homeStarters = (homeR.roster ?? []).filter((p: any) => p.starter);
+              const awayStarters = (awayR.roster ?? []).filter((p: any) => p.starter);
+              if (homeStarters.length && awayStarters.length) {
+                lineupData = { homeTeam: transformRoster(homeR.roster ?? []), awayTeam: transformRoster(awayR.roster ?? []) };
+                hasLineups = true;
+                const hId = homeR.team?.id ? String(homeR.team.id) : String(match.homeTeam?.id ?? '');
+                const aId = awayR.team?.id ? String(awayR.team.id) : String(match.awayTeam?.id ?? '');
+                if (hId && aId) confirmedEspnMeta = { league: espnLeague, homeTeamId: hId, awayTeamId: aId };
+                log(`[sync] ESPN direct roster from summary: ${homeStarters.length} home / ${awayStarters.length} away starters`);
+              }
+            }
+          }
         }
       } catch {}
     }
@@ -1367,10 +1388,10 @@ async function runSync(forceRebuild = false) {
     // Step 1: Try ESPN for lineups + team IDs (0 AF calls). If that fails and match is
     // from AF source within 3h of kickoff, fall back to AF confirmed lineups (1 AF call).
     let espnHistory: Map<string, PlayerGameStat[]> = new Map();
-    let confirmedEspnMeta: { league: string; homeTeamId: string; awayTeamId: string } | null = null;
     if (!hasLineups) {
       log(`[sync] Trying ESPN: ${homeName} vs ${awayName}`);
-      const { lineups: afLineups, debug: afDebug, espnMeta, espnRefName: lineupRef } = await getApiFootballLineups(homeName, awayName, match.utcDate);
+      const espnLeagueHint = fromEspn ? ((match as any)._espnLeague as string | undefined) : undefined;
+      const { lineups: afLineups, debug: afDebug, espnMeta, espnRefName: lineupRef } = await getApiFootballLineups(homeName, awayName, match.utcDate, espnLeagueHint);
       if (afDebug) log(`[api-football] ${afDebug}`);
       if (afLineups) {
         lineupData = afLineups;
@@ -1581,6 +1602,16 @@ async function runSync(forceRebuild = false) {
       afReferee      = prefetched.referee;
       afOdds         = prefetched.odds;
       log(`[sync] AF data from prefetch — home ${homeAfResult.playerIds.size} ids, away ${awayAfResult.playerIds.size} ids`);
+      // If the ref wasn't assigned when the 7am prefetch ran, do one live lookup and
+      // write it back into the prefetch so subsequent syncs don't repeat the AF call.
+      if (!afReferee && afLeagueId && afApiKey) {
+        afReferee = await fetchApiFootballRefereeByLeague(afLeagueId, match.utcDate ?? '', homeName, awayName, afApiKey);
+        if (afReferee) {
+          log(`[sync] Live referee lookup: ${afReferee}`);
+          prefetched.referee = afReferee;
+          await sbSet(`prefetch:${id}`, prefetched, log);
+        }
+      }
     } else {
       // For domestic competitions, pass the known AF league ID to avoid team name guessing.
       // For European cups (2, 3, 848), pass undefined so guessDomesticLeagueId finds the team's domestic league.
