@@ -302,3 +302,24 @@ A second-pass review found 7 bugs in the initial World Cup implementation. All f
 **`inferSeason` callers updated:** `fetchApiFootballTeamHistory`, `fetchApiFootballSquadStats`, `fetchApiFootballOdds`, `fetchApiFootballRefereeByLeague`, `fetchPlayerPersonalHistoryBatch`. Callers in `lookupAfPlayerId` and `lookupAfFixtureId` left unchanged (domestic/club context).
 
 **Current deployed commit:** `807dfb3` on master
+
+### 2026-06-11 (evening) — WC opening day: live-path gaps found and fixed
+
+Mexico vs South Africa (first WC match) built its sheet via the live path because both
+morning crons ran before the WC code deployed. That exposed three gaps, all fixed:
+
+| Fix | Detail |
+|-----|--------|
+| ESPN-sourced lineup speed (commit `0152865`) | For `_fromEspn` matches the sync now pulls rosters straight from the known summary URL (event ID + league already known) instead of letting `getApiFootballLineups` rescan all leagues; `getApiFootballLineups` also accepts an `espnLeagueHint`. Saves up to 5 ESPN calls per WC/CL/EL match. `transformRoster` exported from api-football.ts |
+| Referee live lookup writeback (commit `0152865`) | When `prefetched.referee` is empty (ref not assigned at 7am), sync does ONE live `fetchApiFootballRefereeByLeague` call and writes the result back into the prefetch blob so later cycles reuse it |
+| **Auto-prefetch ordering bug** (commit `8366815`) | The in-sync auto-prefetch loop ran BEFORE the ESPN supplement populated `nearTermMatches`, so ESPN-only matches (ALL World Cup, CL/EL/ECL, FA Cup) were never auto-prefetched. Moved after all discovery (fd.org + ESPN + AF) with `_espnLeague`/`_afLeagueId` → AF league ID mapping. Critical for matches kicking off before the 7am cron covers them |
+| **Odds API fallback in live path** (commit `8366815`) | `fetchTheOddsApiOdds` was only wired into prefetch. Sync's non-prefetch branch now chains the same fallback when AF returns no bookmaker odds (was `odds: null` on the Mexico sheet) |
+| **National team name canon** (commit `8366815`) | ESPN "United States"/"Czechia"/"Türkiye" vs AF "USA"/"Czech Republic"/"Turkey" never word-matched. `NATIONAL_TEAM_CANON` map applied inside `norm()` (both comparison sides converge) and `cleanForSearch()` (AF team search uses canonical name). Covers USA (Jun 13) and Czechia (Jun 12 02:00) |
+| Observability (commit `8366815`) | `[af-live] referee: X \| odds: Y` log line in the live path — empty lookups were previously silent |
+
+**Verified during review:** player dots work for WC (international history flowing: Erik
+Lira `last5Fouls [T,T,T,F,T]`), auth gate redirects correctly, Stripe has 1 active sub,
+Supabase RLS advisories are INFO-only (service-role-only tables, no policies needed).
+
+**Known data limitation:** ESPN had no `gameInfo.officials` for the WC opener even at
+kickoff, so referee TBC can persist when AF also lacks the assignment. Not a code bug.
