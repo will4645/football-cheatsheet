@@ -128,23 +128,7 @@ export async function GET(req: NextRequest) {
     }
     log(`[prefetch] ${nearTerm.length} near-term matches after ESPN supplement`);
 
-    // Also prefetch AF-supplement leagues (Championship, Scottish Prem, etc.)
-    const AF_PREFETCH_LEAGUES = [40];
-    const afFixtureBatches = await Promise.all(
-      AF_PREFETCH_LEAGUES.map(id =>
-        fetchAfFixturesByDateRange(id, fmt(from), fmt(to), 2025, afApiKey).catch(() => []).then(fixes => ({ id, fixes }))
-      )
-    );
-    for (const { id: lgId, fixes } of afFixtureBatches) {
-      for (const fix of fixes) {
-        if (!fix.home.name || !fix.away.name) continue;
-        const hoursAway = (new Date(fix.utcDate).getTime() - Date.now()) / 3_600_000;
-        if (hoursAway > -2 && hoursAway < 24) {
-          nearTerm.push({ homeTeam: { name: fix.home.name }, awayTeam: { name: fix.away.name }, utcDate: fix.utcDate, afLeagueId: lgId });
-        }
-      }
-    }
-    log(`[prefetch] ${nearTerm.length} near-term matches total (fd.org + ESPN + AF supplement)`);
+    log(`[prefetch] ${nearTerm.length} near-term matches total (fd.org + ESPN)`);
 
     let done = 0, skipped = 0;
     for (const m of nearTerm) {

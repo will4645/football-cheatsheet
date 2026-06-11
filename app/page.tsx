@@ -118,7 +118,7 @@ export default async function LandingPage() {
               </span>
             </div>
             <div className="flex flex-wrap gap-2 justify-center">
-              {['Premier League', 'Championship', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1', 'Primeira Liga', 'Eredivisie', 'Belgian Pro League', 'Scottish Premiership', 'Süper Lig'].map(c => (
+              {['Premier League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1', 'Primeira Liga', 'Eredivisie', 'Belgian Pro League', 'Scottish Premiership', 'Süper Lig'].map(c => (
                 <span key={c} className="text-[11px] font-medium px-3 py-1 rounded-full"
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
                   {c}

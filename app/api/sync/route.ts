@@ -1199,11 +1199,9 @@ async function runSync(forceRebuild = false) {
   }
   log(`[sync] ESPN supplement: +${espnAdded} matches added`);
 
-  // ── AF supplement for extra leagues (Championship, Scottish Prem, etc.) ─────
+  // ── AF supplement for extra leagues ──────────────────────────────────────────
   // Uses API-Football as the match source for leagues outside fd.org's free tier.
-  const AF_SUPPLEMENT_LEAGUES = [
-    { leagueId: 40,  compName: 'EFL Championship',    espnSlug: 'eng.2' as string | null },
-  ];
+  const AF_SUPPLEMENT_LEAGUES: Array<{ leagueId: number; compName: string; espnSlug: string | null }> = [];
   const afSupKey = (process.env.API_SPORTS_KEY ?? '').trim();
   let afAdded = 0;
   if (afSupKey) {
@@ -1394,7 +1392,7 @@ async function runSync(forceRebuild = false) {
           const espnToAfLeague: Record<string, number> = {
             'fifa.world': 1,
             'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
-            'eng.1': 39, 'eng.2': 40, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135, 'fra.1': 61,
+            'eng.1': 39, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135, 'fra.1': 61,
           };
           const afLid = espnToAfLeague[(match as any)._espnLeague ?? ''];
           afFixId = (await lookupAfFixtureId(homeName, awayName, match.utcDate, afSupKey, afLid)) ?? 0;
@@ -1549,7 +1547,7 @@ async function runSync(forceRebuild = false) {
       // European cups
       'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
       // Domestic leagues — ensures correct AF team search when match comes from ESPN path
-      'eng.1': 39, 'eng.2': 40, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135,
+      'eng.1': 39, 'esp.1': 140, 'ger.1': 78, 'ita.1': 135,
       'fra.1': 61,
       'fifa.world': 1,
     };

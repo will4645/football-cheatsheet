@@ -14,12 +14,11 @@ export const COMPETITION_CONFIG: CompetitionConfig[] = [
   { slug: 'champions-league',  label: 'Champions League',  country: 'Europe',      apiNames: ['UEFA Champions League'],                  color: '#3B82F6', badge: AF(2)   },
   { slug: 'europa-league',     label: 'Europa League',     country: 'Europe',      apiNames: ['UEFA Europa League'],                     color: '#F36F21', badge: AF(3)   },
   { slug: 'conference-league', label: 'Conference League', country: 'Europe',      apiNames: ['UEFA Europa Conference League'],           color: '#00A551', badge: AF(848) },
-  { slug: 'world-cup',         label: 'World Cup 2026',    country: 'World',       apiNames: ['FIFA World Cup', 'World Cup'],             color: '#C0392B', badge: AF(1)   },
+  { slug: 'world-cup',         label: 'World Cup 2026',    country: 'World',       apiNames: ['FIFA World Cup', 'World Cup'],             color: '#C0392B', badge: '/world-cup-2026.png' },
   { slug: 'la-liga',           label: 'La Liga',           country: 'Spain',       apiNames: ['Primera Division', 'La Liga'],            color: '#FF4B44', badge: AF(140) },
   { slug: 'bundesliga',        label: 'Bundesliga',        country: 'Germany',     apiNames: ['Bundesliga'],                             color: '#D00027', badge: AF(78)  },
   { slug: 'serie-a',           label: 'Serie A',           country: 'Italy',       apiNames: ['Serie A'],                                color: '#009FE3', badge: AF(135) },
   { slug: 'ligue-1',           label: 'Ligue 1',           country: 'France',      apiNames: ['Ligue 1'],                                color: '#DFFE00', badge: AF(61)  },
-  { slug: 'championship',      label: 'Championship',      country: 'England',     apiNames: ['EFL Championship', 'Championship'],        color: '#0057A8', badge: AF(40)  },
 ];
 
 export function slugToConfig(slug: string): CompetitionConfig | undefined {
