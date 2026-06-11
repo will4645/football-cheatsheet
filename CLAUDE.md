@@ -324,3 +324,26 @@ Supabase RLS advisories are INFO-only (service-role-only tables, no policies nee
 
 **Known data limitation:** ESPN had no `gameInfo.officials` for the WC opener even at
 kickoff, so referee TBC can persist when AF also lacks the assignment. Not a code bug.
+AF added the WC opener's referee ~10 min after kickoff; the live lookup caught it.
+
+### 2026-06-11 (late) — National team data correctness, verified end to end
+
+Forced prefetch runs for tonight's WC matches exposed three data bugs. All fixed,
+deployed, and verified with real AF responses via the new debug proxy.
+
+| Fix | Detail |
+|-----|--------|
+| **Season filter chopped national team history** (commit `cb0510d`) | `/fixtures?team=X&last=15&season=2026` returns only the 1-2 fixtures played in calendar 2026, and friendlies carry no AF player stats — Czechia/Canada/Bosnia got empty `fixtureHistory` while Korea/Mexico (more 2026 games) worked. National teams (leagueHint 1 or `team.national`) now fetch `last=15` with NO season param: national teams only play internationals, so the unfiltered window is exactly right |
+| **Squad stats thin for national teams** (commit `cb0510d`) | `/players?team=X&season=2026` gave 1-2 appearance samples. National teams now merge previous calendar year (qualifiers, Nations League) into current season per player |
+| **Women's team shadowing** (commit `201a35d`) | AF search "canada" returns "Canada W" before "Canada"; the OR-ed exact/word-overlap find picked the women's team (id 1717, no player coverage). `pickBestTeam` helper: exact normalized match first (national team preferred on ties), word-overlap fallback second. Used by team history, squad stats, and referee lookups |
+| **`/api/debug-af` ops endpoint** (commit `4b08f78`) | SYNC_SECRET-gated proxy for one AF GET (`?secret=...&path=/teams?id=770`). Middleware already excludes `/api/debug*` from Clerk |
+| **SYNC_SECRET reset** | Old RUNBOOK value did not authenticate; new value set in Vercel production env + RUNBOOK. Crons unaffected (they use CRON_SECRET Bearer auth) |
+
+**Verified state before tonight's matches:** `prefetch:south-korea-vs-czechia` home 108 /
+away 102 player histories; `prefetch:canada-vs-bosnia-herzegovina` home 93 (Canada men's,
+team 5529) / away 78. Both with market odds cached. Component caches for the affected
+teams were purged so nothing serves stale empty data.
+
+**Ops note:** failed/empty team data gets cached in `pc:hist:*`/`pc:squad:*` component
+caches — after fixing a resolution bug, DELETE those rows (plus the `prefetch:*` blob)
+or the re-run serves the cached empties.
