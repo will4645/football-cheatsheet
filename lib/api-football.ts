@@ -789,10 +789,17 @@ export async function fetchApiFootballTeamHistory(
 
     // Fetch 15 recent fixtures (was 10) — larger window gives better per-game averages for
     // afTeamStats and richer afHistory for bestLast5. Quota is no concern (73,500 calls/day spare).
+    // National teams (leagueHint 1 = World Cup): NO season filter. International fixtures span
+    // calendar years (2025 qualifiers + 2026 friendlies/WC) and AF's season param chops the
+    // window to 1-2 games — observed live for Czechia/Canada/Bosnia on WC opening day. National
+    // teams only play international fixtures so an unfiltered last=15 is exactly what we want.
+    const isNationalTeam = leagueHint === 1 || !!best?.team?.national;
     const curSeason = inferSeason(new Date(), leagueHint === 1);
-    let fd = await afFetch(`/fixtures?team=${teamId}&last=15&season=${curSeason}`, apiKey);
+    let fd = isNationalTeam
+      ? await afFetch(`/fixtures?team=${teamId}&last=15`, apiKey)
+      : await afFetch(`/fixtures?team=${teamId}&last=15&season=${curSeason}`, apiKey);
     let fixtures: any[] = fd?.response ?? [];
-    if (!fixtures.length) {
+    if (!fixtures.length && !isNationalTeam) {
       fd = await afFetch(`/fixtures?team=${teamId}&last=15&season=${curSeason - 1}`, apiKey);
       fixtures = fd?.response ?? [];
     }
@@ -1092,8 +1099,27 @@ export async function fetchApiFootballSquadStats(
       return all;
     };
     const currentSeason = inferSeason(new Date(), leagueHint === 1);
+    const isNationalTeam = leagueHint === 1 || !!best?.team?.national;
     let players = await fetchAllPages(currentSeason);
-    if (!players.length) players = await fetchAllPages(currentSeason - 1);
+    if (isNationalTeam) {
+      // International stats are thin mid-tournament-year (a handful of friendlies, 1-2
+      // appearances per player). Merge the previous calendar year (qualifiers, Nations
+      // League) so per-game rates come from a real sample.
+      const prev = await fetchAllPages(currentSeason - 1);
+      if (prev.length) {
+        const byId = new Map<number, any>();
+        for (const e of players) if (e.player?.id) byId.set(e.player.id, e);
+        for (const e of prev) {
+          const id = e.player?.id;
+          if (!id) continue;
+          const cur = byId.get(id);
+          if (cur) cur.statistics = [...(cur.statistics ?? []), ...(e.statistics ?? [])];
+          else { byId.set(id, e); players.push(e); }
+        }
+      }
+    } else if (!players.length) {
+      players = await fetchAllPages(currentSeason - 1);
+    }
     if (!players.length) return { stats: new Map(), playerIds: new Set(), debug: `no players: ${teamId}` };
 
     const squadPlayerIds = new Set<number>();
