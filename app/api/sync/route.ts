@@ -1162,9 +1162,18 @@ async function runSync(forceRebuild = false) {
           });
         }
         if (hoursAway <= 24) {
+          // Map ESPN status names to fd.org-style statuses so LIVE_STATUSES/FINISHED_STATUSES
+          // recognise them. Without this, ESPN-sourced matches (WC/CL/EL/ECL/FA Cup) were never
+          // classified as live: the rebuild guard froze their sheets for 2h mid-game.
+          const espnState: string = comp?.status?.type?.name ?? 'STATUS_SCHEDULED';
+          const mappedStatus =
+            /FIRST_HALF|SECOND_HALF|IN_PROGRESS|EXTRA_TIME|PENALT/i.test(espnState) ? 'IN_PLAY'
+            : /HALFTIME/i.test(espnState) ? 'PAUSED'
+            : /FULL_TIME|FINAL/i.test(espnState) ? 'FINISHED'
+            : 'SCHEDULED';
           nearTermMatches.push({
             _fromEspn: true, _espnLeague: league,
-            id: ev.id, status: comp?.status?.type?.name ?? 'SCHEDULED', utcDate: ev.date,
+            id: ev.id, status: mappedStatus, utcDate: ev.date,
             homeTeam: { name: homeName, id: homeEspnId }, awayTeam: { name: awayName, id: awayEspnId },
             competition: { name: compName }, stage, referees: [], matchday: null,
             _homeBadge: homeBadge, _awayBadge: awayBadge,
