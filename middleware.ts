@@ -16,6 +16,12 @@ const isPublic = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
+  // No Server Actions exist in this app, so non-GET requests to page routes are
+  // always junk (bot POSTs to / were throwing 500s in the Server Action parser).
+  // API routes keep their own methods (Stripe webhook POST etc.).
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !req.nextUrl.pathname.startsWith('/api')) {
+    return new NextResponse(null, { status: 405 });
+  }
   if (isPublic(req)) return NextResponse.next();
   // Exclude cron/internal API routes so they are never blocked by Clerk
   const pathname = req.nextUrl.pathname;
