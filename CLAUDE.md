@@ -34,9 +34,9 @@ Three data sources, combined per match:
 3. **ESPN internal API** (free) — lineups, per-game player stats
 
 Three cron jobs:
-- **Prefetch (7am UTC daily)**: pre-warms AF data into Supabase caches (`pc:hist:*`, `pc:squad:*`, `pc:players:*`, `pc:odds:*`, `pc:ref:*`)
+- **Prefetch (7am UTC daily)**: pre-warms AF data into Supabase caches (`pc:hist:*`, `pc:squad:*`, `pc:players:*`, `pc:odds:*`, `pc:ref:*`). Also runs the daily cache cleanup (`kvDeleteOlderThan`) so stale `prefetch:*`/`pc:*` rows can't crowd out the sync route's 60-row prefetch norm-scan
 - **Prefetch (11am UTC daily)**: second run — belt-and-suspenders for teams the 7am run missed
-- **Sync (every 5 min)**: reads prefetch cache + ESPN lineups → writes `match:{slug}` sheets
+- **Sync (every 5 min)**: reads prefetch cache + ESPN lineups → writes `match:{slug}` sheets. After the main pass, a **lineup watch loop** (150s budget) polls ESPN every ~25s for matches 0.75h..1.6h around kickoff that still lack lineups, and re-runs the sync the moment rosters appear — sheets drop ~30-90s after lineups instead of waiting for the next cron tick. `?watch=0` disables it
 
 ## Key Files — Do NOT touch carelessly
 
@@ -56,8 +56,8 @@ Three cron jobs:
 Each player shows 5 dots per stat: fouls committed, fouls won, shots on target, total shots, goals, assists, cards, saves (GK only).
 
 **Source priority inside `bestLast5()`:**
-1. Personal history (`perPlayerHistory`) — true last 5 games across ALL competitions per player by AF ID. Only used when `personalNonZero > bestOtherNonZero` OR (`personalNonZero >= bestOtherNonZero` AND full 5-game window, no gaps).
-2. AF team history (`afHistory`) — last 15 fixtures from `/fixtures/players?fixture=X&team=Y`, all comps, newest-first.
+1. Personal history (`perPlayerHistory`) — true last 5 games across ALL competitions per player by AF ID. Only used when `personalNonZero > bestOtherNonZero` OR (`personalNonZero >= bestOtherNonZero` AND full 5-game window, no gaps). **INERT as of 2026-06-12:** AF v3 `/fixtures` has no `player` param (`"The Player field do not exist."`), so this source has always returned empty in production — `fetchPlayerPersonalHistoryBatch` now probes once and bails instead of wasting 2 AF calls per player. If AF ever adds the param the probe auto-heals on next cold start.
+2. AF team history (`afHistory`) — last 15 fixtures from `/fixtures/players?fixture=X&team=Y`, all comps, newest-first. **This is the de-facto primary source for dots.**
 3. ESPN team history (`espnHistory`) — from ESPN event summaries, fetched live at sync time.
 
 **Personal history leagues**: `PERSONAL_HISTORY_LEAGUES = {39,140,78,135,61,2,3,848}` (top-5 + CL/EL/ECL). Championship (40) excluded: AF `/players` endpoint returns zero fouls/shots for Championship, adding noise not signal. FA Cup has no AF league ID mapping so `!leagueId` evaluates true and personal history IS fetched for FA Cup. All leagues get AF team history + ESPN fallback.
@@ -115,9 +115,9 @@ PL=39, La Liga=140, Bundesliga=78, Serie A=135, Ligue 1=61, Championship=40, CL=
 
 Full 20-match Premier League day: ~2,550 AF calls (with 15-game fixture history). That is about 3.4% of the 75,000/day limit. Even with on-demand re-prefetches and two cron runs, a heavy day stays well under 10% of quota. No risk of hitting the cap.
 
-## Known Pre-existing Issues (not fixed — deliberate)
+## Known Pre-existing Issues
 
-- **`hasGoodGoals` guard never locks 1-0 results**: the check is `homeGoals > 0 AND awayGoals > 0`. In a 1-0 game, the losing team has `goalsFor = 0`, so the guard keeps re-running every 5 min post-match. Wastes a small amount of quota but causes no data errors. Could be fixed with `(homeGoals + awayGoals) > 0`.
+- **`hasGoodGoals` guard never locks 1-0 results**: FIXED 2026-06-12 — guard now sums both teams: `(homeGoals + awayGoals) > 0`.
 
 ## Sign-in Page Notes
 
@@ -351,4 +351,25 @@ or the re-run serves the cached empties.
 Also gitignored `.env.tmp`/`.env*.tmp` (commit `0847d95`) — they were untracked but not
 actually ignored, contradicting the rule above.
 
-**Current deployed commit:** `0847d95` on master
+### 2026-06-12 — Full-system audit: lineup watch loop + 5 fixes
+
+Full pass over code, Vercel, Supabase, Stripe, and the live site. All deployments
+READY, advisors clean, Stripe and the subscriptions table consistent (1 active paid
+sub + 3 manual free-access rows).
+
+| Change | Detail |
+|--------|--------|
+| **Lineup watch loop** (commit `6d90660`) | The 5-min cron meant a lineup publishing just after a tick waited up to 5+ min for a sheet. The sync GET handler now keeps the invocation alive (150s budget of the 300s maxDuration): runSync returns `awaitingLineups` (matches 0.75h..1.6h around kickoff without lineups, with ESPN league hints), the handler polls ESPN every ~25s and re-runs the sync the moment rosters appear. Sheets now drop ~30-90s after lineups. `?watch=0` disables. fd.org lineup cache TTL cut 2min → 45s so the in-invocation rebuild doesn't read a stale empty-lineup response |
+| Pre-kickoff guard tiered (same commit) | 35min TTL within 2h of kickoff (was locked 6h) so late lineup corrections and ref reassignments reach the sheet before kickoff; >2h stays 6h, post-kickoff stays 2h |
+| `hasGoodGoals` fix (same commit) | Now `(home + away) > 0` — the old per-team check kept complete 1-0/0-0 sheets rebuilding every cycle (documented known issue) |
+| fd.org 429 backoff (same commit) | 60s flat → 15s/45s; worst-case stall halved, cumulative 60s still guarantees a fresh per-minute window |
+| Frontend freshness (same commit) | `/api/matches` CDN s-maxage 30 → 15; dashboard + competition polls 60s → 30s |
+| Bot POST 500s (commit `7fb184e`) | Bots POSTing to `/` crashed the Server Action parser (no Server Actions exist) — middleware returns 405 for non-GET page requests. Verified live |
+| **Cache cleanup** (commit `663b109`) | `kvDeleteOlderThan` in store.ts; prefetch cron deletes stale rows daily (prefetch/pc:odds/pc:ref 4d, pc:hist/squad/players/standings 7d, af:plid 30d — all past read TTLs). Critical because the sync prefetch norm-scan reads max 60 `prefetch:*` rows. Also one-off deleted dead rows: `api_sports_cache`, `fbref_cache`, `fbref_v2_cache`, `__debug_test__` |
+| **Dead AF endpoint** (commit `81b6eb4`) | `/fixtures?player=X` does not exist in AF v3 (verified via debug-af: `"The Player field do not exist."`). Personal history has ALWAYS been empty in production (every `pc:players` blob is `{}`); dots come from team-history fallback. The batch was wasting ~190 AF calls/team in prefetch and ~40 calls + ~20s per live sheet rebuild. Now probes once and bails; module flag skips later batches per warm runtime |
+
+**Verified live after deploy:** manual sync ok (built the live Canada vs Bosnia sheet),
+`POST /` returns 405, USA vs Paraguay prefetched for tonight (98/92 player histories,
+odds cached). The watch loop will see first real action at tonight's 01:00 UTC kickoff.
+
+**Current deployed commit:** `81b6eb4` on master (plus docs commit)
