@@ -1252,6 +1252,15 @@ export async function fetchApiFootballReferee(teamName: string, apiKey: string, 
 // ── Per-player personal fixture history (true last N across all competitions) ─
 // For each player AF ID, fetches their own last N fixtures and returns per-game stats.
 // Deduplicates fixture API calls: teammates share fixture stat requests.
+//
+// IMPORTANT: AF v3 /fixtures has NO `player` parameter (verified 2026-06-12:
+// "The Player field do not exist."). When AF rejects it, every personal-history
+// batch returns empty and bestLast5 falls back to team fixture history — which is
+// the behaviour production has had all along. The probe below detects the rejection
+// on the FIRST player and bails out, instead of burning 2 AF calls per player
+// (~190/team in prefetch, ~40 + ~20s latency per live sheet rebuild) on a dead path.
+let afPlayerParamDead = false;
+
 export async function fetchPlayerPersonalHistoryBatch(
   playerAfIds: number[],
   apiKey: string,
@@ -1259,7 +1268,7 @@ export async function fetchPlayerPersonalHistoryBatch(
   internationalOnly = false,
 ): Promise<Map<number, PlayerGameStat[]>> {
   const result = new Map<number, PlayerGameStat[]>();
-  if (!apiKey || !playerAfIds.length) return result;
+  if (!apiKey || !playerAfIds.length || afPlayerParamDead) return result;
 
   // Fetch more fixtures than needed so gaps from missing stats don't shrink the window.
   // International-only mode needs a larger buffer: players often have long club runs between
@@ -1275,8 +1284,18 @@ export async function fetchPlayerPersonalHistoryBatch(
       // Some AF plan tiers require an explicit season for /fixtures?player — try without first,
       // then fall back to current season if the response is empty.
       let fd = await afFetch(`/fixtures?player=${playerId}&last=${fetchCount}`, apiKey);
+      if (fd?.errors?.player) {
+        afPlayerParamDead = true;
+        console.warn('[personal-history] AF rejects /fixtures?player — skipping batch, dots use team-history fallback');
+        return result;
+      }
       if (!fd?.response?.length) {
         fd = await afFetch(`/fixtures?player=${playerId}&season=${inferSeason(new Date(), internationalOnly)}&last=${fetchCount}`, apiKey);
+        if (fd?.errors?.player) {
+          afPlayerParamDead = true;
+          console.warn('[personal-history] AF rejects /fixtures?player — skipping batch, dots use team-history fallback');
+          return result;
+        }
       }
       const fixtures: any[] = fd?.response ?? [];
       if (fixtures.length > 0) {
