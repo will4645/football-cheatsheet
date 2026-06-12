@@ -975,7 +975,10 @@ async function apiFetch(path: string, ttlMs = 5 * 60 * 1000, _retries = 2): Prom
   });
   if (res.status === 429) {
     if (_retries <= 0) { console.warn(`[sync] 429 rate limit exceeded for ${path} — giving up`); return null; }
-    await new Promise(r => setTimeout(r, 60000));
+    // 15s then 45s: usually recovers on the first retry, and the cumulative 60s still
+    // guarantees a fresh fd.org per-minute window by the second. A flat 60s wait was
+    // stalling the whole sync for up to 2 minutes.
+    await new Promise(r => setTimeout(r, _retries === 2 ? 15_000 : 45_000));
     return apiFetch(path, ttlMs, _retries - 1);
   }
   if (!res.ok) { console.warn(`[sync] ${res.status} for ${path}`); return null; }
@@ -984,9 +987,30 @@ async function apiFetch(path: string, ttlMs = 5 * 60 * 1000, _retries = 2): Prom
   return data;
 }
 
+// Competition name → ESPN league slug, used to give the lineup watcher a direct
+// league hint so each poll costs 1-2 ESPN calls instead of a full league scan.
+const COMP_TO_ESPN_SLUG: Record<string, string> = {
+  'Premier League': 'eng.1', 'La Liga': 'esp.1', 'Primera Division': 'esp.1',
+  'Bundesliga': 'ger.1', 'Serie A': 'ita.1', 'Ligue 1': 'fra.1',
+  'UEFA Champions League': 'uefa.champions', 'UEFA Europa League': 'uefa.europa',
+  'UEFA Europa Conference League': 'uefa.europa.conf', 'FA Cup': 'eng.fa',
+  'FIFA World Cup': 'fifa.world',
+};
+
+// A match close to kickoff whose lineups have not been published yet — the watch
+// loop in the GET handler polls ESPN for these between cron ticks.
+interface AwaitingLineups {
+  id: string;
+  homeName: string;
+  awayName: string;
+  utcDate: string;
+  espnLeagueHint: string;
+}
+
 // ── Main sync logic ────────────────────────────────────────────────────────
-async function runSync(forceRebuild = false) {
+async function runSync(forceRebuild = false): Promise<{ logs: string[]; awaitingLineups: AwaitingLineups[] }> {
   const logs: string[] = [];
+  const awaitingLineups: AwaitingLineups[] = [];
   const log = (msg: string) => { console.log(msg); logs.push(msg); };
 
   log(`[sync] Running — ${new Date().toISOString()}`);
@@ -1329,10 +1353,17 @@ async function runSync(forceRebuild = false) {
     if (!isLive && !forceRebuild) {
       const existingSheet = await sbGet(`match:${id}`) as any;
       const sheetAge = existingSheet?._builtAt ? Date.now() - existingSheet._builtAt : Infinity;
-      const guardTtl = hoursAway > 0 ? 6 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000;
+      // Within 2h of kickoff use a short TTL so late team news (lineup corrections,
+      // ref reassignment) is picked up before the match starts; >2h out the sheet is
+      // stable, post-kickoff the live path owns updates.
+      const guardTtl = hoursAway > 2 ? 6 * 60 * 60 * 1000
+                     : hoursAway > 0 ? 35 * 60 * 1000
+                     : 2 * 60 * 60 * 1000;
       const hasGoodRef   = existingSheet?.referee?.name && existingSheet.referee.name !== 'TBC';
-      const hasGoodGoals = (existingSheet?.homeTeam?.stats?.goalsFor ?? 0) > 0 &&
-                           (existingSheet?.awayTeam?.stats?.goalsFor ?? 0) > 0;
+      // Sum across both teams: requiring each side's average > 0 meant a team with 0
+      // goals across the sample window kept the sheet rebuilding every cycle for hours.
+      const hasGoodGoals = ((existingSheet?.homeTeam?.stats?.goalsFor ?? 0) +
+                            (existingSheet?.awayTeam?.stats?.goalsFor ?? 0)) > 0;
       // Also require corners > 0 — a reliable signal that team stats were actually populated
       const hasGoodStats = (existingSheet?.homeTeam?.stats?.cornersFor ?? 0) > 0 &&
                            (existingSheet?.awayTeam?.stats?.cornersFor ?? 0) > 0;
@@ -1359,7 +1390,9 @@ async function runSync(forceRebuild = false) {
 
     const fromEspn = !!(match as any)._fromEspn;
     const fromAf   = !!(match as any)._fromAf;
-    let lineupData = (fromEspn || fromAf) ? null : await apiFetch(`/matches/${match.id}/lineups`, 2 * 60 * 1000);
+    // 45s TTL (was 2 min): the watch loop re-runs runSync within the same invocation,
+    // so a longer TTL would serve a stale "no lineups" response to the rebuild pass.
+    let lineupData = (fromEspn || fromAf) ? null : await apiFetch(`/matches/${match.id}/lineups`, 45 * 1000);
     // Require BOTH teams to have lineups before building a sheet.
     // Old code only checked homeTeam — if fd.org published home lineup early but not away,
     // hasLineups was true and we'd build a sheet with empty awayTeam.players arrays.
@@ -1558,6 +1591,17 @@ async function runSync(forceRebuild = false) {
 
     if (!hasLineups) {
       log(`[sync] No lineups yet: ${homeName} vs ${awayName}`);
+      // Lineups typically publish ~60-75 min before kickoff. Register matches inside
+      // that window so the watch loop polls for them between cron ticks instead of
+      // waiting up to 5 minutes for the next invocation.
+      if (hoursAway <= 1.6 && hoursAway > -0.75) {
+        awaitingLineups.push({
+          id, homeName, awayName, utcDate: match.utcDate ?? '',
+          espnLeagueHint: fromEspn
+            ? ((match as any)._espnLeague ?? '')
+            : (COMP_TO_ESPN_SLUG[match.competition?.name ?? ''] ?? ''),
+        });
+      }
       if (hoursAway > -4 && !liveMatches.find((m: any) => m.id === id) && !pendingList.find((m: any) => m.id === id)) {
         pendingList.push({
           id, competition: match.competition?.name || 'Football', stage,
@@ -1922,7 +1966,7 @@ async function runSync(forceRebuild = false) {
   await sbSet('matches', liveMatches, log);
   await sbSet('upcoming', pendingList, log);
   log(`[sync] Done`);
-  return logs;
+  return { logs, awaitingLineups };
 }
 
 // ── Demo sync: generates real stats for Fulham vs Getafe CF ───────────────
@@ -2141,7 +2185,40 @@ export async function GET(req: NextRequest) {
   }
   try {
     const force = req.nextUrl.searchParams.get('force') === '1';
-    const logs = await runSync(force);
+    const watch = req.nextUrl.searchParams.get('watch') !== '0';
+    const startedAt = Date.now();
+    let { logs, awaitingLineups } = await runSync(force);
+
+    // ── Lineup watch loop ────────────────────────────────────────────────
+    // Without this, a lineup that publishes just after a cron tick waits up to
+    // 5 minutes for the next invocation. Instead, poll ESPN every ~25s for the
+    // matches close to kickoff and rebuild the moment rosters appear.
+    // Budget leaves ≥2.5 min of the 300s maxDuration for a triggered rebuild pass,
+    // enough for a multi-sheet build on a busy matchday.
+    const WATCH_BUDGET = 150_000;
+    if (!force && watch && awaitingLineups.length) {
+      logs.push(`[watch] ${awaitingLineups.length} match(es) awaiting lineups — polling`);
+      while (Date.now() - startedAt < WATCH_BUDGET && awaitingLineups.length) {
+        await new Promise(r => setTimeout(r, 25_000));
+        if (Date.now() - startedAt >= WATCH_BUDGET) break;
+        let ready = '';
+        for (const m of awaitingLineups) {
+          try {
+            const { lineups } = await getApiFootballLineups(m.homeName, m.awayName, m.utcDate, m.espnLeagueHint || undefined);
+            if (lineups) { ready = m.id; break; }
+          } catch {}
+        }
+        if (ready) {
+          console.log(`[watch] lineups dropped: ${ready} — rebuilding`);
+          logs.push(`[watch] lineups dropped: ${ready} — rebuilding`);
+          const second = await runSync(false);
+          logs = logs.concat(second.logs);
+          awaitingLineups = second.awaitingLineups;
+        }
+      }
+      logs.push(`[watch] done after ${Math.round((Date.now() - startedAt) / 1000)}s — ${awaitingLineups.length} still awaiting`);
+    }
+
     return NextResponse.json({ ok: true, logs });
   } catch (e: any) {
     console.error('[sync] Error:', e);

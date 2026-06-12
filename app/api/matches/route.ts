@@ -45,7 +45,7 @@ export async function GET() {
       return NextResponse.json({
         live: liveFiltered,
         upcoming: upcomingFiltered,
-      }, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' } });
+      }, { headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=30' } });
     } catch (e: any) {
       console.error('[matches] error:', e.message);
       return NextResponse.json({ live: [], upcoming: [], error: e.message });
