@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prefetchMatch } from '@/lib/prefetch';
 import { fetchAfFixturesByDateRange } from '@/lib/api-football';
-import { kvGet, kvSet } from '@/lib/store';
+import { kvGet, kvSet, kvDeleteOlderThan } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -171,6 +171,27 @@ export async function GET(req: NextRequest) {
         }
       }
     }
+
+    // ── Cache hygiene ─────────────────────────────────────────────────────
+    // Component caches refresh by TTL but rows were never deleted, so the table
+    // grows unbounded. Critically, the sync route's prefetch norm-scan reads at
+    // most 60 prefetch:* rows — stale blobs would eventually crowd out fresh ones.
+    // All of these are re-fetchable caches; ages are well past every read TTL.
+    const CLEANUP: Array<[string, number]> = [
+      ['prefetch:',   4 * 86_400_000],
+      ['pc:odds:',    4 * 86_400_000],
+      ['pc:ref:',     4 * 86_400_000],
+      ['pc:hist:',    7 * 86_400_000],
+      ['pc:squad:',   7 * 86_400_000],
+      ['pc:players:', 7 * 86_400_000],
+      ['standings:',  7 * 86_400_000],
+      ['af:plid:',   30 * 86_400_000],
+    ];
+    let cleaned = 0;
+    for (const [prefix, age] of CLEANUP) {
+      cleaned += await kvDeleteOlderThan(prefix, age);
+    }
+    if (cleaned > 0) log(`[prefetch] cleanup: ${cleaned} stale cache rows deleted`);
 
     log(`[prefetch] Done — ${done} fetched, ${skipped} skipped (fresh)`);
     return NextResponse.json({ ok: true, done, skipped, total: nearTerm.length, logs });

@@ -69,6 +69,24 @@ export async function kvDelete(key: string): Promise<void> {
   if (file && existsSync(file)) unlinkSync(file);
 }
 
+// Delete cache rows under a prefix whose updated_at is older than maxAgeMs.
+// Returns the number of rows deleted. No-op in local file mode.
+export async function kvDeleteOlderThan(prefix: string, maxAgeMs: number): Promise<number> {
+  if (USE_SUPABASE) {
+    const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase() as any)
+      .from('match_cache')
+      .delete()
+      .like('key', `${prefix}%`)
+      .lt('updated_at', cutoff)
+      .select('key');
+    if (error) { console.error(`[kvDeleteOlderThan] ${prefix}: ${error.message}`); return 0; }
+    return (data ?? []).length;
+  }
+  return 0;
+}
+
 export async function kvKeys(prefix: string): Promise<string[]> {
   if (USE_SUPABASE) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
