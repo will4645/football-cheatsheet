@@ -1693,10 +1693,19 @@ async function runSync(forceRebuild = false): Promise<{ logs: string[]; awaiting
         })(),
         afApiKey
           ? fetchApiFootballOdds(homeName, awayName, match.utcDate ?? '', afApiKey, afLeagueId || undefined)
-              .then(r => {
+              .then(async r => {
                 // Mirror the prefetch fallback: AF has no bookmaker coverage for some
                 // competitions (WC/CL/EL/ECL) — try The Odds API before giving up
-                if (r && r.homeWin > 0) return r;
+                if (r && r.homeWin > 0) {
+                  // AF has h2h odds but BTTS market absent; try The Odds API for BTTS before formula fallback
+                  if (r.btts === null && afLeagueId && [1, 2, 3, 848].includes(afLeagueId)) {
+                    const tod = await fetchTheOddsApiOdds(homeName, awayName, match.utcDate ?? '', afLeagueId);
+                    if (tod && tod.btts !== null) {
+                      return { ...r, btts: tod.btts, bttsYesOdd: tod.bttsYesOdd, bttsNoOdd: tod.bttsNoOdd };
+                    }
+                  }
+                  return r;
+                }
                 return afLeagueId
                   ? fetchTheOddsApiOdds(homeName, awayName, match.utcDate ?? '', afLeagueId).then(tod => tod ?? r)
                   : r;

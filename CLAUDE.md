@@ -400,3 +400,15 @@ Full audit triggered after PC crash at 2am and two observed issues. All files re
 - All pages (dashboard, competition, match): auth gates, polling intervals, routing — correct
 
 **Note:** BTTS fix applies only when AF has bookmaker h2h odds but no BTTS market. When AF has no odds at all (non-prefetched matches, rare competitions), Poisson still runs as the fallback.
+
+### 2026-06-14 (follow-up) — Wire The Odds API for BTTS when AF has h2h but btts: null
+
+The BTTS derivation formula (session above) is now the last resort, not the first. For WC/CL/EL/ECL matches, The Odds API likely has a real BTTS market that is more accurate than any formula.
+
+| Fix | Files | Detail |
+|-----|-------|--------|
+| **The Odds API BTTS merge** | `lib/prefetch.ts` line 235, `app/api/sync/route.ts` line 1696 | Both odds pipelines now check: when `r.homeWin > 0 && r.btts === null && afLeagueId in {1,2,3,848}`, call `fetchTheOddsApiOdds` and merge `btts`/`bttsYesOdd`/`bttsNoOdd` from the result into `r` before returning. The formula derivation in sync/route.ts ~line 1896 handles any remaining case where both AF and The Odds API have no BTTS market. |
+
+**Priority order now:** (1) AF bookmaker BTTS market, (2) The Odds API BTTS market (WC/CL/EL/ECL only), (3) derived from h2h odds, (4) Poisson (only when no h2h odds at all).
+
+**Deployed:** commit on master, aliased to www.cheatsheets.co.uk.

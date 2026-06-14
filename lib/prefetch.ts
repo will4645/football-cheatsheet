@@ -232,8 +232,17 @@ export async function prefetchMatch(
 
     const [freshOdds, freshRef] = await Promise.all([
       needOdds ? fetchApiFootballOdds(homeName, awayName, matchDate, apiKey, afLeagueId || undefined)
-                   .then(r => {
-                     if (r && r.homeWin > 0) return r;
+                   .then(async r => {
+                     if (r && r.homeWin > 0) {
+                       // AF has h2h odds but BTTS market absent; try The Odds API for BTTS before formula fallback
+                       if (r.btts === null && afLeagueId && [1, 2, 3, 848].includes(afLeagueId)) {
+                         const tod = await fetchTheOddsApiOdds(homeName, awayName, matchDate, afLeagueId);
+                         if (tod && tod.btts !== null) {
+                           return { ...r, btts: tod.btts, bttsYesOdd: tod.bttsYesOdd, bttsNoOdd: tod.bttsNoOdd };
+                         }
+                       }
+                       return r;
+                     }
                      return afLeagueId
                        ? fetchTheOddsApiOdds(homeName, awayName, matchDate, afLeagueId).then(tod => tod ?? r)
                        : r;
