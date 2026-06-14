@@ -1055,7 +1055,7 @@ async function runSync(forceRebuild = false): Promise<{ logs: string[]; awaiting
     if (apiMatchIds.has(m.id)) return false;
     const kickoff = new Date(m.utcDate ?? 0).getTime();
     const hoursFromKo = (Date.now() - kickoff) / 3_600_000;
-    return hoursFromKo > 2.5; // remove ESPN-only matches 2.5h after kickoff
+    return hoursFromKo > 3.5; // remove ESPN-only matches 3.5h after kickoff (extra time + penalties ~150 min)
   });
   for (const m of stale) {
     const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${m.id}`);
@@ -1155,7 +1155,7 @@ async function runSync(forceRebuild = false): Promise<{ logs: string[]; awaiting
         const comp = ev.competitions?.[0];
         const koTime = new Date(ev.date).getTime();
         const hoursFromKo = (Date.now() - koTime) / 3_600_000;
-        if (hoursFromKo > 2.5) continue; // drop matches >2.5h past kickoff regardless of status
+        if (hoursFromKo > 3.5) continue; // drop matches >3.5h past kickoff regardless of status
         const homeComp = comp?.competitors?.find((c: any) => c.homeAway === 'home');
         const awayComp = comp?.competitors?.find((c: any) => c.homeAway === 'away');
         const homeName = homeComp?.team?.displayName;
@@ -1336,8 +1336,8 @@ async function runSync(forceRebuild = false): Promise<{ logs: string[]; awaiting
 
     // Skip: too far away and no sheet yet
     if (!isLive && !alreadyBuiltIds.has(id) && hoursAway > 4) continue;
-    // Skip: match finished >2.5h ago — sheet is final, stop re-processing
-    if (!isLive && hoursAway < -2.5) continue;
+    // Skip: match finished >3.5h ago — sheet is final, stop re-processing
+    if (!isLive && hoursAway < -3.5) continue;
 
     const homeName = match.homeTeam?.name;
     const awayName = match.awayTeam?.name;
@@ -1893,10 +1893,18 @@ async function runSync(forceRebuild = false): Promise<{ logs: string[]; awaiting
         const lA = Math.max(0.3, (awayStats.goalsFor + homeStats.goalsAgainst) / 2);
         const poissonBtts = Math.round((1 - Math.exp(-lH)) * (1 - Math.exp(-lA)) * 100);
         const over25 = toScale(poissonAtLeast(lH + lA, 3));
-        // Use bookmaker odds when available; for BTTS, use Poisson if no BTTS market found
+        // Use bookmaker odds when available; when btts market is absent, derive from h2h odds
+        // (Poisson overstates BTTS for lopsided matches — raw team averages ignore quality gaps)
         const toOdd = (pct: number) => +( 100 / Math.max(1, pct) ).toFixed(2);
         if (afOdds && afOdds.homeWin > 0) {
-          const resolvedBtts = afOdds.btts !== null ? afOdds.btts : poissonBtts;
+          // homeWin+draw+awayWin may not sum to exactly 100 due to upstream rounding (≤1pp error)
+          const resolvedBtts = afOdds.btts !== null
+            ? afOdds.btts
+            : Math.round(
+                (Math.max(afOdds.homeWin, afOdds.awayWin) / 100) * 20 +
+                (afOdds.draw / 100) * 80 +
+                (Math.min(afOdds.homeWin, afOdds.awayWin) / 100) * 85
+              );
           // Derive over25 % from bookmaker odd when available, otherwise keep Poisson
           const resolvedOver25 = afOdds.over25Odd
             ? Math.round(100 / afOdds.over25Odd)

@@ -373,3 +373,30 @@ sub + 3 manual free-access rows).
 odds cached). The watch loop will see first real action at tonight's 01:00 UTC kickoff.
 
 **Current deployed commit:** `81b6eb4` on master (plus docs commit)
+
+### 2026-06-14 — Full-system audit: BTTS fix + stale window extension
+
+Full audit triggered after PC crash at 2am and two observed issues. All files read, two root causes found and fixed.
+
+**Issue 1 — Match sheet wiped before user saw it (Brazil vs Morocco WC, ~1am UTC kickoff):**
+- Sheet built at midnight, deleted at 3:30am UTC (2.5h after 1am kickoff) — extra time + penalties run ~150 min, leaving zero buffer after the final whistle
+- Root cause: ESPN-only stale window (WC, CL, EL, ECL matches not in fd.org) was 2.5h — exact length of a match with full extra time + penalties
+
+**Issue 2 — Germany BTTS showing 70% (should be ~25%):**
+- AF returned h2h bookmaker odds (homeWin: 92%) but no BTTS market (btts: null)
+- Code short-circuited on `r.homeWin > 0` without trying The Odds API for BTTS
+- Probabilities block fell back to `poissonBtts = 70` because raw Poisson uses season averages — Curaçao scored a lot in CONCACAF qualifiers vs weaker teams, inflating their `goalsFor` and the BTTS estimate
+
+| Fix | Location | Detail |
+|-----|---------|--------|
+| **BTTS derivation from h2h odds** | `app/api/sync/route.ts` ~line 1896 | When `afOdds.btts === null` but `afOdds.homeWin > 0`, derive BTTS from h2h: `favWin*0.20 + draw*0.80 + underdogWin*0.85`. Germany vs Curaçao: 25% (was 70%). Brazil vs Morocco: 47%. Balanced match: 54%. Poisson still used as fallback when AF has no h2h odds at all. |
+| **Stale window 2.5h → 3.5h** | `app/api/sync/route.ts`, 3 places (lines 1058, 1158, 1340) | ESPN-only matches now survive 3.5h after kickoff, giving ~1h buffer after a match that goes to full extra time + penalties (150 min). fd.org matches unaffected (use FINISHED status + 1.5h path). |
+
+**Broader audit (no additional issues found):**
+- `app/api/prefetch/route.ts`: ESPN supplement, skip logic, cache hygiene — all correct
+- `app/api/matches/route.ts`: 3h liveFiltered filter is belt-and-suspenders (minor inconsistency with 3.5h stale window, not a bug)
+- `app/api/matches/[id]/route.ts`: auth gating, Supabase read — correct
+- `lib/competitions.ts`, `lib/subscription.ts`, `lib/email.ts`: clean, correct
+- All pages (dashboard, competition, match): auth gates, polling intervals, routing — correct
+
+**Note:** BTTS fix applies only when AF has bookmaker h2h odds but no BTTS market. When AF has no odds at all (non-prefetched matches, rare competitions), Poisson still runs as the fallback.
