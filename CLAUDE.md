@@ -411,4 +411,18 @@ The BTTS derivation formula (session above) is now the last resort, not the firs
 
 **Priority order now:** (1) AF bookmaker BTTS market, (2) The Odds API BTTS market (WC/CL/EL/ECL only), (3) derived from h2h odds, (4) Poisson (only when no h2h odds at all).
 
-**Current deployed commit:** `51c30af` on master, aliased to www.cheatsheets.co.uk.
+**Current deployed commit:** `a474a17` on master, aliased to www.cheatsheets.co.uk.
+
+### 2026-06-15 — WC afLeagueId=0 bug + EU region for BTTS
+
+**Root cause discovered:** `FD_CODE_TO_AF_LEAGUE` in both `app/api/prefetch/route.ts` and `app/api/sync/route.ts` was missing `WC: 1`. fd.org returns World Cup matches with competition code `WC`. Because the code had no mapping for it, WC matches got `afLeagueId=0`. fd.org registers the match slug first, so the ESPN supplement (which correctly maps `fifa.world → 1`) was skipped via the `nearTermIds` deduplication guard. Result: prefetch blobs were saved with `afLeagueId=0` and `odds=null`, causing the sync to use pure Poisson — showing Spain at 57% win and BTTS at 68% vs Cape Verde.
+
+| Fix | Files | Detail |
+|-----|-------|--------|
+| **WC league ID** | `app/api/prefetch/route.ts` line 48, `app/api/sync/route.ts` line 1291 | Added `WC: 1` to `FD_CODE_TO_AF_LEAGUE` in both files. WC matches from fd.org now get `afLeagueId=1`, triggering national-team history mode (no season filter) and WC-specific odds fetch. |
+| **EU region for BTTS** | `lib/api-football.ts` line 1562 | Changed `regions=uk` to `regions=uk,eu` in `fetchTheOddsApiOdds`. UK bookmakers are often late to price BTTS for international matches; EU bookmakers (Unibet, Betway etc.) list it earlier. Costs 6 credits/call instead of 3 — still well within the 500/month free tier for WC volume. |
+| **Live Supabase patch** | Supabase SQL | Patched `prefetch:spain-vs-cape-verde` blob directly: injected correct odds (`homeWin:88`, `homeOdd:1.14`) from `pc:odds:` cache and set `afLeagueId:1`. Deleted stale `pc:odds:` entries for Spain/Cape Verde and Belgium/Egypt to force re-fetch with EU region on next prefetch run. |
+
+**Why Cape Verde player dots are empty (data limitation, not a bug):** AF doesn't publish fixture-level statistics for African qualifier matches, so `/fixtures/statistics?fixture=X` returns zeros for shots/saves. The history map (`fixtureHistory`) ends up empty — no dots for Cape Verde players. This is a data gap in AF's coverage, not a code issue.
+
+**BTTS priority order (unchanged):** (1) AF bookmaker BTTS market, (2) The Odds API BTTS (WC/CL/EL/ECL, now with uk+eu regions), (3) h2h formula, (4) Poisson.
