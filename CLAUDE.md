@@ -411,4 +411,4 @@ The BTTS derivation formula (session above) is now the last resort, not the firs
 
 **Priority order now:** (1) AF bookmaker BTTS market, (2) The Odds API BTTS market (WC/CL/EL/ECL only), (3) derived from h2h odds, (4) Poisson (only when no h2h odds at all).
 
-**Deployed:** commit on master, aliased to www.cheatsheets.co.uk.
+**Current deployed commit:** `51c30af` on master, aliased to www.cheatsheets.co.uk.

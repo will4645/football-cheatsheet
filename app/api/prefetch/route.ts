@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   // fd.org competition code → AF league ID
   const FD_CODE_TO_AF_LEAGUE: Record<string, number> = {
     PL: 39, PD: 140, BL1: 78, SA: 135, FL1: 61,
-    CL: 2, EL: 3, ECL: 848,
+    CL: 2, EL: 3, ECL: 848, WC: 1,
   };
 
   try {

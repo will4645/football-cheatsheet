@@ -1289,7 +1289,7 @@ async function runSync(forceRebuild = false): Promise<{ logs: string[]; awaiting
     const afKeyForPrefetch = (process.env.API_SPORTS_KEY ?? '').trim();
     const FD_CODE_TO_AF_LEAGUE: Record<string, number> = {
       PL: 39, PD: 140, BL1: 78, SA: 135, FL1: 61,
-      CL: 2, EL: 3, ECL: 848,
+      CL: 2, EL: 3, ECL: 848, WC: 1,
     };
     const ESPN_SLUG_TO_AF_LEAGUE: Record<string, number> = {
       'fifa.world': 1, 'uefa.champions': 2, 'uefa.europa': 3, 'uefa.europa.conf': 848,
