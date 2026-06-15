@@ -1559,7 +1559,7 @@ export async function fetchTheOddsApiOdds(
   if (!apiKey || !sport) return null;
   try {
     const dateStr = matchDate.slice(0, 10);
-    const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${apiKey}&regions=uk&markets=h2h,btts,totals&oddsFormat=decimal&dateFormat=iso&commenceTimeFrom=${dateStr}T00:00:00Z&commenceTimeTo=${dateStr}T23:59:59Z`;
+    const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds?apiKey=${apiKey}&regions=uk,eu&markets=h2h,btts,totals&oddsFormat=decimal&dateFormat=iso&commenceTimeFrom=${dateStr}T00:00:00Z&commenceTimeTo=${dateStr}T23:59:59Z`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const events: any[] = await res.json();
