@@ -805,12 +805,16 @@ export async function fetchApiFootballTeamHistory(
     // teams only play international fixtures so an unfiltered last=15 is exactly what we want.
     const isNationalTeam = leagueHint === 1 || !!best?.team?.national;
     const curSeason = inferSeason(new Date(), leagueHint === 1);
+    // National teams: fetch last 40 matches (no season filter) — covers ~4 years of internationals
+    // (qualifiers, Nations League, WC) so the history-derived totals are a meaningful career sample.
+    // Domestic clubs: last 15 from current season only.
+    const histLast = isNationalTeam ? 40 : 15;
     let fd = isNationalTeam
-      ? await afFetch(`/fixtures?team=${teamId}&last=15`, apiKey)
-      : await afFetch(`/fixtures?team=${teamId}&last=15&season=${curSeason}`, apiKey);
+      ? await afFetch(`/fixtures?team=${teamId}&last=${histLast}`, apiKey)
+      : await afFetch(`/fixtures?team=${teamId}&last=${histLast}&season=${curSeason}`, apiKey);
     let fixtures: any[] = fd?.response ?? [];
     if (!fixtures.length && !isNationalTeam) {
-      fd = await afFetch(`/fixtures?team=${teamId}&last=15&season=${curSeason - 1}`, apiKey);
+      fd = await afFetch(`/fixtures?team=${teamId}&last=${histLast}&season=${curSeason - 1}`, apiKey);
       fixtures = fd?.response ?? [];
     }
     if (!fixtures.length) return { history: new Map(), playerIds: new Map(), afTeamId: teamId, afTeamStats: null, debug: `no fixtures: ${teamId}` };

@@ -355,6 +355,7 @@ async function buildPlayers(
   afSquadAway: Map<string, AfSquadPlayer> = new Map(),
   perPlayerHistoryHome: Map<string, PlayerGameStat[]> = new Map(),
   perPlayerHistoryAway: Map<string, PlayerGameStat[]> = new Map(),
+  isNational = false,
 ) {
   function normName(n: string) {
     return (n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -570,7 +571,7 @@ async function buildPlayers(
     }).slice(0, 10);
   }
 
-  function buildSide(starters: any[], opp: any[], afHistory: Map<string, PlayerGameStat[]>, afSquad: Map<string, AfSquadPlayer>, perPlayerHistory: Map<string, PlayerGameStat[]>) {
+  function buildSide(starters: any[], opp: any[], afHistory: Map<string, PlayerGameStat[]>, afSquad: Map<string, AfSquadPlayer>, perPlayerHistory: Map<string, PlayerGameStat[]>, isNational = false) {
     function normN(n: string) {
       return (n || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
     }
@@ -614,6 +615,27 @@ async function buildPlayers(
 
     const players    = starters.map(p => applySquad(playerDefaults(p)));
     const oppPlayers = opp.map(p => playerDefaults(p));
+
+    // For national team (WC) matches, AF /players season stats have poor coverage for goals/assists.
+    // Override totals with values summed from fixture history — same source as the dots — so the
+    // Goals/Assists column and Cards appearances are consistent with what the dots show.
+    if (isNational) {
+      for (const p of players) {
+        const histGames = lookupAF(p.name);
+        if (histGames && histGames.length >= 1) {
+          const hGoals   = histGames.reduce((s: number, g) => s + (g.goals       ?? 0), 0);
+          const hAssists = histGames.reduce((s: number, g) => s + (g.assists     ?? 0), 0);
+          const hYellow  = histGames.reduce((s: number, g) => s + (g.yellowCards ?? 0), 0);
+          const hApps    = histGames.length;
+          p.goals       = hGoals;
+          p.assists     = hAssists;
+          p.yellowCards = hYellow;
+          p.appearances = hApps;
+          p.gaPerGame   = hApps > 0 ? +((hGoals + hAssists) / hApps).toFixed(2) : p.gaPerGame;
+          p.hasRealData = true;
+        }
+      }
+    }
 
     // ── Per-player personal history (true last 5 across all competitions) ───
     function perPlayerLast5(name: string, field: keyof PlayerGameStat, threshold = 1): boolean[] | null {
@@ -894,7 +916,7 @@ async function buildPlayers(
   }).length;
   const afDiag = `AF matched: home ${homeMatched}/${homeStarters.length}, away ${awayMatched}/${awayStarters.length}`;
 
-  return { home: buildSide(homeStarters, awayStarters, afHistoryHome, afSquadHome, perPlayerHistoryHome), away: buildSide(awayStarters, homeStarters, afHistoryAway, afSquadAway, perPlayerHistoryAway), diag: diag + ' | ' + afDiag };
+  return { home: buildSide(homeStarters, awayStarters, afHistoryHome, afSquadHome, perPlayerHistoryHome, isNational), away: buildSide(awayStarters, homeStarters, afHistoryAway, afSquadAway, perPlayerHistoryAway, isNational), diag: diag + ' | ' + afDiag };
 }
 
 // ── Date helpers ───────────────────────────────────────────────────────────
@@ -1869,7 +1891,7 @@ async function runSync(forceRebuild = false): Promise<{ logs: string[]; awaiting
       }
     }
 
-    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, espnHistory, await ensureApiSportsIdx(), combinedRosterMap, homeAfResult.history, awayAfResult.history, homeSquadResult.stats, awaySquadResult.stats, perPlayerHistoryHome, perPlayerHistoryAway);
+    const players = await buildPlayers(lineupData.homeTeam, lineupData.awayTeam, espnHistory, await ensureApiSportsIdx(), combinedRosterMap, homeAfResult.history, awayAfResult.history, homeSquadResult.stats, awaySquadResult.stats, perPlayerHistoryHome, perPlayerHistoryAway, afLeagueId === 1);
     log(`[buildPlayers] ${players.diag}`);
 
     // ── League standings (domestic only, not European cups) ──────────────

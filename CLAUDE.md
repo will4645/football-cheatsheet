@@ -426,3 +426,16 @@ The BTTS derivation formula (session above) is now the last resort, not the firs
 **Why Cape Verde player dots are empty (data limitation, not a bug):** AF doesn't publish fixture-level statistics for African qualifier matches, so `/fixtures/statistics?fixture=X` returns zeros for shots/saves. The history map (`fixtureHistory`) ends up empty — no dots for Cape Verde players. This is a data gap in AF's coverage, not a code issue.
 
 **BTTS priority order (unchanged):** (1) AF bookmaker BTTS market, (2) The Odds API BTTS (WC/CL/EL/ECL, now with uk+eu regions), (3) h2h formula, (4) Poisson.
+
+### 2026-06-15 — WC player stat totals now sourced from fixture history
+
+**Root cause:** The Goals/Assists column, Appearances count, and Cards totals all came from AF's `/players?team=X&season=Y` season-aggregate endpoint. For national teams, AF's season stats frequently report 0 goals/assists even when a player scored in a specific fixture — Doku showed 0 goals despite a green dot in Last 5 Goals. The dots correctly read from `/fixtures/players` (per-fixture data) while the totals read from the unreliable season aggregate, causing them to contradict each other.
+
+| Fix | Files | Detail |
+|-----|-------|--------|
+| **Fixture history increased to last 40 for national teams** | `lib/api-football.ts` | `fetchApiFootballTeamHistory` now fetches `last=40` (was `last=15`) when `isNationalTeam`. Covers ~4 years of internationals (qualifiers, Nations League, WC) — a meaningful career sample. Domestic clubs unchanged at `last=15`. ~80 AF calls per team at prefetch vs 30 before; well within 75k/day quota. |
+| **WC totals derived from fixture history** | `app/api/sync/route.ts` | `buildPlayers` accepts `isNational` flag (set to `afLeagueId === 1`). `buildSide` receives it and, after building initial player stats from squad data, overrides Goals/Assists/YellowCards/Appearances/G+A P/G by summing across all fixture history games. Same data source as the dots — they can no longer contradict each other. |
+
+**Data note:** The Goals/Assists column for WC players now shows totals across their last ~40 national team matches (~4 years), not a full career tally. This is more reliable and more relevant for betting context than a career total from AF's unreliable season API.
+
+**Cache:** All 30 `pc:hist:*` entries deleted from Supabase after deploy — next prefetch rebuilds with 40-game histories.
