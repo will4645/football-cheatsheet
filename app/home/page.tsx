@@ -150,7 +150,7 @@ export default function HomePage() {
                 <p className="text-xs font-semibold text-white">Manage subscription</p>
               </div>
             </Link>
-            <a href="mailto:support@cheatsheets.co.uk">
+            <Link href="/support">
               <div
                 className="rounded-xl p-4 flex flex-col gap-1 transition-all hover:brightness-110 hover:scale-[1.01] cursor-pointer"
                 style={{
@@ -162,7 +162,7 @@ export default function HomePage() {
                 <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Support</p>
                 <p className="text-xs font-semibold text-white">Contact us</p>
               </div>
-            </a>
+            </Link>
           </div>
 
           {/* Legal links */}

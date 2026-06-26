@@ -439,3 +439,37 @@ The BTTS derivation formula (session above) is now the last resort, not the firs
 **Data note:** The Goals/Assists column for WC players now shows totals across their last ~40 national team matches (~4 years), not a full career tally. This is more reliable and more relevant for betting context than a career total from AF's unreliable season API.
 
 **Cache:** All 30 `pc:hist:*` entries deleted from Supabase after deploy — next prefetch rebuilds with 40-game histories.
+
+### 2026-06-18 — Analytics, promo code, support form
+
+**PostHog analytics enabled:**
+- `NEXT_PUBLIC_POSTHOG_KEY` added to Vercel (all environments). `PosthogProvider` was already wired into `app/layout.tsx` — it silently no-ops without the key, which is why there was no data before.
+- `NEXT_PUBLIC_POSTHOG_HOST` defaults to `https://eu.i.posthog.com` in `PosthogProvider.tsx` (hardcoded fallback), so no second env var needed.
+- Autocapture, heatmaps, web vitals, and session recordings all enabled in PostHog dashboard.
+
+**WC2026 promo code (Stripe live mode):**
+- Coupon ID: `UafgtL8h` — 50% off, `duration: once` (first month only), max 500 redemptions.
+- Promotion code ID: `promo_1TjiXq2Ly6cgjatRjmqMhf51` — code `WC2026`, `restrictions.first_time_transaction: true` (new subscribers only), expires 2026-07-20 00:00 UTC (day after WC final).
+- `allow_promotion_codes: true` was already set in `app/api/stripe/checkout/route.ts` — no code changes needed.
+- Pricing page (`app/pricing/page.tsx`): added promo note below plan cards with inline T&Cs and link to Terms.
+- Terms page (`app/terms/page.tsx`): added section 5.6 Promotional Codes with full legal terms. Updated "Last updated" date to 18 June 2026.
+
+**Support contact form:**
+- Supabase table `support_messages` created: `id`, `created_at`, `name`, `email`, `message`, `read`.
+- `app/support/page.tsx`: contact form (name optional, email, message) with success state. Also shows `support@cheatsheets.co.uk` for direct email.
+- `app/api/support/route.ts`: POST endpoint, inserts into Supabase, validates email + message present, caps message at 2000 chars.
+- `app/admin/messages/page.tsx` + `app/admin/messages/MessageList.tsx`: private inbox at `/admin/messages?secret=SYNC_SECRET`. Server component validates secret (redirects to `/` on failure), passes messages to client component. Unread messages highlighted green with "New" badge.
+- `app/api/admin/mark-read/route.ts`: POST endpoint (requires `secret` in body), marks a message as read by ID. Button in MessageList updates state instantly without page reload.
+- `app/home/page.tsx`: Support box changed from `<a href="mailto:...">` to `<Link href="/support">` so clicking it navigates to the form instead of doing nothing (mailto fails when no email client configured).
+
+### 2026-06-18 — Free trial visibility + landing page competition list
+
+**Free trial prominence:**
+- Landing page hero CTA changed from "Start for £9.99/month" → "Try free for 4 days". Added pulsing green badge above buttons: "4-day free trial · No card charged until day 5". Added "Then £9.99/month · Cancel any time" below buttons.
+- Landing page pricing cards: trial text changed from near-invisible `text-[10px] text-gray-700` to green bold `text-xs font-semibold`.
+- Pricing page: same pulsing green badge added above plan cards. Trial line on each card now green.
+
+**Competition list updated (`app/page.tsx`):**
+- Removed: Eredivisie, Primeira Liga, Scottish Premiership, Belgian Pro League, Süper Lig (all removed from the actual product in commit c649654).
+- Added: World Cup 2026 in a new "International" section (highlighted green).
+- Renamed "Cups" → "European". Now three sections: International, Leagues, European.

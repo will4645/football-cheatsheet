@@ -34,7 +34,7 @@ export async function GET() {
       const liveFiltered = (live.data?.value ?? []).filter((m: any) => {
         const ko = parseKickoff(m);
         if (!ko) return true;
-        return (now - ko.getTime()) < 3 * 60 * 60 * 1000;
+        return (now - ko.getTime()) < 5 * 60 * 60 * 1000;
       });
       const rawUpcoming = upcoming.data?.value ?? [];
       const upcomingFiltered = rawUpcoming.filter((m: any) => {

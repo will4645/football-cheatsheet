@@ -133,7 +133,7 @@ export function transformRoster(roster: any[]): { lineup: any[]; startingEleven:
       name:           p.athlete?.displayName ?? p.athlete?.fullName ?? 'Unknown',
       espnId:         p.athlete?.id != null ? String(p.athlete.id) : '',
       position:       p.position?.displayName ?? p.athlete?.position?.displayName ?? 'Midfielder',
-      posAbbr:        (p.position?.abbreviation ?? '').toUpperCase(),
+      posAbbr:        (p.position?.abbreviation ?? p.athlete?.position?.abbreviation ?? '').toUpperCase(),
       formationPlace: parseInt(p.formationPlace) || 0,
     }));
   return { lineup: starters, startingEleven: starters };

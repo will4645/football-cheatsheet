@@ -218,12 +218,16 @@ async function getApiSportsIndex(): Promise<Map<string, ApiSportsPlayer>> {
   const apiKey = (process.env.API_SPORTS_KEY ?? '').trim();
   if (!apiKey) return new Map();
   const cached = await sbGet('api_sports_v2_cache') as { scraped: number; players: ApiSportsPlayer[] } | null;
-  if (cached && Date.now() - cached.scraped < STATS_TTL) {
-    const ageMin = Math.round((Date.now() - cached.scraped) / 60000);
-    console.log(`[api-sports] cache HIT — ${cached.players?.length ?? 0} players, ${ageMin}m old`);
+  const ageMin = cached ? Math.round((Date.now() - cached.scraped) / 60000) : null;
+  const fresh = cached ? Date.now() - cached.scraped < STATS_TTL : false;
+  // Always use cached data immediately if available — never block a sync on a multi-minute rebuild.
+  // Prefetch cron refreshes this cache at 7am/11am so it stays current.
+  if (cached?.players?.length) {
+    console.log(`[api-sports] cache ${fresh ? 'HIT' : 'STALE — using anyway'} — ${cached.players.length} players, ${ageMin}m old`);
     return buildApiSportsNameIndex(cached.players);
   }
-  console.log(`[api-sports] cache MISS — rebuilding (cached=${!!cached}, age=${cached ? Math.round((Date.now() - cached.scraped) / 3600000) + 'h' : 'none'})`);
+  // Cold start only: no cache exists yet, must block to build it.
+  console.log('[api-sports] cache MISS — cold start rebuild');
   try {
     const index = await fetchApiSportsIndex(apiKey);
     const players = Array.from(index.values());
@@ -234,10 +238,6 @@ async function getApiSportsIndex(): Promise<Map<string, ApiSportsPlayer>> {
     }
   } catch (err: any) {
     console.error(`[api-sports] rebuild failed: ${err.message}`);
-  }
-  if (cached?.players?.length) {
-    console.log(`[api-sports] using stale cache (${cached.players.length} players)`);
-    return buildApiSportsNameIndex(cached.players);
   }
   return new Map();
 }
@@ -377,10 +377,29 @@ async function buildPlayers(
     }
     return null;
   }
+  // Derive a coarse MARKS-compatible posAbbr from a display name like "Defender", "Goalkeeper" etc.
+  // Used as last-resort when ESPN summary rosters don't provide a position abbreviation.
+  function derivePosAbbr(displayName: string): string {
+    const d = displayName.toLowerCase();
+    if (d.includes('goalkeeper') || d.includes('keeper')) return 'G';
+    if (d.includes('right back') || d.includes('right wing back')) return 'RB';
+    if (d.includes('left back') || d.includes('left wing back')) return 'LB';
+    if (d.includes('centre back') || d.includes('center back') || d.includes('central defend')) return 'CB';
+    if (d.includes('defensive mid') || d.includes('holding mid')) return 'DM';
+    if (d.includes('attacking mid')) return 'AM';
+    if (d.includes('left mid') || d.includes('left wing')) return 'LW';
+    if (d.includes('right mid') || d.includes('right wing')) return 'RW';
+    if (d.includes('midfielder') || d.includes('midfield')) return 'CM';
+    if (d.includes('defend') || d.includes('back')) return 'CB';
+    if (d.includes('striker') || d.includes('centre forward') || d.includes('center forward')) return 'ST';
+    if (d.includes('forward') || d.includes('attack') || d.includes('winger')) return 'F';
+    return '';
+  }
+
   function playerDefaults(p: any) {
     const name = p.name || p.person?.name || 'Unknown';
     const pos = (p.position || 'Midfielder').toLowerCase();
-    const abbr = normalizePos((p.posAbbr || '').toUpperCase()); // normalise to MARKS key set
+    const abbr = normalizePos((p.posAbbr || '').toUpperCase()) || derivePosAbbr(pos); // normalise to MARKS key set
     const isGK  = abbr === 'G' || pos.includes('keeper') || pos.includes('goalkeeper');
     const isAtt = !isGK && (pos.includes('forward') || pos.includes('attack') || pos.includes('winger') || pos.includes('offence'));
     const isMid = !isGK && pos.includes('mid');
@@ -1077,7 +1096,7 @@ async function runSync(forceRebuild = false): Promise<{ logs: string[]; awaiting
     if (apiMatchIds.has(m.id)) return false;
     const kickoff = new Date(m.utcDate ?? 0).getTime();
     const hoursFromKo = (Date.now() - kickoff) / 3_600_000;
-    return hoursFromKo > 3.5; // remove ESPN-only matches 3.5h after kickoff (extra time + penalties ~150 min)
+    return hoursFromKo > 5; // remove ESPN-only matches 5h after kickoff (covers extra time + penalties + cushion)
   });
   for (const m of stale) {
     const sb = getSb(); if (sb) await sb.from('match_cache').delete().eq('key', `match:${m.id}`);
@@ -1177,7 +1196,7 @@ async function runSync(forceRebuild = false): Promise<{ logs: string[]; awaiting
         const comp = ev.competitions?.[0];
         const koTime = new Date(ev.date).getTime();
         const hoursFromKo = (Date.now() - koTime) / 3_600_000;
-        if (hoursFromKo > 3.5) continue; // drop matches >3.5h past kickoff regardless of status
+        if (hoursFromKo > 5) continue; // drop matches >5h past kickoff regardless of status
         const homeComp = comp?.competitors?.find((c: any) => c.homeAway === 'home');
         const awayComp = comp?.competitors?.find((c: any) => c.homeAway === 'away');
         const homeName = homeComp?.team?.displayName;

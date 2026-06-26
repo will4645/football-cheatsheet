@@ -57,11 +57,16 @@ export default async function LandingPage() {
         <p className="text-base sm:text-lg text-gray-400 mb-8 leading-relaxed max-w-xl mx-auto">
           Confirmed lineups, player form, and statistical analysis across every major competition. All in one place before kick-off.
         </p>
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-5"
+          style={{ background: 'rgba(22,163,74,0.12)', border: '1px solid rgba(22,163,74,0.3)' }}>
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-xs font-bold text-green-400">4-day free trial · No card charged until day 5</span>
+        </div>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link href="/sign-up"
             className="px-8 py-3 rounded-xl font-bold text-sm transition-all hover:scale-105"
             style={{ background: '#16a34a', color: '#fff', boxShadow: '0 0 24px rgba(22,163,74,0.4)' }}>
-            Start for £9.99/month
+            Try free for 4 days
           </Link>
           <Link href="/preview"
             className="px-8 py-3 rounded-xl font-semibold text-sm border transition-colors hover:bg-white/5"
@@ -69,7 +74,8 @@ export default async function LandingPage() {
             View live demo
           </Link>
         </div>
-        <Link href="/how-it-works" className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-4 inline-block">
+        <p className="text-xs text-gray-600 mt-3">Then £9.99/month · Cancel any time</p>
+        <Link href="/how-it-works" className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-2 inline-block">
           See how every section works →
         </Link>
       </section>
@@ -109,6 +115,24 @@ export default async function LandingPage() {
         <p className="text-center text-[10px] uppercase tracking-widest text-gray-600 mb-8">Covers all major competitions</p>
 
         <div className="space-y-6">
+          {/* International */}
+          <div>
+            <div className="flex justify-center mb-4">
+              <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full"
+                style={{ background: 'rgba(22,163,74,0.12)', color: '#4ade80', border: '1px solid rgba(22,163,74,0.25)' }}>
+                International
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {['World Cup 2026'].map(c => (
+                <span key={c} className="text-[11px] font-medium px-3 py-1 rounded-full"
+                  style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.25)', color: '#4ade80' }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+
           {/* Leagues */}
           <div>
             <div className="flex justify-center mb-4">
@@ -118,7 +142,7 @@ export default async function LandingPage() {
               </span>
             </div>
             <div className="flex flex-wrap gap-2 justify-center">
-              {['Premier League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1', 'Primeira Liga', 'Eredivisie', 'Belgian Pro League', 'Scottish Premiership', 'Süper Lig'].map(c => (
+              {['Premier League', 'La Liga', 'Bundesliga', 'Serie A', 'Ligue 1'].map(c => (
                 <span key={c} className="text-[11px] font-medium px-3 py-1 rounded-full"
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
                   {c}
@@ -127,12 +151,12 @@ export default async function LandingPage() {
             </div>
           </div>
 
-          {/* Cups */}
+          {/* European */}
           <div>
             <div className="flex justify-center mb-4">
               <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full"
                 style={{ background: 'rgba(22,163,74,0.12)', color: '#4ade80', border: '1px solid rgba(22,163,74,0.25)' }}>
-                Cups
+                European
               </span>
             </div>
             <div className="flex flex-wrap gap-2 justify-center">
@@ -179,7 +203,7 @@ export default async function LandingPage() {
               style={{ background: '#16a34a', color: '#fff' }}>
               Get Started
             </Link>
-            <p className="text-[10px] text-gray-700 text-center mt-2">4-day free trial · No charge until day 5</p>
+            <p className="text-xs text-center mt-2 font-semibold" style={{ color: '#4ade80' }}>4-day free trial · No charge until day 5</p>
           </div>
 
           {/* Yearly */}
@@ -213,7 +237,7 @@ export default async function LandingPage() {
               style={{ background: '#16a34a', color: '#fff' }}>
               Get Started
             </Link>
-            <p className="text-[10px] text-gray-700 text-center mt-2">4-day free trial · No charge until day 5</p>
+            <p className="text-xs text-center mt-2 font-semibold" style={{ color: '#4ade80' }}>4-day free trial · No charge until day 5</p>
           </div>
 
         </div>

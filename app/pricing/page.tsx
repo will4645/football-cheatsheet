@@ -93,8 +93,8 @@ function PlanCard({
         <p className="text-xs text-center mt-1 mb-1" style={{ color: '#4ade80' }}>{note}</p>
       )}
 
-      <p className="text-xs text-gray-600 mb-1 text-center mt-2">
-        4-day free trial · Cancel any time
+      <p className="text-xs font-semibold mb-1 text-center mt-2" style={{ color: '#4ade80' }}>
+        4-day free trial · No charge until day 5
       </p>
       {billing === 'annual' && (
         <p className="text-[10px] text-center mb-5" style={{ color: 'rgba(255,255,255,0.25)' }}>
@@ -122,7 +122,7 @@ function PlanCard({
 
       {error && <p className="text-red-400 text-xs text-center mt-3">{error}</p>}
 
-      <p className="text-[10px] text-gray-700 text-center mt-3">Secure payment via Stripe · No charge for 4 days</p>
+      <p className="text-[10px] text-gray-500 text-center mt-3">Secure payment via Stripe · No charge for 4 days</p>
       <p className="text-[10px] text-gray-700 text-center mt-2 leading-relaxed">
         By subscribing you agree to our{' '}
         <Link href="/terms" className="hover:text-gray-500 transition-colors">Terms of Service</Link>
@@ -149,6 +149,12 @@ export default function PricingPage() {
         </p>
       </div>
 
+      <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6"
+        style={{ background: 'rgba(22,163,74,0.12)', border: '1px solid rgba(22,163,74,0.3)' }}>
+        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+        <span className="text-xs font-bold text-green-400">Try free for 4 days · No card charged until day 5</span>
+      </div>
+
       <div className="w-full max-w-xl flex flex-col sm:flex-row gap-4">
         <PlanCard
           label="Monthly"
@@ -168,7 +174,17 @@ export default function PricingPage() {
         />
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 text-center">
+        <p className="text-xs text-gray-600 mb-1">
+          Have a promo code? Enter it at checkout.
+        </p>
+        <p className="text-[10px] text-gray-700 max-w-sm mx-auto">
+          WC2026: 50% off your first payment. New subscribers only, one use per account, valid until 19 July 2026. Cannot be combined with other offers. See{' '}
+          <Link href="/terms#promotions" className="hover:text-gray-500 transition-colors">Terms</Link> for full details.
+        </p>
+      </div>
+
+      <div className="mt-4">
         <Link href="/preview" className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
           View demo first →
         </Link>

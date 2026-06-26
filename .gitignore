@@ -48,3 +48,6 @@ next-env.d.ts
 
 # private ops runbook — contains keys and secrets, never commit
 RUNBOOK.md
+
+.vercel
+.env*.local

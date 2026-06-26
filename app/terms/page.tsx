@@ -10,7 +10,7 @@ export default function TermsPage() {
       <Link href="/" className="text-[11px] text-gray-600 hover:text-gray-400 transition-colors">← Back</Link>
 
       <h1 className="text-2xl font-black text-white mt-6 mb-2 tracking-tight">Terms of Service</h1>
-      <p className="text-xs text-gray-500 mb-10">Last updated: 19 May 2026</p>
+      <p className="text-xs text-gray-500 mb-10">Last updated: 18 June 2026</p>
 
       <div className="space-y-8 text-sm leading-relaxed text-gray-400">
 
@@ -115,6 +115,17 @@ export default function TermsPage() {
             We reserve the right to change subscription prices. We will give you at least 30 days&apos; notice of any price
             increase via email. Continued use of the Service after the notice period constitutes acceptance of the new price.
           </p>
+
+          <h3 id="promotions" className="text-gray-300 font-semibold mt-4 mb-2">5.6 Promotional Codes</h3>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Promotional codes (including WC2026) are issued at our sole discretion and may be withdrawn or modified at any time without notice.</li>
+            <li>Each promotional code may only be used once per customer account. Creating multiple accounts to redeem a code more than once constitutes a violation of these Terms and may result in account termination.</li>
+            <li>Promotional discounts apply only to the first billing period of a new subscription unless otherwise stated.</li>
+            <li>Promotional codes are valid for new subscribers only. They may not be used by anyone who has previously held a paid or trial subscription with us.</li>
+            <li>Promotional codes cannot be combined with other offers, discounts, or promotions and have no cash value.</li>
+            <li>We reserve the right to verify eligibility and to reverse any discount applied in breach of these conditions.</li>
+            <li>WC2026 expires at 00:00 UTC on 20 July 2026.</li>
+          </ul>
         </section>
 
         <section>

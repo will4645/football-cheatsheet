@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prefetchMatch } from '@/lib/prefetch';
 import { fetchAfFixturesByDateRange } from '@/lib/api-football';
+import { fetchApiSportsIndex, buildApiSportsNameIndex } from '@/lib/api-sports';
 import { kvGet, kvSet, kvDeleteOlderThan } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
@@ -192,6 +193,26 @@ export async function GET(req: NextRequest) {
       cleaned += await kvDeleteOlderThan(prefix, age);
     }
     if (cleaned > 0) log(`[prefetch] cleanup: ${cleaned} stale cache rows deleted`);
+
+    // Refresh api-sports player cache if stale — keeps sync from ever blocking on it mid-match
+    const SPORTS_TTL = 23 * 60 * 60 * 1000;
+    try {
+      const sportsCached = await kvGet<{ scraped: number; players: unknown[] }>('api_sports_v2_cache');
+      if (!sportsCached || Date.now() - sportsCached.scraped >= SPORTS_TTL) {
+        log('[prefetch] refreshing api-sports player cache...');
+        const index = await fetchApiSportsIndex(afApiKey);
+        const players = Array.from(index.values());
+        if (players.length > 0) {
+          await kvSet('api_sports_v2_cache', { scraped: Date.now(), players });
+          log(`[prefetch] api-sports cache saved — ${players.length} players`);
+        }
+      } else {
+        const ageMin = Math.round((Date.now() - sportsCached.scraped) / 60000);
+        log(`[prefetch] api-sports cache fresh — ${sportsCached.players?.length ?? 0} players, ${ageMin}m old`);
+      }
+    } catch (err: any) {
+      log(`[prefetch] api-sports refresh failed (non-fatal): ${err.message}`);
+    }
 
     log(`[prefetch] Done — ${done} fetched, ${skipped} skipped (fresh)`);
     return NextResponse.json({ ok: true, done, skipped, total: nearTerm.length, logs });
