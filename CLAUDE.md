@@ -473,3 +473,23 @@ The BTTS derivation formula (session above) is now the last resort, not the firs
 - Removed: Eredivisie, Primeira Liga, Scottish Premiership, Belgian Pro League, Süper Lig (all removed from the actual product in commit c649654).
 - Added: World Cup 2026 in a new "International" section (highlighted green).
 - Renamed "Cups" → "European". Now three sections: International, Leagues, European.
+
+### 2026-06-26 — Sign-up verification email fix + middleware + pipeline improvements
+
+**Sign-up verification email bug fixed (`app/sign-up/[[...sign-up]]/page.tsx`):**
+- Root cause: `handleSubmit` called `signUp.create()` then only called `prepareEmailAddressVerification` if `created.verifications.emailAddress.status === 'unverified'`. After `create()`, that status is `null` (not yet initiated), so the condition was always false, the email was never sent, but the UI still advanced to the verify screen. Users saw "Check your email" but nothing arrived.
+- Fix: removed the condition entirely — `prepareEmailAddressVerification({ strategy: 'email_code' })` now always runs after `create()`. This is the standard Clerk pattern.
+- Confirmed via Clerk email logs: sign-up attempts were creating the sign-up object but no `sign_up.email_address.verification.code_sent` event ever fired.
+
+**Middleware fix (`middleware.ts`):**
+- `/support` and `/api/support` added to the `isPublic` route matcher. Both were accidentally protected by Clerk auth, causing unauthenticated users to be redirected to sign-in when trying to contact support.
+
+**WC2026 promo now applies to both plans:**
+- Removed "Monthly plan only" restriction from pricing page note and Terms section 5.6. WC2026 (Stripe coupon `UafgtL8h`) gives 50% off the first payment regardless of plan — monthly or annual.
+- Pricing page note updated: "50% off your first payment" (was "first month").
+
+**Pipeline improvements (committed with 2026-06-18 changes above, deployed 2026-06-26):**
+- `app/api/matches/route.ts`: live match filter window extended 3h → 5h after kickoff to prevent WC knockout games (22:00 UTC kick) from disappearing at 01:30 UTC while still live.
+- `app/api/sync/route.ts`: ESPN-only stale window extended 3.5h → 5h for same reason. api-sports cache now always used if available (even if stale) — sync never blocks on a rebuild. Cold-start (no cache at all) still rebuilds. `derivePosAbbr()` helper added to infer position abbreviation from ESPN display name when `posAbbr` is missing.
+- `app/api/prefetch/route.ts`: api-sports player cache now refreshed at prefetch time (7am/11am cron) so sync always has a fresh copy.
+- `lib/api-football.ts`: ESPN position abbreviation now falls back to `p.athlete?.position?.abbreviation` when `p.position?.abbreviation` is absent.
